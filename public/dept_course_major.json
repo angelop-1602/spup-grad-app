@@ -1,0 +1,535 @@
+{
+  "departments": [
+    {
+      "code": "SITE",
+      "department": "School of Information Technology and Engineering",
+      "programs": [
+        {
+          "code": "BLIS",
+          "name": "Bachelor of Library and Information Science",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSCE",
+          "name": "Bachelor of Science in Civil Engineering",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSCpE",
+          "name": "Bachelor of Science in Computer Engineering",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSESE",
+          "name": "Bachelor of Science in Environmental and Sanitary Engineering",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSIT",
+          "name": "Bachelor of Science in Information Technology",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "SBAHM",
+      "department": "School of Business, Accountancy and Hospitality Management",
+      "programs": [
+        {
+          "code": "BSA",
+          "name": "Bachelor of Science in Accountancy",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSBA",
+          "name": "Bachelor of Science in Business Administration",
+          "altCodes": [
+            "BSBA-ETEEAP"
+          ],
+          "majors": [
+            {
+              "code": "BSBA-FM",
+              "name": "Financial Management"
+            },
+            {
+              "code": "BSBA-MM",
+              "name": "Marketing Management"
+            },
+            {
+              "code": "BSBA-OM",
+              "name": "Operations Management"
+            }
+          ]
+        },
+        {
+          "code": "BSEntrep",
+          "name": "Bachelor of Science in Entrepreneurship",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSHM",
+          "name": "Bachelor of Science in Hospitality Management",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSMA",
+          "name": "Bachelor of Science in Management Accounting",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSTM",
+          "name": "Bachelor of Science in Tourism Management",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "SASTE",
+      "department": "School of Arts, Sciences and Teacher Education",
+      "programs": [
+        {
+          "code": "BAELS",
+          "name": "Bachelor of Arts in English Language Studies",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BEEd",
+          "name": "Bachelor of Elementary Education",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BPEd",
+          "name": "Bachelor of Physical Education",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSBIO",
+          "name": "Bachelor of Science in Biology",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "BSBIO-MICRO",
+              "name": "Microbiology"
+            }
+          ]
+        },
+        {
+          "code": "BSPsych",
+          "name": "Bachelor of Science in Psychology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSPA",
+          "name": "Bachelor of Science in Public Administration",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSSW",
+          "name": "Bachelor of Science in Social Work",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSEd",
+          "name": "Bachelor of Secondary Education",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "BSEd-ENG",
+              "name": "English"
+            },
+            {
+              "code": "BSEd-MATH",
+              "name": "Mathematics"
+            },
+            {
+              "code": "BSEd-SCI",
+              "name": "Science"
+            },
+            {
+              "code": "BSEd-SOCSCI",
+              "name": "Social Science"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "SNAHS(Nursing)",
+      "department": "School of Nursing and Allied Health Sciences(Nursing)",
+      "programs": [
+        {
+          "code": "BSN",
+          "name": "Bachelor of Science in Nursing",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "SNAHS(Allied)",
+      "department": "School of Nursing and Allied Health Sciences(Allied)",
+      "programs": [
+        {
+          "code": "BSPharm",
+          "name": "Bachelor of Science in Pharmacy",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSPT",
+          "name": "Bachelor of Science in Physical Therapy",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSRT",
+          "name": "Bachelor of Science in Radiologic Technology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSMT",
+          "name": "Bachelor of Science in Medical Technology",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "GS(Masters)",
+      "department": "Graduate School(Masters)",
+      "programs": [
+        {
+          "code": "MST",
+          "name": "Master of Science in Teaching",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "MST-BIO",
+              "name": "Biology"
+            },
+            {
+              "code": "MST-ENG",
+              "name": "English"
+            },
+            {
+              "code": "MST-FIL",
+              "name": "Filipino"
+            },
+            {
+              "code": "MST-GENSCI",
+              "name": "General Science"
+            },
+            {
+              "code": "MST-MATH",
+              "name": "Mathematics"
+            },
+            {
+              "code": "MST-PE",
+              "name": "Physical Education"
+            },
+            {
+              "code": "MST-SOCSTU",
+              "name": "Social Studies"
+            },
+            {
+              "code": "MST-TLE",
+              "name": "Technology and Livelihood Education"
+            }
+          ]
+        },
+        {
+          "code": "MSSW",
+          "name": "Master of Science in Social Work",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MSN",
+          "name": "Master of Science in Nursing",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "MSN-ADHLTH",
+              "name": "Adult Health"
+            },
+            {
+              "code": "MSN-PHC",
+              "name": "Primary Health Care"
+            },
+            {
+              "code": "MSN-WH",
+              "name": "Women's Health"
+            }
+          ]
+        },
+        {
+          "code": "MSHM",
+          "name": "Master of Science in Hospitality Management",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MPsych",
+          "name": "Master of Psychology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MAPsych",
+          "name": "Master of Arts in Psychology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MAN",
+          "name": "Master of Arts in Nursing",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "MAN-NURADM",
+              "name": "Nursing Administration"
+            }
+          ]
+        },
+        {
+          "code": "MALL",
+          "name": "Master of Arts in Language and Literature",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MAGHCL",
+          "name": "Master of Arts in Global Health Care Leadership",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MAEd",
+          "name": "Master of Arts in Education",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "MAEd-ENG",
+              "name": "English"
+            },
+            {
+              "code": "MAEd-FIL",
+              "name": "Filipino"
+            },
+            {
+              "code": "MAEd-GENSCI",
+              "name": "General Science"
+            },
+            {
+              "code": "MAEd-G&C",
+              "name": "Guidance and Counseling"
+            },
+            {
+              "code": "MAEd-MATH",
+              "name": "Mathematics"
+            },
+            {
+              "code": "MAEd-PE",
+              "name": "Physical Education"
+            },
+            {
+              "code": "MAEd-SCHLEAD",
+              "name": "School Leadership"
+            }
+          ]
+        },
+        {
+          "code": "MPA",
+          "name": "Master in Public Administration",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MLIS",
+          "name": "Master in Library and Information Science",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "MIT",
+          "name": "Master in Information Technology",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "MIT-INFMGT",
+              "name": "Information Management"
+            }
+          ]
+        },
+        {
+          "code": "MBA",
+          "name": "Master in Business Administration",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "GS(Doctoral)",
+      "department": "Graduate School(Doctoral)",
+      "programs": [
+        {
+          "code": "DBM",
+          "name": "Doctor in Business Management",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "DBM-HM",
+              "name": "Hospitality Management"
+            }
+          ]
+        },
+        {
+          "code": "DHM",
+          "name": "Doctor in Hospitality Management",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "DIT",
+          "name": "Doctor in Information Technology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "DPA",
+          "name": "Doctor in Public Administration",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "PhDEd",
+          "name": "Doctor of Philosophy in Education",
+          "altCodes": [],
+          "majors": [
+            {
+              "code": "PhDEd-EDMGT",
+              "name": "Educational Management"
+            },
+            {
+              "code": "PhDEd-PE",
+              "name": "Physical Education"
+            }
+          ]
+        },
+        {
+          "code": "PhDMathEd",
+          "name": "Doctor of Philosophy in Mathematics Education",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "PhDNS",
+          "name": "Doctor of Philosophy in Nursing Science",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "PhDPsych",
+          "name": "Doctor of Philosophy in Psychology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "PhDRL",
+          "name": "Doctor of Philosophy in Rhetoric and Linguistics",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "PhDSciEd",
+          "name": "Doctor of Philosophy in Science Education",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    },
+    {
+      "code": "ETEEAP",
+      "department": "Expanded Tertiary Education Equivalency and Accreditation Program",
+      "programs": [
+        {
+          "code": "BAELS-ETEEAP",
+          "name": "Bachelor of Arts in English Language Studies",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BEEd-ETEEAP",
+          "name": "Bachelor of Elementary Education",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSPsych-ETEEAP",
+          "name": "Bachelor of Science in Psychology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSBA-ETEEAP",
+          "name": "Bachelor of Science in Business Administration",
+          "altCodes": [
+            "BSBA-ETEEAP"
+          ],
+          "majors": [
+            {
+              "code": "BSBA-FM-ETEEAP",
+              "name": "Financial Management"
+            },
+            {
+              "code": "BSBA-OM-ETEEAP",
+              "name": "Operations Management"
+            }
+          ]
+        },
+        {
+          "code": "BSHM-ETEEAP",
+          "name": "Bachelor of Science in Hospitality Management",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSCpE-ETEEAP",
+          "name": "Bachelor of Science in Computer Engineering",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSIT-ETEEAP",
+          "name": "Bachelor of Science in Information Technology",
+          "altCodes": [],
+          "majors": []
+        },
+        {
+          "code": "BSESE-ETEEAP",
+          "name": "Bachelor of Science in Environmental and Sanitary Engineering",
+          "altCodes": [],
+          "majors": []
+        }
+      ]
+    }
+  ]
+}
