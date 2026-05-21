@@ -239,11 +239,11 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Download an application DOCX (admin).
+     * Download an application PDF (admin).
      */
     public function download(Application $application): BinaryFileResponse
     {
-        return StudentApplicationController::generateDocx($application);
+        return StudentApplicationController::generatePdf($application);
     }
 
     public function downloadPhoto(Application $application): BinaryFileResponse

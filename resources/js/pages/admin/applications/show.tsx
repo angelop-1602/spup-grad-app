@@ -1,14 +1,14 @@
 import { ApplicationStatusBadge } from '@/components/application-status-badge';
-import adminRoutes from '@/routes/admin';
-import { Button } from '@/components/ui/button';
+import { DownloadFormButton } from '@/components/download-form-button';
 import { RequirementsList } from '@/components/requirements-list';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
+import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Calendar, FileText, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
-import { useToast } from '@/contexts/toast-context';
+import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -143,73 +143,88 @@ interface ShowApplicationProps {
     application: Application;
 }
 
-
 const requirementStatusConfig = {
     pending: { label: 'Pending', icon: Clock, color: 'text-blue-500' },
     required: { label: 'Required', icon: Clock, color: 'text-gray-500' },
-    approved: { label: 'Approved', icon: CheckCircle2, color: 'text-green-600' },
+    approved: {
+        label: 'Approved',
+        icon: CheckCircle2,
+        color: 'text-green-600',
+    },
 };
 
-export default function AdminShowApplication({ application }: ShowApplicationProps) {
+export default function AdminShowApplication({
+    application,
+}: ShowApplicationProps) {
     const { addToast } = useToast();
     const [requirementsData, setRequirementsData] = useState(
         application.requirements
-            .filter(req => !req.parent_id) // Only process parent requirements
-            .flatMap(req => {
+            .filter((req) => !req.parent_id) // Only process parent requirements
+            .flatMap((req) => {
                 const children = req.children || [];
                 // Include parent and all children
                 return [req, ...children];
             })
-            .map(req => ({
+            .map((req) => ({
                 id: req.id,
                 status: req.status,
                 notes: req.notes || '',
-            }))
+            })),
     );
     const [isSaving, setIsSaving] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
 
     // Store initial requirements for comparison
     const initialRequirements = useMemo(
-        () => application.requirements
-            .filter(req => !req.parent_id) // Only process parent requirements
-            .flatMap(req => {
-                const children = req.children || [];
-                // Include parent and all children
-                return [req, ...children];
-            })
-            .map(req => ({
-                id: req.id,
-                status: req.status,
-                notes: req.notes || '',
-            })),
-        [application.id] // Only reset when application changes
+        () =>
+            application.requirements
+                .filter((req) => !req.parent_id) // Only process parent requirements
+                .flatMap((req) => {
+                    const children = req.children || [];
+                    // Include parent and all children
+                    return [req, ...children];
+                })
+                .map((req) => ({
+                    id: req.id,
+                    status: req.status,
+                    notes: req.notes || '',
+                })),
+        [application.id], // Only reset when application changes
     );
 
     // Check if there are unsaved changes
     useEffect(() => {
-        const hasUnsavedChanges = initialRequirements.some(initialReq => {
-            const reqData = requirementsData.find(r => r.id === initialReq.id);
+        const hasUnsavedChanges = initialRequirements.some((initialReq) => {
+            const reqData = requirementsData.find(
+                (r) => r.id === initialReq.id,
+            );
             if (!reqData) return false;
             const statusChanged = reqData.status !== initialReq.status;
-            const notesChanged = (reqData.notes || '') !== (initialReq.notes || '');
+            const notesChanged =
+                (reqData.notes || '') !== (initialReq.notes || '');
             return statusChanged || notesChanged;
         });
         setHasChanges(hasUnsavedChanges);
     }, [requirementsData, initialRequirements]);
 
-    const handleRequirementStatusChange = (requirementId: number, status: ApplicationRequirement['status']) => {
-        setRequirementsData(prev => {
-            const updated = prev.map(req =>
+    const handleRequirementStatusChange = (
+        requirementId: number,
+        status: ApplicationRequirement['status'],
+    ) => {
+        setRequirementsData((prev) => {
+            const updated = prev.map((req) =>
                 req.id === requirementId ? { ...req, status } : req,
             );
             return updated;
         });
     };
 
-    const handleRequirementNotesChange = (requirementId: number, notes: string) => {
-        setRequirementsData(prev => {
-            const updated = prev.map(req =>
+    const handleRequirementNotesChange = (
+        requirementId: number,
+        notes: string,
+    ) => {
+        setRequirementsData((prev) => {
+            const updated = prev.map((req) =>
                 req.id === requirementId ? { ...req, notes } : req,
             );
             return updated;
@@ -219,7 +234,9 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
     const handleSaveRequirements = () => {
         setIsSaving(true);
         router.put(
-            adminRoutes.applications.updateRequirements({ application: application.application_number }).url,
+            adminRoutes.applications.updateRequirements({
+                application: application.application_number,
+            }).url,
             { requirements: requirementsData },
             {
                 preserveScroll: true,
@@ -227,14 +244,16 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                     addToast({
                         variant: 'success',
                         title: 'Changes saved',
-                        description: 'Requirement updates have been saved successfully',
+                        description:
+                            'Requirement updates have been saved successfully',
                     });
                     setHasChanges(false);
                     // Reload the page to get fresh data
                     router.reload({ only: ['application'] });
                 },
                 onError: (errors) => {
-                    const errorMessage = errors?.message || 'Failed to save requirement changes';
+                    const errorMessage =
+                        errors?.message || 'Failed to save requirement changes';
                     addToast({
                         variant: 'error',
                         title: 'Save failed',
@@ -254,37 +273,40 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
         application.subject_code ||
         application.thesis_dissertation_title ||
         (application.subject_enrollments.length > 0 &&
-            application.subject_enrollments.some(se => se.subject_name.includes(' - ')));
+            application.subject_enrollments.some((se) =>
+                se.subject_name.includes(' - '),
+            ));
 
     // Parse graduate subjects from subject enrollments
-    const graduateSubjects = isGraduateProgram && application.subject_enrollments.length > 0
-        ? application.subject_enrollments.map(se => {
-            const parts = se.subject_name.split(' - ');
-            return {
-                subject_code: parts[0] || '',
-                subject_title: parts[1] || se.subject_name,
-                units: se.units,
-            };
-        })
-        : [];
-
+    const graduateSubjects =
+        isGraduateProgram && application.subject_enrollments.length > 0
+            ? application.subject_enrollments.map((se) => {
+                  const parts = se.subject_name.split(' - ');
+                  return {
+                      subject_code: parts[0] || '',
+                      subject_title: parts[1] || se.subject_name,
+                      units: se.units,
+                  };
+              })
+            : [];
 
     const profile = application.user.profile;
     const highestEducationLevelLabel = profile?.highest_education_level
-        ? HIGHEST_EDUCATION_LEVEL_LABELS[profile.highest_education_level] ?? profile.highest_education_level
+        ? (HIGHEST_EDUCATION_LEVEL_LABELS[profile.highest_education_level] ??
+          profile.highest_education_level)
         : 'N/A';
     const collegeSchoolDisplay = profile?.is_transferee
         ? 'St. Paul University Philippines'
         : profile?.college_school_name;
     const profileDisplayName = profile
         ? [
-            profile.first_name,
-            profile.middle_name,
-            profile.last_name,
-            profile.suffix,
-        ]
-            .filter((part): part is string => Boolean(part))
-            .join(' ')
+              profile.first_name,
+              profile.middle_name,
+              profile.last_name,
+              profile.suffix,
+          ]
+              .filter((part): part is string => Boolean(part))
+              .join(' ')
         : 'N/A';
     const photoDownloadHref = `/admin/applications/${application.application_number}/photo/download`;
 
@@ -296,27 +318,38 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                 <div className="flex items-center justify-between pb-6">
                     <div className="flex items-center gap-3">
                         <Button asChild variant="ghost" size="icon">
-                            <Link href={adminRoutes.windows.show({ window: application.window.id }).url}>
+                            <Link
+                                href={
+                                    adminRoutes.windows.show({
+                                        window: application.window.id,
+                                    }).url
+                                }
+                            >
                                 <ArrowLeft className="h-4 w-4" />
                             </Link>
                         </Button>
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight">Application Details</h1>
+                            <h1 className="text-3xl font-bold tracking-tight">
+                                Application Details
+                            </h1>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <ApplicationStatusBadge status={application.status} size="md" />
+                        <ApplicationStatusBadge
+                            status={application.status}
+                            size="md"
+                        />
                         {application.status === 'approved' && (
-                            <Button asChild variant="outline" size="sm">
-                                <a
-                                    href={adminRoutes.applications.download({ application: application.application_number }).url}
-                                    download
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    Download DOCX
-                                </a>
-                            </Button>
+                            <DownloadFormButton
+                                href={
+                                    adminRoutes.applications.download({
+                                        application:
+                                            application.application_number,
+                                    }).url
+                                }
+                                variant="outline"
+                                size="sm"
+                            />
                         )}
                     </div>
                 </div>
@@ -324,14 +357,16 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                 {/* Main Content Grid */}
                 <div className="grid gap-8 lg:grid-cols-3">
                     {/* Left Column - Details */}
-                    <div className="lg:col-span-2 space-y-8">
+                    <div className="space-y-8 lg:col-span-2">
                         {/* Personal Data */}
                         {profile && (
                             <div className="space-y-4">
-                                <h2 className="text-lg font-semibold">Personal Data</h2>
-                                <div className="grid gap-6 lg:grid-cols-[180px,1fr]">
+                                <h2 className="text-lg font-semibold">
+                                    Personal Data
+                                </h2>
+                                <div className="grid gap-6 sm:grid-cols-[180px_minmax(0,1fr)]">
                                     <div className="space-y-2">
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                             Photo
                                         </p>
                                         {profile.photo_path ? (
@@ -341,7 +376,12 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-44 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />
-                                                <Button asChild variant="outline" size="sm" className="w-full max-w-[180px]">
+                                                <Button
+                                                    asChild
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full max-w-[180px]"
+                                                >
                                                     <a href={photoDownloadHref}>
                                                         Download Photo
                                                     </a>
@@ -353,74 +393,96 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                             </div>
                                         )}
                                     </div>
-                                    <dl className="grid gap-x-12 gap-y-4 md:grid-cols-2">
+                                    <dl className="grid min-w-0 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Full Name
                                             </dt>
-                                            <dd className="text-sm">{profileDisplayName}</dd>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Email Address
-                                            </dt>
-                                            <dd className="text-sm break-all">{application.user.email}</dd>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Student ID
-                                            </dt>
-                                            <dd className="text-sm">{application.user.student_id}</dd>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Date of Birth
-                                            </dt>
                                             <dd className="text-sm">
-                                                {new Date(profile.date_of_birth).toLocaleDateString()}
+                                                {profileDisplayName}
                                             </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Email Address
+                                            </dt>
+                                            <dd className="text-sm break-all">
+                                                {application.user.email}
+                                            </dd>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Student ID
+                                            </dt>
+                                            <dd className="text-sm">
+                                                {application.user.student_id}
+                                            </dd>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Date of Birth
+                                            </dt>
+                                            <dd className="text-sm">
+                                                {new Date(
+                                                    profile.date_of_birth,
+                                                ).toLocaleDateString()}
+                                            </dd>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Place of Birth
                                             </dt>
-                                            <dd className="text-sm">{profile.place_of_birth}</dd>
+                                            <dd className="text-sm">
+                                                {profile.place_of_birth}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Sex
                                             </dt>
-                                            <dd className="text-sm">{profile.sex}</dd>
+                                            <dd className="text-sm">
+                                                {profile.sex}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Civil Status
                                             </dt>
-                                            <dd className="text-sm">{profile.civil_status}</dd>
+                                            <dd className="text-sm">
+                                                {profile.civil_status}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Religion
                                             </dt>
-                                            <dd className="text-sm">{profile.religion || 'N/A'}</dd>
+                                            <dd className="text-sm">
+                                                {profile.religion || 'N/A'}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Nationality
                                             </dt>
-                                            <dd className="text-sm">{profile.nationality}</dd>
+                                            <dd className="text-sm">
+                                                {profile.nationality}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Contact Number
                                             </dt>
-                                            <dd className="text-sm">{profile.contact_number}</dd>
+                                            <dd className="text-sm">
+                                                {profile.contact_number}
+                                            </dd>
                                         </div>
-                                        <div className="space-y-1 md:col-span-2">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        <div className="space-y-1 sm:col-span-2 xl:col-span-3">
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                 Permanent Address
                                             </dt>
-                                            <dd className="text-sm">{profile.permanent_address}</dd>
+                                            <dd className="text-sm">
+                                                {profile.permanent_address}
+                                            </dd>
                                         </div>
                                     </dl>
                                 </div>
@@ -430,85 +492,107 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                         {/* Educational Background */}
                         {profile && (
                             <div className="space-y-4 border-t pt-6">
-                                <h2 className="text-lg font-semibold">Educational Background</h2>
+                                <h2 className="text-lg font-semibold">
+                                    Educational Background
+                                </h2>
                                 <dl className="grid gap-x-12 gap-y-4 md:grid-cols-2">
                                     <div className="space-y-1">
-                                        <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                             Highest Education Level Completed
                                         </dt>
-                                        <dd className="text-sm">{highestEducationLevelLabel}</dd>
+                                        <dd className="text-sm">
+                                            {highestEducationLevelLabel}
+                                        </dd>
                                     </div>
                                 </dl>
 
                                 {/* Grade School (Grades 1–6) */}
-                                {(profile.grade_1_school || profile.grade_2_school || profile.grade_3_school ||
-                                    profile.grade_4_school || profile.grade_5_school || profile.grade_6_school) && (
+                                {(profile.grade_1_school ||
+                                    profile.grade_2_school ||
+                                    profile.grade_3_school ||
+                                    profile.grade_4_school ||
+                                    profile.grade_5_school ||
+                                    profile.grade_6_school) && (
                                     <div className="space-y-2">
-                                        <h3 className="text-sm font-semibold">Grade School</h3>
+                                        <h3 className="text-sm font-semibold">
+                                            Grade School
+                                        </h3>
                                         <dl className="grid gap-x-12 gap-y-3 md:grid-cols-2">
                                             {profile.grade_1_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 1
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_1_school}
-                                                        {profile.grade_1_year ? ` (${profile.grade_1_year})` : ''}
+                                                        {profile.grade_1_year
+                                                            ? ` (${profile.grade_1_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.grade_2_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 2
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_2_school}
-                                                        {profile.grade_2_year ? ` (${profile.grade_2_year})` : ''}
+                                                        {profile.grade_2_year
+                                                            ? ` (${profile.grade_2_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.grade_3_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 3
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_3_school}
-                                                        {profile.grade_3_year ? ` (${profile.grade_3_year})` : ''}
+                                                        {profile.grade_3_year
+                                                            ? ` (${profile.grade_3_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.grade_4_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 4
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_4_school}
-                                                        {profile.grade_4_year ? ` (${profile.grade_4_year})` : ''}
+                                                        {profile.grade_4_year
+                                                            ? ` (${profile.grade_4_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.grade_5_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 5
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_5_school}
-                                                        {profile.grade_5_year ? ` (${profile.grade_5_year})` : ''}
+                                                        {profile.grade_5_year
+                                                            ? ` (${profile.grade_5_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.grade_6_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 6
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.grade_6_school}
-                                                        {profile.grade_6_year ? ` (${profile.grade_6_year})` : ''}
+                                                        {profile.grade_6_year
+                                                            ? ` (${profile.grade_6_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
@@ -517,51 +601,64 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                 )}
 
                                 {/* Junior High School (Grades 7–10) */}
-                                {(profile.jhs_1_school || profile.jhs_2_school || profile.jhs_3_school || profile.jhs_4_school) && (
+                                {(profile.jhs_1_school ||
+                                    profile.jhs_2_school ||
+                                    profile.jhs_3_school ||
+                                    profile.jhs_4_school) && (
                                     <div className="space-y-2 border-t pt-6">
-                                        <h3 className="text-sm font-semibold">Junior High School</h3>
+                                        <h3 className="text-sm font-semibold">
+                                            Junior High School
+                                        </h3>
                                         <dl className="grid gap-x-12 gap-y-3 md:grid-cols-2">
                                             {profile.jhs_1_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 7
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.jhs_1_school}
-                                                        {profile.jhs_1_year ? ` (${profile.jhs_1_year})` : ''}
+                                                        {profile.jhs_1_year
+                                                            ? ` (${profile.jhs_1_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.jhs_2_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 8
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.jhs_2_school}
-                                                        {profile.jhs_2_year ? ` (${profile.jhs_2_year})` : ''}
+                                                        {profile.jhs_2_year
+                                                            ? ` (${profile.jhs_2_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.jhs_3_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 9
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.jhs_3_school}
-                                                        {profile.jhs_3_year ? ` (${profile.jhs_3_year})` : ''}
+                                                        {profile.jhs_3_year
+                                                            ? ` (${profile.jhs_3_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.jhs_4_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 10
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.jhs_4_school}
-                                                        {profile.jhs_4_year ? ` (${profile.jhs_4_year})` : ''}
+                                                        {profile.jhs_4_year
+                                                            ? ` (${profile.jhs_4_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
@@ -570,29 +667,36 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                 )}
 
                                 {/* Senior High School (Grades 11–12) */}
-                                {(profile.shs_11_school || profile.shs_12_school) && (
+                                {(profile.shs_11_school ||
+                                    profile.shs_12_school) && (
                                     <div className="space-y-2 border-t pt-6">
-                                        <h3 className="text-sm font-semibold">Senior High School</h3>
+                                        <h3 className="text-sm font-semibold">
+                                            Senior High School
+                                        </h3>
                                         <dl className="grid gap-x-12 gap-y-3 md:grid-cols-2">
                                             {profile.shs_11_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 11
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.shs_11_school}
-                                                        {profile.shs_11_year ? ` (${profile.shs_11_year})` : ''}
+                                                        {profile.shs_11_year
+                                                            ? ` (${profile.shs_11_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
                                             {profile.shs_12_school && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Grade 12
                                                     </dt>
                                                     <dd className="text-sm">
                                                         {profile.shs_12_school}
-                                                        {profile.shs_12_year ? ` (${profile.shs_12_year})` : ''}
+                                                        {profile.shs_12_year
+                                                            ? ` (${profile.shs_12_year})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             )}
@@ -601,21 +705,31 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                 )}
 
                                 {/* College – only if highest education is at least college */}
-                                {(profile.college_degree || collegeSchoolDisplay || profile.college_year_graduated) &&
-                                    (profile.highest_education_level === 'college' ||
-                                        profile.highest_education_level === 'masters' ||
-                                        profile.highest_education_level === 'doctor') && (
+                                {(profile.college_degree ||
+                                    collegeSchoolDisplay ||
+                                    profile.college_year_graduated) &&
+                                    (profile.highest_education_level ===
+                                        'college' ||
+                                        profile.highest_education_level ===
+                                            'masters' ||
+                                        profile.highest_education_level ===
+                                            'doctor') && (
                                         <div className="space-y-2 border-t pt-6">
-                                            <h3 className="text-sm font-semibold">College</h3>
+                                            <h3 className="text-sm font-semibold">
+                                                College
+                                            </h3>
                                             <dl className="grid gap-x-12 gap-y-3 md:grid-cols-2">
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                         Degree / Course
                                                     </dt>
                                                     <dd className="text-sm">
-                                                        {profile.college_degree && `${profile.college_degree} – `}
+                                                        {profile.college_degree &&
+                                                            `${profile.college_degree} – `}
                                                         {collegeSchoolDisplay}
-                                                        {profile.college_year_graduated ? ` (${profile.college_year_graduated})` : ''}
+                                                        {profile.college_year_graduated
+                                                            ? ` (${profile.college_year_graduated})`
+                                                            : ''}
                                                     </dd>
                                                 </div>
                                             </dl>
@@ -623,32 +737,47 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                     )}
 
                                 {/* Graduate Studies – only if highest education level is masters or doctor */}
-                                {(profile.grad_masteral_school || profile.grad_doctoral_school) &&
-                                    (profile.highest_education_level === 'masters' ||
-                                        profile.highest_education_level === 'doctor') && (
+                                {(profile.grad_masteral_school ||
+                                    profile.grad_doctoral_school) &&
+                                    (profile.highest_education_level ===
+                                        'masters' ||
+                                        profile.highest_education_level ===
+                                            'doctor') && (
                                         <div className="space-y-2 border-t pt-6">
-                                            <h3 className="text-sm font-semibold">Graduate Studies</h3>
+                                            <h3 className="text-sm font-semibold">
+                                                Graduate Studies
+                                            </h3>
                                             <dl className="grid gap-x-12 gap-y-3 md:grid-cols-2">
-                                                {profile.highest_education_level !== 'doctor' && profile.grad_masteral_school && (
-                                                    <div className="space-y-1">
-                                                        <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                            Masters
-                                                        </dt>
-                                                        <dd className="text-sm">
-                                                            {profile.grad_masteral_school}
-                                                            {profile.grad_masteral_year ? ` (${profile.grad_masteral_year})` : ''}
-                                                        </dd>
-                                                    </div>
-                                                )}
+                                                {profile.highest_education_level !==
+                                                    'doctor' &&
+                                                    profile.grad_masteral_school && (
+                                                        <div className="space-y-1">
+                                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                                Masters
+                                                            </dt>
+                                                            <dd className="text-sm">
+                                                                {
+                                                                    profile.grad_masteral_school
+                                                                }
+                                                                {profile.grad_masteral_year
+                                                                    ? ` (${profile.grad_masteral_year})`
+                                                                    : ''}
+                                                            </dd>
+                                                        </div>
+                                                    )}
 
                                                 {profile.grad_doctoral_school && (
                                                     <div className="space-y-1">
-                                                        <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                        <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                             Doctoral
                                                         </dt>
                                                         <dd className="text-sm">
-                                                            {profile.grad_doctoral_school}
-                                                            {profile.grad_doctoral_year ? ` (${profile.grad_doctoral_year})` : ''}
+                                                            {
+                                                                profile.grad_doctoral_school
+                                                            }
+                                                            {profile.grad_doctoral_year
+                                                                ? ` (${profile.grad_doctoral_year})`
+                                                                : ''}
                                                         </dd>
                                                     </div>
                                                 )}
@@ -662,9 +791,12 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                         <div className="space-y-6 border-t pt-6">
                             {/* Header */}
                             <div className="space-y-1">
-                                <h2 className="text-lg font-semibold tracking-tight">Graduate Program Details</h2>
+                                <h2 className="text-lg font-semibold tracking-tight">
+                                    Graduate Program Details
+                                </h2>
                                 <p className="text-sm text-muted-foreground">
-                                    Program information and (if applicable) current enrollment.
+                                    Program information and (if applicable)
+                                    current enrollment.
                                 </p>
                             </div>
 
@@ -672,56 +804,94 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                             <div className="space-y-6 border-y py-6">
                                 {/* Program Information */}
                                 <div className="space-y-3">
-                                    <h3 className="text-sm font-semibold text-foreground">Program Information</h3>
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                        Program Information
+                                    </h3>
 
                                     <dl className="grid gap-x-8 gap-y-4 md:grid-cols-2">
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Course</dt>
-                                            <dd className="text-sm font-medium">{application.course.name}</dd>
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Course
+                                            </dt>
+                                            <dd className="text-sm font-medium">
+                                                {application.course.name}
+                                            </dd>
                                         </div>
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Degree Title</dt>
-                                            <dd className="text-sm font-medium">{application.degree_title}</dd>
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Degree Title
+                                            </dt>
+                                            <dd className="text-sm font-medium">
+                                                {application.degree_title}
+                                            </dd>
                                         </div>
 
                                         {application.major && (
                                             <div className="space-y-1">
-                                                <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Major</dt>
-                                                <dd className="text-sm font-medium">{application.major}</dd>
+                                                <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                    Major
+                                                </dt>
+                                                <dd className="text-sm font-medium">
+                                                    {application.major}
+                                                </dd>
                                             </div>
                                         )}
 
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Department</dt>
-                                            <dd className="text-sm">{application.department.name}</dd>
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Department
+                                            </dt>
+                                            <dd className="text-sm">
+                                                {application.department.name}
+                                            </dd>
                                         </div>
 
                                         <div className="space-y-1">
-                                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Graduation Appearance</dt>
+                                            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                Graduation Appearance
+                                            </dt>
                                             <dd className="text-sm">
-                                                {application.presence === "attending" ? "Attending" : "Not Attending"}
+                                                {application.presence ===
+                                                'attending'
+                                                    ? 'Attending'
+                                                    : 'Not Attending'}
                                             </dd>
                                         </div>
                                     </dl>
                                 </div>
 
                                 {/* Divider */}
-                                {(application.thesis_dissertation_title || application.thesis_dissertation_adviser) && (
-                                    <div className="border-t pt-6 space-y-3">
-                                        <h3 className="text-sm font-semibold text-foreground">Thesis / Dissertation</h3>
+                                {(application.thesis_dissertation_title ||
+                                    application.thesis_dissertation_adviser) && (
+                                    <div className="space-y-3 border-t pt-6">
+                                        <h3 className="text-sm font-semibold text-foreground">
+                                            Thesis / Dissertation
+                                        </h3>
 
-                                        <dl className="grid gap-x-8 gap-y-4 grid-cols-2">
+                                        <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
                                             {application.thesis_dissertation_title && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Title</dt>
-                                                    <dd className="text-sm leading-relaxed">{application.thesis_dissertation_title}</dd>
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                        Title
+                                                    </dt>
+                                                    <dd className="text-sm leading-relaxed">
+                                                        {
+                                                            application.thesis_dissertation_title
+                                                        }
+                                                    </dd>
                                                 </div>
                                             )}
 
                                             {application.thesis_dissertation_adviser && (
                                                 <div className="space-y-1">
-                                                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Adviser</dt>
-                                                    <dd className="text-sm">{application.thesis_dissertation_adviser}</dd>
+                                                    <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                        Adviser
+                                                    </dt>
+                                                    <dd className="text-sm">
+                                                        {
+                                                            application.thesis_dissertation_adviser
+                                                        }
+                                                    </dd>
                                                 </div>
                                             )}
                                         </dl>
@@ -730,11 +900,17 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
 
                                 {/* Graduate Enrollment */}
                                 {isGraduateProgram && (
-                                    <div className="border-t pt-6 space-y-3">
+                                    <div className="space-y-3 border-t pt-6">
                                         <div className="flex items-center justify-between">
-                                            <h3 className="text-sm font-semibold text-foreground">Subjects Presently Enrolled</h3>
+                                            <h3 className="text-sm font-semibold text-foreground">
+                                                Subjects Presently Enrolled
+                                            </h3>
                                             <span className="text-xs text-muted-foreground">
-                                                {graduateSubjects.length} subject{graduateSubjects.length === 1 ? "" : "s"}
+                                                {graduateSubjects.length}{' '}
+                                                subject
+                                                {graduateSubjects.length === 1
+                                                    ? ''
+                                                    : 's'}
                                             </span>
                                         </div>
 
@@ -743,46 +919,68 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                                 <table className="w-full border-collapse text-sm">
                                                     <thead>
                                                         <tr className="border-b">
-                                                            <th className="px-0 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                            <th className="px-0 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                                                 Code
                                                             </th>
-                                                            <th className="px-0 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                            <th className="px-0 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                                                 Title
                                                             </th>
-                                                            <th className="px-0 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                            <th className="px-0 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                                                 Units
                                                             </th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="[&_tr:last-child]:border-b-0">
-                                                        {graduateSubjects.map((subject, index) => (
-                                                            <tr key={index} className="border-b">
-                                                                <td className="py-3 pr-4 align-top">{subject.subject_code || "-"}</td>
-                                                                <td className="py-3 pr-4 align-top">{subject.subject_title || "-"}</td>
-                                                                <td className="py-3 align-top">{subject.units || "-"}</td>
-                                                            </tr>
-                                                        ))}
+                                                        {graduateSubjects.map(
+                                                            (
+                                                                subject,
+                                                                index,
+                                                            ) => (
+                                                                <tr
+                                                                    key={index}
+                                                                    className="border-b"
+                                                                >
+                                                                    <td className="py-3 pr-4 align-top">
+                                                                        {subject.subject_code ||
+                                                                            '-'}
+                                                                    </td>
+                                                                    <td className="py-3 pr-4 align-top">
+                                                                        {subject.subject_title ||
+                                                                            '-'}
+                                                                    </td>
+                                                                    <td className="py-3 align-top">
+                                                                        {subject.units ||
+                                                                            '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
                                                     </tbody>
                                                 </table>
                                             </div>
                                         ) : (
-                                            <p className="text-sm text-muted-foreground">No subjects listed.</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                No subjects listed.
+                                            </p>
                                         )}
                                     </div>
                                 )}
                             </div>
                         </div>
-
                     </div>
 
                     {/* Right Column - Requirements & Status */}
                     <div className="lg:col-span-1">
                         <div className="sticky top-4">
-                            <div className="space-y-3 border rounded-lg p-6 bg-muted/30">
+                            <div className="space-y-3 rounded-lg border bg-muted/30 p-6">
                                 <div className="flex items-center justify-between">
-                                    <h2 className="text-lg font-semibold">Requirements Checklist</h2>
+                                    <h2 className="text-lg font-semibold">
+                                        Requirements Checklist
+                                    </h2>
                                     {hasChanges && (
-                                        <span className="text-xs text-muted-foreground">Unsaved changes</span>
+                                        <span className="text-xs text-muted-foreground">
+                                            Unsaved changes
+                                        </span>
                                     )}
                                 </div>
                                 <div className="space-y-3 border-t pt-6">
@@ -790,22 +988,30 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                                         requirements={application.requirements}
                                         requirementsData={requirementsData}
                                         mode="admin"
-                                        applicationNumber={application.application_number}
+                                        applicationNumber={
+                                            application.application_number
+                                        }
                                         showDownloadButton={true}
-                                        onStatusChange={handleRequirementStatusChange}
-                                        onNotesChange={handleRequirementNotesChange}
+                                        onStatusChange={
+                                            handleRequirementStatusChange
+                                        }
+                                        onNotesChange={
+                                            handleRequirementNotesChange
+                                        }
                                         showNotesInput={true}
                                         className="space-y-3"
                                     />
                                 </div>
                                 {hasChanges && (
-                                    <div className="border-t pt-4 flex justify-end">
+                                    <div className="flex justify-end border-t pt-4">
                                         <Button
                                             onClick={handleSaveRequirements}
                                             disabled={isSaving}
                                             size="sm"
                                         >
-                                            {isSaving ? 'Saving...' : 'Save Changes'}
+                                            {isSaving
+                                                ? 'Saving...'
+                                                : 'Save Changes'}
                                         </Button>
                                     </div>
                                 )}
@@ -814,7 +1020,6 @@ export default function AdminShowApplication({ application }: ShowApplicationPro
                     </div>
                 </div>
             </div>
-
         </AppLayout>
     );
 }

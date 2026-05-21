@@ -790,7 +790,7 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Download an application DOCX (coordinator).
+     * Download an application PDF (coordinator).
      */
     public function download(Application $application): BinaryFileResponse
     {
@@ -801,7 +801,7 @@ class ApplicationController extends Controller
             abort(403, 'Unauthorized access to this application.');
         }
 
-        return \App\Http\Controllers\ApplicationController::generateDocx($application);
+        return \App\Http\Controllers\ApplicationController::generatePdf($application);
     }
 
     public function downloadPhoto(Application $application): BinaryFileResponse

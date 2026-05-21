@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    'libreoffice' => [
+        'enabled' => filter_var(env('LIBREOFFICE_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'binary' => env('LIBREOFFICE_BINARY'),
+        'timeout' => (int) env('LIBREOFFICE_TIMEOUT', 60),
+    ],
+
+    'freeconvert' => [
+        'api_key' => env('FREECONVERT_API_KEY'),
+        'base_url' => env('FREECONVERT_BASE_URL', 'https://api.freeconvert.com/v1'),
+        'timeout' => (int) env('FREECONVERT_TIMEOUT', 60),
+        'poll_interval' => (int) env('FREECONVERT_POLL_INTERVAL', 2),
+    ],
+
 ];

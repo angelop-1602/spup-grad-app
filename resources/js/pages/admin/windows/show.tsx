@@ -1,5 +1,7 @@
-import adminRoutes from '@/routes/admin';
 import { ApplicationApplicantCell } from '@/components/application-applicant-cell';
+import { DownloadFormMenuItem } from '@/components/download-form-button';
+import { NationalitySummary } from '@/components/nationality-summary';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -8,17 +10,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { Calendar, ArrowLeft, Edit, FileText, CheckCircle2, Clock, XCircle, MoreVertical, Eye, Download, AlertCircle, Search, FileDown, FileSpreadsheet } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
     Dialog,
     DialogContent,
@@ -26,13 +17,29 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AppLayout from '@/layouts/app-layout';
+import adminRoutes from '@/routes/admin';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, router } from '@inertiajs/react';
+import {
+    ArrowLeft,
+    Download,
+    Edit,
+    Eye,
+    MoreVertical,
+    Search,
+} from 'lucide-react';
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { NationalitySummary } from '@/components/nationality-summary';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -186,46 +193,60 @@ interface ShowWindowProps {
     };
 }
 
-export default function ShowWindow({ window, applications, stats, filters = {} }: ShowWindowProps) {
+export default function ShowWindow({
+    window,
+    applications,
+    stats,
+    filters = {},
+}: ShowWindowProps) {
     // Debug: Log received props
     console.log('ShowWindow Props:', {
         window: window ? { id: window.id, title: window.title } : null,
-        applications: applications ? { 
-            total: applications.total, 
-            dataLength: applications.data?.length,
-            current_page: applications.current_page,
-            last_page: applications.last_page,
-        } : null,
-        stats: stats ? {
-            attendance: stats.attendance,
-            departmentsCount: stats.departments?.length ?? 0,
-            programsCount: stats.programs?.length ?? 0,
-            majorsCount: stats.majors?.length ?? 0,
-            nationalitiesCount: stats.nationalities?.length ?? 0,
-            hierarchicalCount: stats.hierarchical?.length ?? 0,
-        } : null,
+        applications: applications
+            ? {
+                  total: applications.total,
+                  dataLength: applications.data?.length,
+                  current_page: applications.current_page,
+                  last_page: applications.last_page,
+              }
+            : null,
+        stats: stats
+            ? {
+                  attendance: stats.attendance,
+                  departmentsCount: stats.departments?.length ?? 0,
+                  programsCount: stats.programs?.length ?? 0,
+                  majorsCount: stats.majors?.length ?? 0,
+                  nationalitiesCount: stats.nationalities?.length ?? 0,
+                  hierarchicalCount: stats.hierarchical?.length ?? 0,
+              }
+            : null,
     });
 
     // Ensure we have valid data structures
     // Handle both paginated object and array format
-    const safeApplications: PaginatedApplications = applications && typeof applications === 'object' && 'data' in applications ? {
-        data: applications.data || [],
-        current_page: applications.current_page || 1,
-        last_page: applications.last_page || 1,
-        per_page: applications.per_page || 20,
-        total: applications.total || 0,
-        from: applications.from ?? null,
-        to: applications.to ?? null,
-        links: applications.links || [],
-    } : {
-        data: [],
-        current_page: 1,
-        last_page: 1,
-        per_page: 20,
-        total: 0,
-        from: null,
-        to: null,
-    };
+    const safeApplications: PaginatedApplications =
+        applications &&
+        typeof applications === 'object' &&
+        'data' in applications
+            ? {
+                  data: applications.data || [],
+                  current_page: applications.current_page || 1,
+                  last_page: applications.last_page || 1,
+                  per_page: applications.per_page || 20,
+                  total: applications.total || 0,
+                  from: applications.from ?? null,
+                  to: applications.to ?? null,
+                  links: applications.links || [],
+              }
+            : {
+                  data: [],
+                  current_page: 1,
+                  last_page: 1,
+                  per_page: 20,
+                  total: 0,
+                  from: null,
+                  to: null,
+              };
 
     const safeStats = stats || {
         attendance: { attending: 0, not_attending: 0 },
@@ -323,23 +344,43 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
         );
     };
 
-
     const now = new Date();
     const startDate = new Date(window.start_date);
     const endDate = new Date(window.end_date);
 
     const getStatus = () => {
-        if (now < startDate) return { label: 'Upcoming', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' };
-        if (now > endDate) return { label: 'Ended', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' };
-        return { label: 'Active', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
+        if (now < startDate)
+            return {
+                label: 'Upcoming',
+                color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+            };
+        if (now > endDate)
+            return {
+                label: 'Ended',
+                color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+            };
+        return {
+            label: 'Active',
+            color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+        };
     };
 
     const status = getStatus();
 
-    const totalApplications = safeStats.status_counts?.all ?? safeApplications.total;
-    const pendingApplications = safeStats.status_counts?.pending ?? safeApplications.data.filter((app) => app.status === 'pending' || app.status === 'submitted').length;
-    const approvedApplications = safeStats.status_counts?.approved ?? safeApplications.data.filter((app) => app.status === 'approved').length;
-    const incompleteApplications = safeStats.status_counts?.incomplete ?? safeApplications.data.filter((app) => app.status === 'incomplete').length;
+    const totalApplications =
+        safeStats.status_counts?.all ?? safeApplications.total;
+    const pendingApplications =
+        safeStats.status_counts?.pending ??
+        safeApplications.data.filter(
+            (app) => app.status === 'pending' || app.status === 'submitted',
+        ).length;
+    const approvedApplications =
+        safeStats.status_counts?.approved ??
+        safeApplications.data.filter((app) => app.status === 'approved').length;
+    const incompleteApplications =
+        safeStats.status_counts?.incomplete ??
+        safeApplications.data.filter((app) => app.status === 'incomplete')
+            .length;
 
     const renderApplicationsTable = () => {
         if (safeApplications.data.length === 0) {
@@ -385,18 +426,26 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                     <td className="px-4 py-3">
                                         <ApplicationApplicantCell
                                             name={application.user.name}
-                                            studentId={application.user.student_id}
+                                            studentId={
+                                                application.user.student_id
+                                            }
                                             profile={application.user.profile}
                                         />
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className="text-sm">{application.department?.name || 'N/A'}</span>
+                                        <span className="text-sm">
+                                            {application.department?.name ||
+                                                'N/A'}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3">
                                         <div>
-                                            <span className="text-sm">{application.course?.name || 'N/A'}</span>
+                                            <span className="text-sm">
+                                                {application.course?.name ||
+                                                    'N/A'}
+                                            </span>
                                             {application.major && (
-                                                <p className="text-xs text-muted-foreground mt-1">
+                                                <p className="mt-1 text-xs text-muted-foreground">
                                                     Major: {application.major}
                                                 </p>
                                             )}
@@ -406,12 +455,16 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                         <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                                             {application.status
                                                 .replace(/_/g, ' ')
-                                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                                .replace(/\b\w/g, (l) =>
+                                                    l.toUpperCase(),
+                                                )}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="text-sm text-muted-foreground">
-                                            {new Date(application.created_at).toLocaleDateString()}
+                                            {new Date(
+                                                application.created_at,
+                                            ).toLocaleDateString()}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
@@ -423,7 +476,9 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                                     className="h-8 w-8 p-0"
                                                 >
                                                     <MoreVertical className="h-4 w-4" />
-                                                    <span className="sr-only">Open menu</span>
+                                                    <span className="sr-only">
+                                                        Open menu
+                                                    </span>
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
@@ -432,9 +487,12 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                                         href={
                                                             application.detail_url
                                                                 ? application.detail_url
-                                                                : adminRoutes.applications.show({
-                                                                      application: application.application_number,
-                                                                  }).url
+                                                                : adminRoutes.applications.show(
+                                                                      {
+                                                                          application:
+                                                                              application.application_number,
+                                                                      },
+                                                                  ).url
                                                         }
                                                         className="flex items-center"
                                                     >
@@ -442,27 +500,30 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                                         View Details
                                                     </Link>
                                                 </DropdownMenuItem>
-                                                {application.status === 'approved' && (() => {
-                                                    const downloadUrl = application.download_url
-                                                        ? application.download_url
-                                                        : application.is_historical
-                                                            ? null
-                                                            : adminRoutes.applications.download({
-                                                                  application: application.application_number,
-                                                              }).url;
+                                                {application.status ===
+                                                    'approved' &&
+                                                    (() => {
+                                                        const downloadUrl =
+                                                            application.download_url
+                                                                ? application.download_url
+                                                                : application.is_historical
+                                                                  ? null
+                                                                  : adminRoutes.applications.download(
+                                                                        {
+                                                                            application:
+                                                                                application.application_number,
+                                                                        },
+                                                                    ).url;
 
-                                                    return downloadUrl ? (
-                                                        <DropdownMenuItem asChild>
-                                                            <a
-                                                                href={downloadUrl}
+                                                        return downloadUrl ? (
+                                                            <DownloadFormMenuItem
+                                                                href={
+                                                                    downloadUrl
+                                                                }
                                                                 className="flex items-center"
-                                                            >
-                                                                <Download className="mr-2 h-4 w-4" />
-                                                                Download DOCX
-                                                            </a>
-                                                        </DropdownMenuItem>
-                                                    ) : null;
-                                                })()}
+                                                            />
+                                                        ) : null;
+                                                    })()}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </td>
@@ -475,22 +536,34 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                 {safeApplications.last_page > 1 && (
                     <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                         <div>
-                            Showing {safeApplications.from} – {safeApplications.to} of {safeApplications.total}
+                            Showing {safeApplications.from} –{' '}
+                            {safeApplications.to} of {safeApplications.total}
                         </div>
                         <div className="flex gap-2">
                             <Button
                                 variant="outline"
                                 size="sm"
                                 disabled={safeApplications.current_page === 1}
-                                onClick={() => handlePageChange(safeApplications.current_page - 1)}
+                                onClick={() =>
+                                    handlePageChange(
+                                        safeApplications.current_page - 1,
+                                    )
+                                }
                             >
                                 Previous
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
-                                disabled={safeApplications.current_page === safeApplications.last_page}
-                                onClick={() => handlePageChange(safeApplications.current_page + 1)}
+                                disabled={
+                                    safeApplications.current_page ===
+                                    safeApplications.last_page
+                                }
+                                onClick={() =>
+                                    handlePageChange(
+                                        safeApplications.current_page + 1,
+                                    )
+                                }
                             >
                                 Next
                             </Button>
@@ -502,7 +575,8 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
     };
 
     const [exportDialogOpen, setExportDialogOpen] = useState(false);
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('all');
+    const [selectedDepartmentId, setSelectedDepartmentId] =
+        useState<string>('all');
 
     const uniqueDepartments = Array.from(
         new Map(
@@ -539,10 +613,13 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                             </Link>
                         </Button>
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight">{window.title}</h1>
-                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                            <h1 className="text-3xl font-bold tracking-tight">
+                                {window.title}
+                            </h1>
+                            <p className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <span>
-                                    {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
+                                    {startDate.toLocaleDateString()} –{' '}
+                                    {endDate.toLocaleDateString()}
                                 </span>
                                 <span
                                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}
@@ -554,12 +631,13 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                     </div>
                     {!isHistorical ? (
                         <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                asChild
-                            >
+                            <Button variant="outline" asChild>
                                 <a
-                                    href={adminRoutes.windows.exportStatisticsPdf({ window: window.id }).url}
+                                    href={
+                                        adminRoutes.windows.exportStatisticsPdf(
+                                            { window: window.id },
+                                        ).url
+                                    }
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
@@ -574,35 +652,59 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                 <Download className="mr-2 h-4 w-4" />
                                 Excel
                             </Button>
-                            <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+                            <Dialog
+                                open={exportDialogOpen}
+                                onOpenChange={setExportDialogOpen}
+                            >
                                 <DialogContent>
                                     <DialogHeader>
-                                        <DialogTitle>Export applications</DialogTitle>
+                                        <DialogTitle>
+                                            Export applications
+                                        </DialogTitle>
                                         <DialogDescription>
-                                            Choose which applications to include in the Excel file.
+                                            Choose which applications to include
+                                            in the Excel file.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4">
                                         <div className="space-y-2">
-                                            <Label htmlFor="department-filter">Department</Label>
+                                            <Label htmlFor="department-filter">
+                                                Department
+                                            </Label>
                                             <select
                                                 id="department-filter"
                                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                                                 value={selectedDepartmentId}
-                                                onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                                onChange={(e) =>
+                                                    setSelectedDepartmentId(
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 aria-label="Department filter"
                                             >
-                                                <option value="all">All departments</option>
-                                                {uniqueDepartments.map((dept) => (
-                                                    <option key={dept.id} value={dept.id}>
-                                                        {dept.name}
-                                                    </option>
-                                                ))}
+                                                <option value="all">
+                                                    All departments
+                                                </option>
+                                                {uniqueDepartments.map(
+                                                    (dept) => (
+                                                        <option
+                                                            key={dept.id}
+                                                            value={dept.id}
+                                                        >
+                                                            {dept.name}
+                                                        </option>
+                                                    ),
+                                                )}
                                             </select>
                                         </div>
                                     </div>
                                     <DialogFooter>
-                                        <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                setExportDialogOpen(false)
+                                            }
+                                        >
                                             Cancel
                                         </Button>
                                         <Button onClick={handleExport}>
@@ -612,7 +714,13 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                                 </DialogContent>
                             </Dialog>
                             <Button asChild>
-                                <Link href={adminRoutes.windows.edit({ window: window.id }).url}>
+                                <Link
+                                    href={
+                                        adminRoutes.windows.edit({
+                                            window: window.id,
+                                        }).url
+                                    }
+                                >
                                     <Edit className="mr-2 h-4 w-4" />
                                     Edit
                                 </Link>
@@ -627,17 +735,20 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                             <div>
                                 <CardTitle>Applications</CardTitle>
                                 <CardDescription>
-                                    {totalApplications} application{totalApplications !== 1 ? 's' : ''} total
+                                    {totalApplications} application
+                                    {totalApplications !== 1 ? 's' : ''} total
                                 </CardDescription>
                             </div>
                             <div className="w-full max-w-sm">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
                                         type="text"
                                         placeholder="Search by name, student ID, email, department, or course..."
                                         value={searchQuery}
-                                        onChange={(e) => handleSearch(e.target.value)}
+                                        onChange={(e) =>
+                                            handleSearch(e.target.value)
+                                        }
                                         className="pl-9"
                                     />
                                 </div>
@@ -645,7 +756,11 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <Tabs value={statusFilter} onValueChange={handleStatusChange} className="w-full">
+                        <Tabs
+                            value={statusFilter}
+                            onValueChange={handleStatusChange}
+                            className="w-full"
+                        >
                             <TabsList className="grid w-full grid-cols-4">
                                 <TabsTrigger value="pending">
                                     Pending ({pendingApplications})
@@ -680,181 +795,314 @@ export default function ShowWindow({ window, applications, stats, filters = {} }
                 {/* Total by Department, Program & Major */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Total by Department, Program & Major</CardTitle>
-                        <CardDescription>Hierarchical breakdown of applications by department, program/course, and major with attendance and nationality statistics</CardDescription>
+                        <CardTitle>
+                            Total by Department, Program & Major
+                        </CardTitle>
+                        <CardDescription>
+                            Hierarchical breakdown of applications by
+                            department, program/course, and major with
+                            attendance and nationality statistics
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {(safeStats.hierarchical || []).length > 0 ? (
                             <div className="space-y-4">
-                                {(safeStats.hierarchical || []).map((dept, deptIndex) => (
-                                    <div
-                                        key={deptIndex}
-                                        className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
-                                    >
-                                        <div className="flex items-center justify-between border-b pb-3 mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                                <span className="font-semibold text-base">{dept.name}</span>
+                                {(safeStats.hierarchical || []).map(
+                                    (dept, deptIndex) => (
+                                        <div
+                                            key={deptIndex}
+                                            className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
+                                        >
+                                            <div className="mb-3 flex items-center justify-between border-b pb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                                    <span className="text-base font-semibold">
+                                                        {dept.name}
+                                                    </span>
+                                                </div>
+                                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                    Total: {dept.total}
+                                                </Badge>
                                             </div>
-                                            <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                Total: {dept.total}
-                                            </Badge>
-                                        </div>
 
-                                        {/* Department Stats Grid */}
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-3 bg-muted/30 rounded-lg">
-                                            <div className="space-y-2">
-                                                <p className="text-xs font-medium text-muted-foreground">Attendance</p>
-                                                <div className="flex gap-2">
-                                                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                        Attending: {dept.attendance?.attending || 0}
-                                                    </Badge>
-                                                    <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                                        Not Attending: {dept.attendance?.not_attending || 0}
-                                                    </Badge>
+                                            {/* Department Stats Grid */}
+                                            <div className="mb-4 grid grid-cols-1 gap-4 rounded-lg bg-muted/30 p-3 md:grid-cols-3">
+                                                <div className="space-y-2">
+                                                    <p className="text-xs font-medium text-muted-foreground">
+                                                        Attendance
+                                                    </p>
+                                                    <div className="flex gap-2">
+                                                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                            Attending:{' '}
+                                                            {dept.attendance
+                                                                ?.attending ||
+                                                                0}
+                                                        </Badge>
+                                                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                            Not Attending:{' '}
+                                                            {dept.attendance
+                                                                ?.not_attending ||
+                                                                0}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2 md:col-span-2">
+                                                    <p className="text-xs font-medium text-muted-foreground">
+                                                        Nationalities
+                                                    </p>
+                                                    <NationalitySummary
+                                                        nationalities={
+                                                            dept.nationalities ||
+                                                            []
+                                                        }
+                                                    />
                                                 </div>
                                             </div>
-                                            <div className="space-y-2 md:col-span-2">
-                                                <p className="text-xs font-medium text-muted-foreground">Nationalities</p>
-                                                <NationalitySummary nationalities={dept.nationalities || []} />
-                                            </div>
-                                        </div>
 
-                                        {dept.programs && dept.programs.length > 0 && (
-                                            <div className="space-y-3 ml-2">
-                                                {dept.programs.map((program, programIndex) => (
-                                                    <div key={programIndex} className="space-y-2">
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                                                                <span className="text-sm font-medium text-foreground">
-                                                                    {program.name}
-                                                                </span>
-                                                                <Badge variant="outline" className="text-xs">
-                                                                    Total: {program.total}
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="flex gap-1.5">
-                                                                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
-                                                                        Attending: {program.attendance?.attending || 0}
-                                                                    </Badge>
-                                                                    <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs">
-                                                                        Not Attending: {program.attendance?.not_attending || 0}
-                                                                    </Badge>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="ml-4 mb-2">
-                                                            <NationalitySummary nationalities={program.nationalities || []} compact />
-                                                        </div>
-                                                        {program.majors && program.majors.length > 0 && program.majors.some((m) => m.name !== 'N/A') && (
-                                                            <div className="ml-4 space-y-1.5 border-l-2 border-muted pl-3">
-                                                                {program.majors
-                                                                    .filter((m) => m.name !== 'N/A')
-                                                                    .map((major, majorIndex) => (
-                                                                        <div
-                                                                            key={majorIndex}
-                                                                            className="flex items-center justify-between py-1"
-                                                                        >
-                                                                            <div className="flex items-center gap-2">
-                                                                                <div className="h-1 w-1 rounded-full bg-green-500" />
-                                                                                <span className="text-xs text-muted-foreground">
-                                                                                    {major.name}
-                                                                                </span>
-                                                                                <Badge variant="outline" className="text-xs">
-                                                                                    Total: {major.total}
+                                            {dept.programs &&
+                                                dept.programs.length > 0 && (
+                                                    <div className="ml-2 space-y-3">
+                                                        {dept.programs.map(
+                                                            (
+                                                                program,
+                                                                programIndex,
+                                                            ) => (
+                                                                <div
+                                                                    key={
+                                                                        programIndex
+                                                                    }
+                                                                    className="space-y-2"
+                                                                >
+                                                                    <div className="mb-2 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                                                                            <span className="text-sm font-medium text-foreground">
+                                                                                {
+                                                                                    program.name
+                                                                                }
+                                                                            </span>
+                                                                            <Badge
+                                                                                variant="outline"
+                                                                                className="text-xs"
+                                                                            >
+                                                                                Total:{' '}
+                                                                                {
+                                                                                    program.total
+                                                                                }
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="flex gap-1.5">
+                                                                                <Badge className="bg-green-100 text-xs text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                                                    Attending:{' '}
+                                                                                    {program
+                                                                                        .attendance
+                                                                                        ?.attending ||
+                                                                                        0}
+                                                                                </Badge>
+                                                                                <Badge className="bg-red-100 text-xs text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                                                    Not
+                                                                                    Attending:{' '}
+                                                                                    {program
+                                                                                        .attendance
+                                                                                        ?.not_attending ||
+                                                                                        0}
                                                                                 </Badge>
                                                                             </div>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className="text-xs text-green-600">Attending: {major.attendance?.attending || 0}</span>
-                                                                                <span className="text-xs text-red-600">Not Attending: {major.attendance?.not_attending || 0}</span>
-                                                                                <NationalitySummary nationalities={major.nationalities || []} inline />
-                                                                            </div>
                                                                         </div>
-                                                                    ))}
-                                                            </div>
+                                                                    </div>
+                                                                    <div className="mb-2 ml-4">
+                                                                        <NationalitySummary
+                                                                            nationalities={
+                                                                                program.nationalities ||
+                                                                                []
+                                                                            }
+                                                                            compact
+                                                                        />
+                                                                    </div>
+                                                                    {program.majors &&
+                                                                        program
+                                                                            .majors
+                                                                            .length >
+                                                                            0 &&
+                                                                        program.majors.some(
+                                                                            (
+                                                                                m,
+                                                                            ) =>
+                                                                                m.name !==
+                                                                                'N/A',
+                                                                        ) && (
+                                                                            <div className="ml-4 space-y-1.5 border-l-2 border-muted pl-3">
+                                                                                {program.majors
+                                                                                    .filter(
+                                                                                        (
+                                                                                            m,
+                                                                                        ) =>
+                                                                                            m.name !==
+                                                                                            'N/A',
+                                                                                    )
+                                                                                    .map(
+                                                                                        (
+                                                                                            major,
+                                                                                            majorIndex,
+                                                                                        ) => (
+                                                                                            <div
+                                                                                                key={
+                                                                                                    majorIndex
+                                                                                                }
+                                                                                                className="flex items-center justify-between py-1"
+                                                                                            >
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    <div className="h-1 w-1 rounded-full bg-green-500" />
+                                                                                                    <span className="text-xs text-muted-foreground">
+                                                                                                        {
+                                                                                                            major.name
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                    <Badge
+                                                                                                        variant="outline"
+                                                                                                        className="text-xs"
+                                                                                                    >
+                                                                                                        Total:{' '}
+                                                                                                        {
+                                                                                                            major.total
+                                                                                                        }
+                                                                                                    </Badge>
+                                                                                                </div>
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    <span className="text-xs text-green-600">
+                                                                                                        Attending:{' '}
+                                                                                                        {major
+                                                                                                            .attendance
+                                                                                                            ?.attending ||
+                                                                                                            0}
+                                                                                                    </span>
+                                                                                                    <span className="text-xs text-red-600">
+                                                                                                        Not
+                                                                                                        Attending:{' '}
+                                                                                                        {major
+                                                                                                            .attendance
+                                                                                                            ?.not_attending ||
+                                                                                                            0}
+                                                                                                    </span>
+                                                                                                    <NationalitySummary
+                                                                                                        nationalities={
+                                                                                                            major.nationalities ||
+                                                                                                            []
+                                                                                                        }
+                                                                                                        inline
+                                                                                                    />
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ),
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+                                                                </div>
+                                                            ),
                                                         )}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                                )}
+                                        </div>
+                                    ),
+                                )}
                             </div>
                         ) : (
                             <div className="space-y-6">
                                 {/* Fallback: Department Totals */}
                                 {(safeStats.departments || []).length > 0 && (
                                     <div>
-                                        <h3 className="text-sm font-semibold mb-3 text-foreground">Departments</h3>
+                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                            Departments
+                                        </h3>
                                         <div className="space-y-2">
-                                            {(safeStats.departments || []).map((dept) => (
-                                                <div
-                                                    key={dept.code}
-                                                    className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                                        <span className="text-sm font-medium">{dept.code} - {dept.name}</span>
+                                            {(safeStats.departments || []).map(
+                                                (dept) => (
+                                                    <div
+                                                        key={dept.code}
+                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                                            <span className="text-sm font-medium">
+                                                                {dept.code} -{' '}
+                                                                {dept.name}
+                                                            </span>
+                                                        </div>
+                                                        <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                            {dept.total}
+                                                        </span>
                                                     </div>
-                                                    <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                        {dept.total}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                                ),
+                                            )}
                                         </div>
                                     </div>
                                 )}
                                 {/* Fallback: Program Totals */}
                                 {(safeStats.programs || []).length > 0 && (
                                     <div>
-                                        <h3 className="text-sm font-semibold mb-3 text-foreground">Programs/Courses</h3>
+                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                            Programs/Courses
+                                        </h3>
                                         <div className="space-y-2">
-                                            {(safeStats.programs || []).map((program) => (
-                                                <div
-                                                    key={program.code}
-                                                    className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="h-2 w-2 rounded-full bg-purple-500" />
-                                                        <span className="text-sm font-medium">{program.code} - {program.name}</span>
+                                            {(safeStats.programs || []).map(
+                                                (program) => (
+                                                    <div
+                                                        key={program.code}
+                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="h-2 w-2 rounded-full bg-purple-500" />
+                                                            <span className="text-sm font-medium">
+                                                                {program.code} -{' '}
+                                                                {program.name}
+                                                            </span>
+                                                        </div>
+                                                        <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                                            {program.total}
+                                                        </span>
                                                     </div>
-                                                    <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                                                        {program.total}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                                ),
+                                            )}
                                         </div>
                                     </div>
                                 )}
                                 {/* Fallback: Major Totals */}
                                 {(safeStats.majors || []).length > 0 && (
                                     <div>
-                                        <h3 className="text-sm font-semibold mb-3 text-foreground">Majors</h3>
+                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                            Majors
+                                        </h3>
                                         <div className="space-y-2">
-                                            {(safeStats.majors || []).map((major) => (
-                                                <div
-                                                    key={major.code}
-                                                    className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                                                        <span className="text-sm font-medium">{major.code} - {major.name}</span>
+                                            {(safeStats.majors || []).map(
+                                                (major) => (
+                                                    <div
+                                                        key={major.code}
+                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="h-2 w-2 rounded-full bg-green-500" />
+                                                            <span className="text-sm font-medium">
+                                                                {major.code} -{' '}
+                                                                {major.name}
+                                                            </span>
+                                                        </div>
+                                                        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                            {major.total}
+                                                        </span>
                                                     </div>
-                                                    <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                        {major.total}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                                ),
+                                            )}
                                         </div>
                                     </div>
                                 )}
-                                {(!safeStats.departments?.length && !safeStats.programs?.length && !safeStats.majors?.length) && (
-                                    <p className="py-8 text-center text-sm text-muted-foreground">
-                                        No data available.
-                                    </p>
-                                )}
+                                {!safeStats.departments?.length &&
+                                    !safeStats.programs?.length &&
+                                    !safeStats.majors?.length && (
+                                        <p className="py-8 text-center text-sm text-muted-foreground">
+                                            No data available.
+                                        </p>
+                                    )}
                             </div>
                         )}
                     </CardContent>

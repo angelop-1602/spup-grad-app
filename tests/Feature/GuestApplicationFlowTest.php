@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -255,8 +256,81 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertOk();
 });
 
-test('guest portal downloads the generated application as a docx', function () {
+test('guest portal downloads the generated application as a pdf', function () {
     Notification::fake();
+    config([
+        'services.freeconvert.api_key' => 'test-freeconvert-key',
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
+    ]);
+    Http::fake(function ($request) {
+        $url = (string) $request->url();
+
+        if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
+            return Http::response([
+                'id' => 'job-123',
+                'status' => 'created',
+                'tasks' => [
+                    [
+                        'name' => 'import-docx',
+                        'operation' => 'import/upload',
+                        'result' => [
+                            'form' => [
+                                'url' => 'https://upload.freeconvert.test/api/upload/job-123',
+                                'parameters' => [
+                                    'signature' => 'signed-upload',
+                                ],
+                            ],
+                        ],
+                    ],
+                    [
+                        'name' => 'convert-pdf',
+                        'operation' => 'convert',
+                        'status' => 'processing',
+                    ],
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'processing',
+                    ],
+                ],
+            ], 201);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-123') {
+            return Http::response(['ok' => true]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-123') {
+            return Http::response([
+                'id' => 'job-123',
+                'status' => 'completed',
+                'tasks' => [
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'completed',
+                        'result' => [
+                            'url' => 'https://download.freeconvert.test/job-123/result.pdf',
+                        ],
+                    ],
+                ],
+            ]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-123/result.pdf') {
+            return Http::response('%PDF-1.4 test pdf body', 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        if ($request->method() === 'DELETE' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-123') {
+            return Http::response([], 204);
+        }
+
+        return Http::response([], 404);
+    });
 
     [$window, $department, $course] = guestApplicationCatalog();
     $payload = guestApplicationPayload($window, $department, $course);
@@ -284,7 +358,51 @@ test('guest portal downloads the generated application as a docx', function () {
         ->assertRedirect(route('apply.portal.show', $application->application_number, absolute: false));
 
     $response = $this->get(route('apply.portal.download', $application->application_number));
+    $response->assertDownload('GraduationApplication_Andrea_L_Santos_Jr.pdf');
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+});
 
+test('guest portal falls back to docx when pdf conversion fails', function () {
+    Notification::fake();
+    config([
+        'services.freeconvert.api_key' => 'test-freeconvert-key',
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
+        'services.libreoffice.enabled' => false,
+    ]);
+    Http::fake([
+        'https://api.freeconvert.test/v1/process/jobs' => Http::response([
+            'message' => 'conversion service unavailable',
+        ], 503),
+    ]);
+
+    [$window, $department, $course] = guestApplicationCatalog();
+    $payload = guestApplicationPayload($window, $department, $course);
+
+    $this->post(route('apply.store'), $payload);
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $verifyUrl = URL::temporarySignedRoute(
+        'apply.verify',
+        now()->addMinutes(config('auth.verification.expire', 60)),
+        ['draft' => $draft->id, 'hash' => sha1($draft->email)],
+    );
+
+    $this->get($verifyUrl);
+
+    $draft->refresh();
+    $application = Application::findOrFail($draft->application_id);
+    $accessUrl = URL::temporarySignedRoute(
+        'apply.access',
+        now()->addDays(30),
+        ['draft' => $draft->id],
+    );
+
+    $this->get($accessUrl)
+        ->assertRedirect(route('apply.portal.show', $application->application_number, absolute: false));
+
+    $response = $this->get(route('apply.portal.download', $application->application_number));
     $response->assertDownload('GraduationApplication_Andrea_L_Santos_Jr.docx');
     expect($response->headers->get('content-type'))->toContain('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 });

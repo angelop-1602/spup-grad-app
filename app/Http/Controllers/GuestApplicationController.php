@@ -346,7 +346,7 @@ class GuestApplicationController extends Controller
 
     public function download(Application $application): BinaryFileResponse
     {
-        return ApplicationController::generateDocx($application);
+        return ApplicationController::generatePdf($application);
     }
 
     public function downloadPhoto(Application $application): BinaryFileResponse

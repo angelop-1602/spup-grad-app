@@ -10,12 +10,15 @@ use App\Models\ApplicationWindow;
 use App\Support\ApplicationWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use PhpOffice\PhpWord\TemplateProcessor;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\Process\Process;
 
 class ApplicationController extends Controller
 {
@@ -172,16 +175,54 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Generate a DOCX file from the application data.
+     * Generate an application form download from the latest application data.
      *
      * This method always uses the latest application data, including any recent updates.
      * The form is generated dynamically each time it's downloaded, ensuring it reflects
      * the current state of the application, requirements, and user profile.
      *
      * Note: Any changes made to the application will be automatically reflected in
-     * the downloadable DOCX the next time it is generated.
+     * the downloadable file the next time it is generated.
      */
-    public static function generateDocx(Application $application): BinaryFileResponse
+    public static function generatePdf(Application $application): BinaryFileResponse
+    {
+        $docx = self::buildApplicationDocx($application);
+
+        try {
+            $pdfPath = self::convertDocxToPdf($docx['path']);
+        } catch (\Throwable $e) {
+            Log::warning('Application PDF conversion failed; returning DOCX fallback.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return self::downloadApplicationDocx($docx);
+        }
+
+        @unlink($docx['path']);
+
+        $fileName = preg_replace('/\.docx$/i', '.pdf', $docx['file_name']) ?: 'GraduationApplication.pdf';
+
+        return response()->download($pdfPath, $fileName, [
+            'Content-Type' => 'application/pdf',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @param  array{path: string, file_name: string}  $docx
+     */
+    private static function downloadApplicationDocx(array $docx): BinaryFileResponse
+    {
+        return response()->download($docx['path'], $docx['file_name'], [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Build the filled DOCX source file used for downloads and PDF conversion.
+     *
+     * @return array{path: string, file_name: string}
+     */
+    private static function buildApplicationDocx(Application $application): array
     {
         // Always load fresh data to ensure the form reflects the latest application state
         $application->loadMissing([
@@ -505,9 +546,325 @@ class ApplicationController extends Controller
 
         $fileName = 'GraduationApplication_'.$safeName.'.docx';
 
-        return response()->download($tempDocx, $fileName, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        ])->deleteFileAfterSend(true);
+        return [
+            'path' => $tempDocx,
+            'file_name' => $fileName,
+        ];
+    }
+
+    private static function convertDocxToPdf(string $docxPath): string
+    {
+        try {
+            if ($pdfPath = self::convertDocxToPdfWithFreeConvert($docxPath)) {
+                return $pdfPath;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('FreeConvert DOCX to PDF conversion failed.', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        if ($pdfPath = self::convertDocxToPdfWithLibreOffice($docxPath)) {
+            return $pdfPath;
+        }
+
+        throw new \RuntimeException('No DOCX to PDF converter is configured or available.');
+    }
+
+    private static function convertDocxToPdfWithFreeConvert(string $docxPath): ?string
+    {
+        $apiKey = (string) config('services.freeconvert.api_key', '');
+
+        if ($apiKey === '') {
+            return null;
+        }
+
+        $baseUrl = rtrim((string) config('services.freeconvert.base_url', 'https://api.freeconvert.com/v1'), '/');
+        $timeout = max(10, (int) config('services.freeconvert.timeout', 60));
+        $pollInterval = max(1, (int) config('services.freeconvert.poll_interval', 2));
+        $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
+        $outputFileName = basename($pdfPath);
+        $jobId = null;
+
+        @unlink($pdfPath);
+
+        try {
+            $jobResponse = Http::baseUrl($baseUrl)
+                ->acceptJson()
+                ->asJson()
+                ->withToken($apiKey)
+                ->timeout($timeout)
+                ->post('/process/jobs', [
+                    'tag' => 'graduation-application-'.((string) Str::uuid()),
+                    'tasks' => [
+                        'import-docx' => [
+                            'operation' => 'import/upload',
+                        ],
+                        'convert-pdf' => [
+                            'operation' => 'convert',
+                            'input' => 'import-docx',
+                            'input_format' => 'docx',
+                            'output_format' => 'pdf',
+                        ],
+                        'export-pdf' => [
+                            'operation' => 'export/url',
+                            'input' => 'convert-pdf',
+                            'filename' => $outputFileName,
+                        ],
+                    ],
+                ]);
+
+            if (! $jobResponse->successful()) {
+                throw new \RuntimeException('FreeConvert job creation failed with status '.$jobResponse->status().'.');
+            }
+
+            $job = $jobResponse->json();
+            $jobId = data_get($job, 'id');
+            $uploadTask = self::findFreeConvertTask($job, 'import-docx', 'import/upload');
+            $uploadUrl = data_get($uploadTask, 'result.form.url');
+            $uploadParameters = data_get($uploadTask, 'result.form.parameters', []);
+
+            if (! $jobId || ! $uploadUrl || ! is_array($uploadParameters)) {
+                throw new \RuntimeException('FreeConvert upload task did not include upload details.');
+            }
+
+            $fileHandle = fopen($docxPath, 'r');
+
+            if ($fileHandle === false) {
+                throw new \RuntimeException('Unable to open generated DOCX for FreeConvert upload.');
+            }
+
+            try {
+                $uploadResponse = Http::withToken($apiKey)
+                    ->timeout($timeout)
+                    ->withOptions(['allow_redirects' => true])
+                    ->attach(
+                        'file',
+                        $fileHandle,
+                        basename($docxPath),
+                        ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+                    )
+                    ->post($uploadUrl, $uploadParameters);
+            } finally {
+                fclose($fileHandle);
+            }
+
+            if (! $uploadResponse->successful()) {
+                throw new \RuntimeException('FreeConvert file upload failed with status '.$uploadResponse->status().'.');
+            }
+
+            $completedJob = self::waitForFreeConvertJob($baseUrl, $apiKey, $jobId, $timeout, $pollInterval);
+            $exportTask = self::findFreeConvertTask($completedJob, 'export-pdf', 'export/url');
+            $downloadUrl = self::freeConvertResultUrl($exportTask);
+
+            if (! $downloadUrl) {
+                throw new \RuntimeException('FreeConvert export task did not return a download URL.');
+            }
+
+            $downloadResponse = Http::timeout($timeout)->get($downloadUrl);
+
+            if (! $downloadResponse->successful()) {
+                throw new \RuntimeException('FreeConvert PDF download failed with status '.$downloadResponse->status().'.');
+            }
+
+            $body = $downloadResponse->body();
+
+            if (! str_starts_with($body, '%PDF')) {
+                throw new \RuntimeException('FreeConvert download response was not a PDF.');
+            }
+
+            if (file_put_contents($pdfPath, $body) === false || ! file_exists($pdfPath)) {
+                throw new \RuntimeException('Unable to save converted PDF from FreeConvert.');
+            }
+
+            return $pdfPath;
+        } finally {
+            if ($jobId) {
+                try {
+                    Http::baseUrl($baseUrl)
+                        ->withToken($apiKey)
+                        ->timeout(10)
+                        ->delete('/process/jobs/'.$jobId);
+                } catch (\Throwable) {
+                    // Cleanup is best-effort; downloaded PDFs should still be returned.
+                }
+            }
+        }
+    }
+
+    private static function waitForFreeConvertJob(string $baseUrl, string $apiKey, string $jobId, int $timeout, int $pollInterval): array
+    {
+        $deadline = time() + $timeout;
+
+        do {
+            $response = Http::baseUrl($baseUrl)
+                ->acceptJson()
+                ->withToken($apiKey)
+                ->timeout(max(10, min($timeout, 30)))
+                ->get('/process/jobs/'.$jobId);
+
+            if (! $response->successful()) {
+                throw new \RuntimeException('FreeConvert job lookup failed with status '.$response->status().'.');
+            }
+
+            $job = $response->json();
+            $status = data_get($job, 'status');
+
+            if ($status === 'completed') {
+                return $job;
+            }
+
+            if ($status === 'failed') {
+                throw new \RuntimeException('FreeConvert job failed.');
+            }
+
+            sleep($pollInterval);
+        } while (time() < $deadline);
+
+        throw new \RuntimeException('FreeConvert job timed out.');
+    }
+
+    private static function findFreeConvertTask(array $job, string $name, string $operation): ?array
+    {
+        $tasks = data_get($job, 'tasks', []);
+
+        if (! is_array($tasks)) {
+            return null;
+        }
+
+        foreach ($tasks as $task) {
+            if (data_get($task, 'name') === $name) {
+                return $task;
+            }
+        }
+
+        foreach ($tasks as $task) {
+            if (data_get($task, 'operation') === $operation) {
+                return $task;
+            }
+        }
+
+        return null;
+    }
+
+    private static function freeConvertResultUrl(?array $task): ?string
+    {
+        if (! $task) {
+            return null;
+        }
+
+        $url = data_get($task, 'result.url')
+            ?? data_get($task, 'result.files.0.url')
+            ?? data_get($task, 'result.file.url');
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    private static function convertDocxToPdfWithLibreOffice(string $docxPath): ?string
+    {
+        $binary = self::locateLibreOfficeBinary();
+
+        if (! $binary) {
+            return null;
+        }
+
+        $outputDir = dirname($docxPath);
+        $pdfPath = $outputDir.'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
+        $profileDir = $outputDir.'/libreoffice-profile-'.Str::random(12);
+
+        if (! is_dir($profileDir)) {
+            mkdir($profileDir, 0755, true);
+        }
+
+        @unlink($pdfPath);
+
+        try {
+            $process = new Process([
+                $binary,
+                '--headless',
+                '--nologo',
+                '--nofirststartwizard',
+                '--norestore',
+                '--nodefault',
+                '-env:UserInstallation='.self::pathToFileUri($profileDir),
+                '--convert-to',
+                'pdf:writer_pdf_Export',
+                '--outdir',
+                $outputDir,
+                $docxPath,
+            ]);
+            $process->setTimeout(max(10, (int) config('services.libreoffice.timeout', 60)));
+            $process->run();
+        } catch (\Throwable) {
+            self::deleteDirectory($profileDir);
+
+            return null;
+        }
+
+        self::deleteDirectory($profileDir);
+
+        return $process->isSuccessful() && file_exists($pdfPath) ? $pdfPath : null;
+    }
+
+    private static function locateLibreOfficeBinary(): ?string
+    {
+        if (! config('services.libreoffice.enabled', true)) {
+            return null;
+        }
+
+        $candidates = array_values(array_filter(array_unique([
+            config('services.libreoffice.binary'),
+            'soffice',
+            'libreoffice',
+            'C:\Program Files\LibreOffice\program\soffice.exe',
+            'C:\Program Files (x86)\LibreOffice\program\soffice.exe',
+        ])));
+
+        foreach ($candidates as $candidate) {
+            try {
+                $process = new Process([$candidate, '--version']);
+                $process->setTimeout(10);
+                $process->run();
+
+                if ($process->isSuccessful()) {
+                    return $candidate;
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    private static function pathToFileUri(string $path): string
+    {
+        $normalized = str_replace('\\', '/', realpath($path) ?: $path);
+        $encoded = str_replace('%2F', '/', rawurlencode($normalized));
+        $encoded = str_replace('%3A', ':', $encoded);
+
+        return str_starts_with($normalized, '/')
+            ? 'file://'.$encoded
+            : 'file:///'.$encoded;
+    }
+
+    private static function deleteDirectory(string $path): void
+    {
+        if (! is_dir($path)) {
+            return;
+        }
+
+        $items = array_diff(scandir($path) ?: [], ['.', '..']);
+
+        foreach ($items as $item) {
+            $itemPath = $path.DIRECTORY_SEPARATOR.$item;
+
+            is_dir($itemPath)
+                ? self::deleteDirectory($itemPath)
+                : @unlink($itemPath);
+        }
+
+        @rmdir($path);
     }
 
     public static function generateProfilePhotoDownload(Application $application): BinaryFileResponse
@@ -544,7 +901,7 @@ class ApplicationController extends Controller
             abort(403);
         }
 
-        return self::generateDocx($application);
+        return self::generatePdf($application);
     }
 
     public function downloadPhoto(Request $request, Application $application): BinaryFileResponse
