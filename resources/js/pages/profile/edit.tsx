@@ -819,7 +819,7 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                             />
                                             {showReligionSuggestions &&
                                                 religionInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
                                                         {RELIGIONS.filter((r) =>
                                                             r
                                                                 .toLowerCase()
@@ -880,7 +880,7 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                             />
                                             {showNationalitySuggestions &&
                                                 nationalityInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
                                                         {NATIONALITIES.filter((n) =>
                                                             n
                                                                 .toLowerCase()
@@ -1667,4 +1667,3 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
         </AppLayout>
     );
 }
-

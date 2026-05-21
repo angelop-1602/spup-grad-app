@@ -1216,7 +1216,7 @@ export function ApplicationWizard({
                                                     autoComplete="off"
                                                 />
                                                 {showReligionSuggestions && religionInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
                                                         {RELIGIONS.filter((religion) =>
                                                             religion
                                                                 .toLowerCase()
@@ -1277,7 +1277,7 @@ export function ApplicationWizard({
                                                     autoComplete="off"
                                                 />
                                                 {showNationalitySuggestions && nationalityInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
                                                         {NATIONALITIES.filter((nationality) =>
                                                             nationality
                                                                 .toLowerCase()

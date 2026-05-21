@@ -119,6 +119,17 @@ export default function Welcome({ canRegister = true }: { canRegister?: boolean 
     }, [trackingForm.errors]);
 
     useEffect(() => {
+        if (windowStatus?.status !== 'active') {
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('track') === '1') {
+            setIsTrackingDialogOpen(true);
+        }
+    }, [windowStatus?.status]);
+
+    useEffect(() => {
         let isMounted = true;
 
         const load = async () => {
@@ -214,6 +225,7 @@ export default function Welcome({ canRegister = true }: { canRegister?: boolean 
     const opensAtReadable = formatIsoToReadable(windowStatus?.opensAt ?? null);
     const closesAtReadable = formatIsoToReadable(windowStatus?.closesAt ?? null);
 
+    const isApplicationOpen = windowStatus?.status === 'active';
     const showCountdown = windowStatus?.status === 'upcoming' || windowStatus?.status === 'active';
 
     return (
@@ -325,92 +337,94 @@ export default function Welcome({ canRegister = true }: { canRegister?: boolean 
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <Button asChild size="lg" className="w-full sm:w-auto">
-                                            <Link href="/apply">
-                                                Start applying
-                                                <ArrowRight className="ml-2 size-4" />
-                                            </Link>
-                                        </Button>
-                                        <Dialog open={isTrackingDialogOpen} onOpenChange={setIsTrackingDialogOpen}>
-                                            <DialogTrigger asChild>
-                                                <Button
-                                                    type="button"
-                                                    size="lg"
-                                                    variant="outline"
-                                                    className="w-full border-white/20 bg-white/8 text-white backdrop-blur hover:bg-white/15 sm:w-auto"
-                                                >
-                                                    Track existing application
-                                                </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className="border-emerald-900/30 bg-[#0d3d24] text-white sm:max-w-lg">
-                                                <DialogHeader>
-                                                    <DialogTitle>Track an existing application</DialogTitle>
-                                                    <DialogDescription className="text-emerald-100/80">
-                                                        Enter the tracking code and 6-digit PIN from your email to reopen your application status.
-                                                    </DialogDescription>
-                                                </DialogHeader>
+                                    {isApplicationOpen ? (
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <Button asChild size="lg" className="w-full sm:w-auto">
+                                                <Link href="/apply">
+                                                    Start applying
+                                                    <ArrowRight className="ml-2 size-4" />
+                                                </Link>
+                                            </Button>
+                                            <Dialog open={isTrackingDialogOpen} onOpenChange={setIsTrackingDialogOpen}>
+                                                <DialogTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        size="lg"
+                                                        variant="outline"
+                                                        className="w-full border-white/20 bg-white/8 text-white backdrop-blur hover:bg-white/15 sm:w-auto"
+                                                    >
+                                                        Track existing application
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent className="border-emerald-900/30 bg-[#0d3d24] text-white sm:max-w-lg">
+                                                    <DialogHeader>
+                                                        <DialogTitle>Track an existing application</DialogTitle>
+                                                        <DialogDescription className="text-emerald-100/80">
+                                                            Enter the tracking code and 6-digit PIN from your email to reopen your application status.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
 
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="tracking_code" className="text-white/90">
-                                                            Tracking code
-                                                        </Label>
-                                                        <Input
-                                                            id="tracking_code"
-                                                            value={trackingForm.data.tracking_code}
-                                                            onChange={(event) => trackingForm.setData('tracking_code', event.target.value)}
-                                                            placeholder="TRK-2026-MAR-ABC123"
-                                                            className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
-                                                        />
-                                                        <InputError message={trackingForm.errors.tracking_code} />
-                                                    </div>
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="tracking_code" className="text-white/90">
+                                                                Tracking code
+                                                            </Label>
+                                                            <Input
+                                                                id="tracking_code"
+                                                                value={trackingForm.data.tracking_code}
+                                                                onChange={(event) => trackingForm.setData('tracking_code', event.target.value)}
+                                                                placeholder="TRK-JUNE-2026-ABC123"
+                                                                className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
+                                                            />
+                                                            <InputError message={trackingForm.errors.tracking_code} />
+                                                        </div>
 
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="tracking_pin" className="text-white/90">
-                                                            6-digit PIN
-                                                        </Label>
-                                                        <Input
-                                                            id="tracking_pin"
-                                                            inputMode="numeric"
-                                                            maxLength={6}
-                                                            value={trackingForm.data.tracking_pin}
-                                                            onChange={(event) =>
-                                                                trackingForm.setData('tracking_pin', event.target.value.replace(/\D/g, '').slice(0, 6))
-                                                            }
-                                                            placeholder="123456"
-                                                            className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
-                                                        />
-                                                        <InputError message={trackingForm.errors.tracking_pin} />
-                                                    </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="tracking_pin" className="text-white/90">
+                                                                6-digit PIN
+                                                            </Label>
+                                                            <Input
+                                                                id="tracking_pin"
+                                                                inputMode="numeric"
+                                                                maxLength={6}
+                                                                value={trackingForm.data.tracking_pin}
+                                                                onChange={(event) =>
+                                                                    trackingForm.setData('tracking_pin', event.target.value.replace(/\D/g, '').slice(0, 6))
+                                                                }
+                                                                placeholder="123456"
+                                                                className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
+                                                            />
+                                                            <InputError message={trackingForm.errors.tracking_pin} />
+                                                        </div>
 
-                                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            className="text-white hover:bg-white/10 hover:text-white"
-                                                            onClick={() => setIsTrackingDialogOpen(false)}
-                                                        >
-                                                            Cancel
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                trackingForm.post('/apply/track', {
-                                                                    preserveScroll: true,
-                                                                    onSuccess: () => setIsTrackingDialogOpen(false),
-                                                                    onError: () => setIsTrackingDialogOpen(true),
-                                                                })
-                                                            }
-                                                            disabled={trackingForm.processing}
-                                                        >
-                                                            {trackingForm.processing ? 'Checking...' : 'Track application'}
-                                                        </Button>
+                                                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                className="text-white hover:bg-white/10 hover:text-white"
+                                                                onClick={() => setIsTrackingDialogOpen(false)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    trackingForm.post('/apply/track', {
+                                                                        preserveScroll: true,
+                                                                        onSuccess: () => setIsTrackingDialogOpen(false),
+                                                                        onError: () => setIsTrackingDialogOpen(true),
+                                                                    })
+                                                                }
+                                                                disabled={trackingForm.processing}
+                                                            >
+                                                                {trackingForm.processing ? 'Checking...' : 'Track application'}
+                                                            </Button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </DialogContent>
-                                        </Dialog>
-                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </div>
+                                    ) : null}
                                 </div>
 
                                 {/* Countdown (GLASS) */}
@@ -473,7 +487,7 @@ export default function Welcome({ canRegister = true }: { canRegister?: boolean 
                                         <DialogContent className="!max-w-5xl max-h-[90vh] overflow-y-auto p-6">
                                             <DialogHeader>
                                                 <DialogTitle className="flex items-center gap-2">
-                                                    <AlertCircle className="size-5 text-amber-600 dark:text-amber-400" />
+                                                    <AlertCircle className="size-5 text-[#036635] dark:text-emerald-300" />
                                                     Graduation Application Policy
                                                 </DialogTitle>
                                                 <DialogDescription>
@@ -483,7 +497,7 @@ export default function Welcome({ canRegister = true }: { canRegister?: boolean 
 
                                             <div className="space-y-4">
                                                 {/* Policy Section */}
-                                                <Alert variant="warning">
+                                                <Alert className="border-[#036635]/25 bg-[#036635]/10 text-[#034f29] dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100">
                                                     <AlertTitle>
                                                         Graduation Application Policy
                                                     </AlertTitle>

@@ -102,16 +102,27 @@ class GuestApplicationDraft extends Model
 
     private static function generateTrackingCode(?int $windowId = null): string
     {
-        $window = $windowId ? ApplicationWindow::query()->find($windowId) : null;
-        $trackingDate = $window?->start_date ?? now();
-        $year = $trackingDate->format('Y');
-        $month = Str::upper($trackingDate->format('M'));
+        $window = $windowId
+            ? ApplicationWindow::query()->find($windowId)
+            : ApplicationWindow::current();
+        $windowSegment = static::trackingWindowSegment($window);
 
         do {
-            $trackingCode = "TRK-{$year}-{$month}-".Str::upper(Str::random(6));
+            $trackingCode = "TRK-{$windowSegment}-".Str::upper(Str::random(6));
         } while (static::query()->where('tracking_code', $trackingCode)->exists());
 
         return $trackingCode;
+    }
+
+    private static function trackingWindowSegment(?ApplicationWindow $window): string
+    {
+        $segment = $window?->title
+            ? Str::upper(Str::slug($window->title))
+            : Str::upper(now()->format('Y-M'));
+
+        $segment = trim(substr($segment, 0, 40), '-');
+
+        return $segment !== '' ? $segment : Str::upper(now()->format('Y-M'));
     }
 
     private static function generateTrackingPin(): string

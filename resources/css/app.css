@@ -154,4 +154,20 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    select {
+        color-scheme: light;
+        background-color: var(--background);
+        color: var(--foreground);
+    }
+
+    .dark select {
+        color-scheme: dark;
+    }
+
+    select option,
+    select optgroup {
+        background-color: var(--popover);
+        color: var(--popover-foreground);
+    }
 }

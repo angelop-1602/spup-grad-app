@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Link } from '@inertiajs/react';
-import { Home, Menu, Send, Sparkles } from 'lucide-react';
+import { Home, Menu, Search, Sparkles } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 interface ApplyLayoutProps {
@@ -36,10 +36,10 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                 Home
                             </Link>
                             <Link
-                                href="/apply"
+                                href="/?track=1"
                                 className="rounded-md px-2 py-1 transition hover:bg-background/70 hover:text-foreground"
                             >
-                                Start application
+                                Track application
                             </Link>
                             <div className="rounded-lg border border-border/70 bg-background/75 backdrop-blur">
                                 <AppearanceToggleDropdown />
@@ -85,11 +85,11 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                             </SheetClose>
                                             <SheetClose asChild>
                                                 <Link
-                                                    href="/apply"
+                                                    href="/?track=1"
                                                     className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/30 px-3 py-3 text-sm font-medium transition hover:bg-muted/60"
                                                 >
-                                                    <Send className="h-4 w-4 text-muted-foreground" />
-                                                    Start application
+                                                    <Search className="h-4 w-4 text-muted-foreground" />
+                                                    Track application
                                                 </Link>
                                             </SheetClose>
                                         </div>

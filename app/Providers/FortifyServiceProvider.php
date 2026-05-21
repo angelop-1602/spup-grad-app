@@ -147,7 +147,7 @@ class FortifyServiceProvider extends ServiceProvider
             $ip = (string) $request->ip();
 
             return [
-                Limit::perMinute(2)
+                Limit::perMinute(1)
                     ->by("guest-application-resend:burst:{$draftId}:{$ip}")
                     ->response(function (Request $request, array $headers) use ($draft) {
                         return redirect()->route('apply.pending.show', $draft)

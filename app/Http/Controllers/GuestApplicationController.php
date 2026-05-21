@@ -124,7 +124,7 @@ class GuestApplicationController extends Controller
         }
 
         return Inertia::render('apply/pending', [
-            'draft' => $this->pendingPayload($request, $draft),
+            'draft' => $this->pendingPayload($draft),
         ]);
     }
 
@@ -288,9 +288,6 @@ class GuestApplicationController extends Controller
         return Inertia::render('apply/verified', [
             'draft' => [
                 'id' => $draft->id,
-                'tracking_code' => $draft->ensureTrackingCode(),
-                'tracking_pin' => $draft->ensureTrackingPin(),
-                'application_number' => $draft->application?->application_number,
                 'access_url' => $this->guestAccessUrl($draft),
             ],
             'alreadyVerified' => ! $newlyFinalized,
@@ -344,10 +341,6 @@ class GuestApplicationController extends Controller
             'application' => $application,
             'profile' => $application->user->profile,
             'portalMode' => 'guest',
-            'guestTracking' => $draft ? [
-                'tracking_code' => $draft->ensureTrackingCode(),
-                'tracking_pin' => $draft->ensureTrackingPin(),
-            ] : null,
         ]);
     }
 
@@ -536,31 +529,17 @@ class GuestApplicationController extends Controller
         );
     }
 
-    private function pendingPayload(Request $request, GuestApplicationDraft $draft): array
+    private function pendingPayload(GuestApplicationDraft $draft): array
     {
-        $draft->loadMissing(['window', 'application']);
+        $draft->loadMissing('application');
 
         $application = $draft->application;
-        $hasPortalAccess = $application
-            ? in_array($application->id, $request->session()->get(self::ACCESS_SESSION_KEY, []), true)
-            : false;
 
         return [
             'id' => $draft->id,
             'email' => $draft->email,
-            'student_id' => $draft->student_id,
-            'tracking_code' => $draft->ensureTrackingCode(),
-            'tracking_pin' => $draft->ensureTrackingPin(),
             'verified_at' => $draft->verified_at?->toIso8601String(),
-            'has_portal_access' => $hasPortalAccess,
-            'application_number' => $application?->application_number,
             'access_url' => $application ? $this->guestAccessUrl($draft) : null,
-            'window' => [
-                'id' => $draft->window->id,
-                'title' => $draft->window->title,
-                'start_date' => $draft->window->start_date->toIso8601String(),
-                'end_date' => $draft->window->end_date->toIso8601String(),
-            ],
         ];
     }
 

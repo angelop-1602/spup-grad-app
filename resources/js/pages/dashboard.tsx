@@ -78,17 +78,17 @@ export default function Dashboard({
                         <CardContent className=" md:p-6">
                             <div className="space-y-4 md:space-y-6">
                                     {/* Policy Notice */}
-                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 md:p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                                    <div className="rounded-lg border border-[#036635]/25 bg-[#036635]/10 p-3 md:p-4 dark:border-emerald-400/30 dark:bg-emerald-400/10">
                                         <div className="flex items-start gap-2 md:gap-3">
-                                            <AlertCircle className="mt-0.5 size-4 md:size-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                            <AlertCircle className="mt-0.5 size-4 md:size-5 text-[#036635] dark:text-emerald-300 shrink-0" />
                                             <div className="flex-1 min-w-0 space-y-2">
-                                                <h3 className="text-sm md:text-base font-semibold text-amber-900 dark:text-amber-100">
+                                                <h3 className="text-sm md:text-base font-semibold text-[#034f29] dark:text-emerald-100">
                                                     Graduation Application Policy
                                                 </h3>
-                                                <p className="text-xs md:text-sm text-amber-800 dark:text-amber-200">
+                                                <p className="text-xs md:text-sm text-[#035c30] dark:text-emerald-100/90">
                                                     The University strictly enforces the <strong>"No Application, No Graduation"</strong> policy. Submission of an official graduation application is <strong>mandatory</strong> as it serves as the primary basis for evaluating a student's academic record and determining eligibility for graduation.
                                                 </p>
-                                                <p className="text-xs md:text-sm text-amber-800 dark:text-amber-200">
+                                                <p className="text-xs md:text-sm text-[#035c30] dark:text-emerald-100/90">
                                                     To avoid delays in processing and approval, students are strongly advised to submit their application within the prescribed period.
                                                 </p>
                                             </div>

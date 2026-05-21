@@ -113,7 +113,7 @@ test('guest submit stores a draft and sends verification without creating real a
     $response->assertRedirect(route('apply.pending.show', $draft, absolute: false));
     expect($draft)->not->toBeNull();
     expect($draft->verified_at)->toBeNull();
-    expect($draft->tracking_code)->toMatch('/^TRK-\d{4}-[A-Z]{3}-[A-Z0-9]{6}$/');
+    expect($draft->tracking_code)->toMatch('/^TRK-MARCH-2026-GRADUATION-[A-Z0-9]{6}$/');
     expect($draft->tracking_pin)->toMatch('/^\d{6}$/');
     expect($draft->payload['last_name'])->toBe('Santos');
     expect($draft->payload['contact_number'])->toBe('09171234567');
@@ -231,9 +231,6 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/verified')
             ->where('draft.id', $draft->id)
-            ->where('draft.tracking_code', $draft->tracking_code)
-            ->where('draft.tracking_pin', $draft->tracking_pin)
-            ->where('draft.application_number', $application->application_number)
             ->where('alreadyVerified', false)
             ->where('draft.access_url', fn (string $url) => str_contains($url, "/apply/access/{$draft->id}"))
         );
@@ -247,8 +244,7 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/pending')
-            ->where('draft.application_number', $application->application_number)
-            ->where('draft.tracking_pin', $draft->tracking_pin)
+            ->where('draft.verified_at', fn (?string $verifiedAt) => $verifiedAt !== null)
             ->where('draft.access_url', fn (string $url) => str_contains($url, "/apply/access/{$draft->id}"))
         );
 
@@ -309,8 +305,8 @@ test('public tracking lookup redirects to the guest status page when tracking co
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/pending')
-            ->where('draft.tracking_code', $draft->tracking_code)
-            ->where('draft.tracking_pin', $draft->tracking_pin)
+            ->where('draft.email', $draft->email)
+            ->where('draft.verified_at', null)
         );
 });
 

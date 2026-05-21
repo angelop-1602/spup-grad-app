@@ -139,10 +139,6 @@ interface ShowApplicationProps {
         grad_doctoral_year?: number | null;
     } | null;
     portalMode?: 'student' | 'guest';
-    guestTracking?: {
-        tracking_code: string;
-        tracking_pin: string;
-    } | null;
 }
 
 
@@ -150,7 +146,6 @@ export default function ShowApplication({
     application,
     profile,
     portalMode = 'student',
-    guestTracking = null,
 }: ShowApplicationProps) {
     const [uploadingRequirement, setUploadingRequirement] = useState<number | null>(null);
     const uploadingToastIdRef = useRef<string | null>(null);
@@ -332,22 +327,6 @@ export default function ShowApplication({
                                     {application.presence === 'attending' ? 'Attending' : 'Not Attending'}
                                 </p>
                             </div>
-                            {isGuestPortal && guestTracking ? (
-                                <>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                            Tracking Code
-                                        </Label>
-                                        <p className="text-sm font-medium">{guestTracking.tracking_code}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                            Tracking PIN
-                                        </Label>
-                                        <p className="text-sm font-medium">{guestTracking.tracking_pin}</p>
-                                    </div>
-                                </>
-                            ) : null}
                         </div>
                         <div className="hidden grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-1">
@@ -414,22 +393,6 @@ export default function ShowApplication({
                                 </Label>
                                 <p className="text-sm">{new Date(application.created_at).toLocaleDateString()}</p>
                             </div>
-                            {isGuestPortal && guestTracking ? (
-                                <>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                            Tracking Code
-                                        </Label>
-                                        <p className="text-sm font-medium">{guestTracking.tracking_code}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                            Tracking PIN
-                                        </Label>
-                                        <p className="text-sm font-medium">{guestTracking.tracking_pin}</p>
-                                    </div>
-                                </>
-                            ) : null}
                         </div>
                     </div>
                 </div>
