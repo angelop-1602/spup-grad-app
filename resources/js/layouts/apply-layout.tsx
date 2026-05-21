@@ -3,7 +3,14 @@ import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import FlashToastHandler from '@/components/flash-toast-handler';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import {
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+} from '@/components/ui/sheet';
 import { Link } from '@inertiajs/react';
 import { Home, Menu, Search, Sparkles } from 'lucide-react';
 import { type ReactNode } from 'react';
@@ -16,14 +23,16 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
     return (
         <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
             <FlashToastHandler />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_38%),linear-gradient(180deg,_rgba(236,253,245,0.96)_0%,_rgba(248,250,252,1)_52%,_rgba(255,255,255,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_40%),linear-gradient(180deg,_#052e16_0%,_#022c22_45%,_#020617_100%)]" />
-            <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
-                <header className="mb-8 border-b border-border/70 pb-5 sm:pb-6">
+            <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col bg-background px-4 py-6 sm:px-6 lg:px-8">
+                <header className="border-b border-border/70 pb-5 sm:pb-6">
                     <div className="flex items-start justify-between gap-3">
-                        <Link href="/" className="flex min-w-0 flex-1 items-center gap-2.5 pr-2 sm:gap-3">
+                        <Link
+                            href="/"
+                            className="flex min-w-0 flex-1 items-center gap-2.5 pr-2 sm:gap-3"
+                        >
                             <AppLogoIcon className="h-9 w-9 shrink-0 object-contain sm:h-12 sm:w-12" />
-                            <div className="min-w-0 max-w-[12.5rem] sm:max-w-none">
-                                <p className="text-[10px] font-semibold tracking-[0.14em] text-emerald-700 uppercase dark:text-emerald-100/80 sm:text-xs md:text-sm">
+                            <div className="max-w-[12.5rem] min-w-0 sm:max-w-none">
+                                <p className="text-[10px] font-semibold tracking-[0.14em] text-emerald-700 uppercase sm:text-xs md:text-sm dark:text-emerald-100/80">
                                     Graduation Portal
                                 </p>
                                 <h1 className="text-xs leading-tight font-semibold text-foreground sm:text-sm md:text-lg">
@@ -32,7 +41,10 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                             </div>
                         </Link>
                         <div className="hidden items-center gap-3 text-sm text-muted-foreground md:flex">
-                            <Link href="/" className="rounded-md px-2 py-1 transition hover:bg-background/70 hover:text-foreground">
+                            <Link
+                                href="/"
+                                className="rounded-md px-2 py-1 transition hover:bg-background/70 hover:text-foreground"
+                            >
                                 Home
                             </Link>
                             <Link
@@ -48,7 +60,11 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                         <div className="md:hidden">
                             <Sheet>
                                 <SheetTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-lg">
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-10 w-10 shrink-0 rounded-lg"
+                                    >
                                         <Menu className="h-5 w-5" />
                                     </Button>
                                 </SheetTrigger>
@@ -64,7 +80,8 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                                     Graduation Portal
                                                 </p>
                                                 <SheetTitle className="text-sm leading-tight">
-                                                    St. Paul University Philippines
+                                                    St. Paul University
+                                                    Philippines
                                                 </SheetTitle>
                                             </div>
                                         </div>
@@ -101,7 +118,8 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                                     Appearance
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Choose light, dark, or system mode.
+                                                    Choose light, dark, or
+                                                    system mode.
                                                 </p>
                                             </div>
                                             <AppearanceToggleDropdown className="shrink-0" />
