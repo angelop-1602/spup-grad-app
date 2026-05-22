@@ -24,7 +24,7 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
         <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
             <FlashToastHandler />
             <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col bg-background px-4 py-6 sm:px-6 lg:px-8">
-                <header className="border-b border-border/70 pb-5 sm:pb-6">
+                <header className="rounded-xl border border-border/70 bg-white px-4 py-4 text-black shadow-sm sm:px-5 dark:bg-black dark:text-white">
                     <div className="flex items-start justify-between gap-3">
                         <Link
                             href="/"
@@ -32,12 +32,18 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                         >
                             <AppLogoIcon className="h-9 w-9 shrink-0 object-contain sm:h-12 sm:w-12" />
                             <div className="max-w-[12.5rem] min-w-0 sm:max-w-none">
-                                <p className="text-[10px] font-semibold tracking-[0.14em] text-emerald-700 uppercase sm:text-xs md:text-sm dark:text-emerald-100/80">
-                                    Graduation Portal
-                                </p>
-                                <h1 className="text-xs leading-tight font-semibold text-foreground sm:text-sm md:text-lg">
+                                <h1
+                                    className="text-xs leading-tight font-semibold text-foreground sm:text-sm md:text-lg"
+                                    style={{
+                                        fontFamily:
+                                            '"Old English Text MT", "UnifrakturCook", "UnifrakturMaguntia", "Blackletter", serif',
+                                    }}
+                                >
                                     St. Paul University Philippines
                                 </h1>
+                                <p className="text-[5px] font-semibold tracking-[0.14em] text-emerald-700 uppercase sm:text-xs md:text-xs dark:text-emerald-100/80">
+                                    Graduation Application Portal
+                                </p>
                             </div>
                         </Link>
                         <div className="hidden items-center gap-3 text-sm text-muted-foreground md:flex">
@@ -79,7 +85,13 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                                 <p className="text-[10px] font-semibold tracking-[0.14em] text-emerald-700 uppercase dark:text-emerald-100/80">
                                                     Graduation Portal
                                                 </p>
-                                                <SheetTitle className="text-sm leading-tight">
+                                                <SheetTitle
+                                                    className="text-sm leading-tight"
+                                                    style={{
+                                                        fontFamily:
+                                                            '"Old English Text MT", "UnifrakturCook", "UnifrakturMaguntia", "Blackletter", serif',
+                                                    }}
+                                                >
                                                     St. Paul University
                                                     Philippines
                                                 </SheetTitle>

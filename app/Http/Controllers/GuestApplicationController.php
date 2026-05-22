@@ -159,6 +159,16 @@ class GuestApplicationController extends Controller
 
         $this->rememberDraft($request, $draft);
 
+        if ($draft->application_id) {
+            $draft->loadMissing('application');
+
+            if ($draft->application) {
+                $this->grantPortalAccess($request, $draft->application->id);
+
+                return redirect()->route('apply.portal.show', $draft->application);
+            }
+        }
+
         return redirect()->route('apply.pending.show', $draft);
     }
 

@@ -161,7 +161,7 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
         <ApplyLayout>
             <Head title="Check Your Email" />
 
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-4xl">
                 <Card className="border-border/70 bg-background/80 shadow-2xl shadow-black/10 backdrop-blur dark:shadow-black/20">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-2xl">

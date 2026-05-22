@@ -1,5 +1,4 @@
 import InputError from '@/components/input-error';
-import ValidationSummary from '@/components/validation-summary';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -12,14 +11,22 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import ValidationSummary from '@/components/validation-summary';
+import { useToast } from '@/contexts/toast-context';
 import { MONTHS, NATIONALITIES, RELIGIONS } from '@/lib/profile-form-options';
-import { type SharedData } from '@/types';
-import { Link, useForm, usePage } from '@inertiajs/react';
-import { useState, useEffect, useRef } from 'react';
 import applicationRoutes from '@/routes/applications/index';
 import applyRoutes from '@/routes/apply';
-import { Camera, CheckCircle2, ChevronRight, ChevronLeft, Plus, X } from 'lucide-react';
-import { useToast } from '@/contexts/toast-context';
+import { type SharedData } from '@/types';
+import { Link, useForm, usePage } from '@inertiajs/react';
+import {
+    Camera,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Plus,
+    X,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface Department {
     id: number;
@@ -225,9 +232,9 @@ export function ApplicationWizard({
     const activeApplication = application;
     const [currentStep, setCurrentStep] = useState<Step>('personal');
     const [confirmedSteps, setConfirmedSteps] = useState<Set<Step>>(new Set());
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | ''>(
-        activeApplication?.department_id ?? '',
-    );
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<
+        number | ''
+    >(activeApplication?.department_id ?? '');
     const [selectedCourseId, setSelectedCourseId] = useState<number | ''>(
         activeApplication?.course_id ?? '',
     );
@@ -238,7 +245,8 @@ export function ApplicationWizard({
     const [noThesisRequired, setNoThesisRequired] = useState(false);
     // Check if student did NOT attend senior high school
     // Default to false (unchecked) - show inputs by default
-    const [didNotAttendSeniorHigh, setDidNotAttendSeniorHigh] = useState<boolean>(false);
+    const [didNotAttendSeniorHigh, setDidNotAttendSeniorHigh] =
+        useState<boolean>(false);
     const [useSingleGradeSchool, setUseSingleGradeSchool] = useState(false);
     const [singleGradeSchoolName, setSingleGradeSchoolName] = useState('');
     const [useSingleJhsSchool, setUseSingleJhsSchool] = useState(false);
@@ -246,22 +254,30 @@ export function ApplicationWizard({
     const [useSingleShsSchool, setUseSingleShsSchool] = useState(false);
     const [singleShsSchoolName, setSingleShsSchoolName] = useState('');
     const [religionInput, setReligionInput] = useState(profile?.religion || '');
-    const [showReligionSuggestions, setShowReligionSuggestions] = useState(false);
-    const [nationalityInput, setNationalityInput] = useState(profile?.nationality || '');
-    const [showNationalitySuggestions, setShowNationalitySuggestions] = useState(false);
-    const existingPhotoPreview = profile?.photo_path ? `/storage/${profile.photo_path}` : null;
-    const [photoPreview, setPhotoPreview] = useState<string | null>(existingPhotoPreview);
+    const [showReligionSuggestions, setShowReligionSuggestions] =
+        useState(false);
+    const [nationalityInput, setNationalityInput] = useState(
+        profile?.nationality || '',
+    );
+    const [showNationalitySuggestions, setShowNationalitySuggestions] =
+        useState(false);
+    const existingPhotoPreview = profile?.photo_path
+        ? `/storage/${profile.photo_path}`
+        : null;
+    const [photoPreview, setPhotoPreview] = useState<string | null>(
+        existingPhotoPreview,
+    );
 
     // Date of birth state (month/day/year dropdowns)
     const parsedDob = profile?.date_of_birth
         ? (() => {
-            try {
-                const date = new Date(profile.date_of_birth);
-                return isNaN(date.getTime()) ? null : date;
-            } catch {
-                return null;
-            }
-        })()
+              try {
+                  const date = new Date(profile.date_of_birth);
+                  return isNaN(date.getTime()) ? null : date;
+              } catch {
+                  return null;
+              }
+          })()
         : null;
     const currentYear = new Date().getFullYear();
     const [dobMonth, setDobMonth] = useState<number | ''>(
@@ -274,8 +290,12 @@ export function ApplicationWizard({
         parsedDob ? parsedDob.getFullYear() : '',
     );
 
-    const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId);
-    const selectedCourse = selectedDepartment?.courses.find((c) => c.id === selectedCourseId);
+    const selectedDepartment = departments.find(
+        (d) => d.id === selectedDepartmentId,
+    );
+    const selectedCourse = selectedDepartment?.courses.find(
+        (c) => c.id === selectedCourseId,
+    );
     const isGraduateProgram =
         selectedDepartment?.name.toLowerCase().includes('graduate') ?? false;
 
@@ -283,102 +303,121 @@ export function ApplicationWizard({
     const formRef = useRef<HTMLFormElement | null>(null);
     const photoInputRef = useRef<HTMLInputElement | null>(null);
 
-    const existingGraduateSubjects = activeApplication && isGraduateProgram && activeApplication.subject_enrollments.length > 0
-        ? activeApplication.subject_enrollments.map((subjectEnrollment) => {
-            const parts = (subjectEnrollment.subject_name || '').split(' - ');
+    const existingGraduateSubjects =
+        activeApplication &&
+        isGraduateProgram &&
+        activeApplication.subject_enrollments.length > 0
+            ? activeApplication.subject_enrollments.map((subjectEnrollment) => {
+                  const parts = (subjectEnrollment.subject_name || '').split(
+                      ' - ',
+                  );
 
-            return {
-                subject_code: parts[0] || '',
-                subject_title: parts[1] || subjectEnrollment.subject_name,
-                units: subjectEnrollment.units,
-            };
-        })
-        : [];
+                  return {
+                      subject_code: parts[0] || '',
+                      subject_title: parts[1] || subjectEnrollment.subject_name,
+                      units: subjectEnrollment.units,
+                  };
+              })
+            : [];
 
-    const existingSubjectEnrollments = activeApplication && !isGraduateProgram
-        ? activeApplication.subject_enrollments.map((subjectEnrollment) => ({
-            subject_name: subjectEnrollment.subject_name,
-            units: subjectEnrollment.units,
-        }))
-        : [];
+    const existingSubjectEnrollments =
+        activeApplication && !isGraduateProgram
+            ? activeApplication.subject_enrollments.map(
+                  (subjectEnrollment) => ({
+                      subject_name: subjectEnrollment.subject_name,
+                      units: subjectEnrollment.units,
+                  }),
+              )
+            : [];
 
     // Initialize form data from profile
-    const { data, setData, post, put, processing, errors } = useForm<ApplicationWizardData>({
-        window_id: window.id,
-        email: '',
-        student_id: user?.student_id
-            ? String(user.student_id)
-            : activeApplication?.user?.student_id
-                ? String(activeApplication.user.student_id)
+    const { data, setData, post, put, processing, errors } =
+        useForm<ApplicationWizardData>({
+            window_id: window.id,
+            email: '',
+            student_id: user?.student_id
+                ? String(user.student_id)
+                : activeApplication?.user?.student_id
+                  ? String(activeApplication.user.student_id)
+                  : '',
+            // Personal Information (editable)
+            first_name: profile?.first_name || '',
+            middle_name: profile?.middle_name || '',
+            last_name: profile?.last_name || '',
+            suffix: profile?.suffix || '',
+            date_of_birth: profile?.date_of_birth || '',
+            place_of_birth: profile?.place_of_birth || '',
+            sex: profile?.sex || '',
+            civil_status: profile?.civil_status || '',
+            religion: profile?.religion || '',
+            nationality: profile?.nationality || '',
+            permanent_address: profile?.permanent_address || '',
+            contact_number: profile?.contact_number || '',
+            photo: null,
+            // Educational Background (editable)
+            highest_education_level: profile?.highest_education_level || '',
+            // Grade School
+            grade_1_school: profile?.grade_1_school || '',
+            grade_1_year: profile?.grade_1_year || '',
+            grade_2_school: profile?.grade_2_school || '',
+            grade_2_year: profile?.grade_2_year || '',
+            grade_3_school: profile?.grade_3_school || '',
+            grade_3_year: profile?.grade_3_year || '',
+            grade_4_school: profile?.grade_4_school || '',
+            grade_4_year: profile?.grade_4_year || '',
+            grade_5_school: profile?.grade_5_school || '',
+            grade_5_year: profile?.grade_5_year || '',
+            grade_6_school: profile?.grade_6_school || '',
+            grade_6_year: profile?.grade_6_year || '',
+            // Junior High School
+            jhs_1_school: profile?.jhs_1_school || '',
+            jhs_1_year: profile?.jhs_1_year || '',
+            jhs_2_school: profile?.jhs_2_school || '',
+            jhs_2_year: profile?.jhs_2_year || '',
+            jhs_3_school: profile?.jhs_3_school || '',
+            jhs_3_year: profile?.jhs_3_year || '',
+            jhs_4_school: profile?.jhs_4_school || '',
+            jhs_4_year: profile?.jhs_4_year || '',
+            // Senior High School
+            shs_11_school: profile?.shs_11_school || '',
+            shs_11_year: profile?.shs_11_year || '',
+            shs_12_school: profile?.shs_12_school || '',
+            shs_12_year: profile?.shs_12_year || '',
+            // College
+            college_degree: profile?.college_degree || '',
+            college_school_name: profile?.college_school_name || '',
+            college_year_graduated: profile?.college_year_graduated || '',
+            is_transferee: profile?.is_transferee || false,
+            // Graduate School
+            grad_masteral_school: profile?.grad_masteral_school || '',
+            grad_masteral_year: profile?.grad_masteral_year || '',
+            grad_doctoral_school: profile?.grad_doctoral_school || '',
+            grad_doctoral_year: profile?.grad_doctoral_year || '',
+            // Application Details
+            department_id: activeApplication
+                ? String(activeApplication.department_id)
                 : '',
-        // Personal Information (editable)
-        first_name: profile?.first_name || '',
-        middle_name: profile?.middle_name || '',
-        last_name: profile?.last_name || '',
-        suffix: profile?.suffix || '',
-        date_of_birth: profile?.date_of_birth || '',
-        place_of_birth: profile?.place_of_birth || '',
-        sex: profile?.sex || '',
-        civil_status: profile?.civil_status || '',
-        religion: profile?.religion || '',
-        nationality: profile?.nationality || '',
-        permanent_address: profile?.permanent_address || '',
-        contact_number: profile?.contact_number || '',
-        photo: null,
-        // Educational Background (editable)
-        highest_education_level: profile?.highest_education_level || '',
-        // Grade School
-        grade_1_school: profile?.grade_1_school || '',
-        grade_1_year: profile?.grade_1_year || '',
-        grade_2_school: profile?.grade_2_school || '',
-        grade_2_year: profile?.grade_2_year || '',
-        grade_3_school: profile?.grade_3_school || '',
-        grade_3_year: profile?.grade_3_year || '',
-        grade_4_school: profile?.grade_4_school || '',
-        grade_4_year: profile?.grade_4_year || '',
-        grade_5_school: profile?.grade_5_school || '',
-        grade_5_year: profile?.grade_5_year || '',
-        grade_6_school: profile?.grade_6_school || '',
-        grade_6_year: profile?.grade_6_year || '',
-        // Junior High School
-        jhs_1_school: profile?.jhs_1_school || '',
-        jhs_1_year: profile?.jhs_1_year || '',
-        jhs_2_school: profile?.jhs_2_school || '',
-        jhs_2_year: profile?.jhs_2_year || '',
-        jhs_3_school: profile?.jhs_3_school || '',
-        jhs_3_year: profile?.jhs_3_year || '',
-        jhs_4_school: profile?.jhs_4_school || '',
-        jhs_4_year: profile?.jhs_4_year || '',
-        // Senior High School
-        shs_11_school: profile?.shs_11_school || '',
-        shs_11_year: profile?.shs_11_year || '',
-        shs_12_school: profile?.shs_12_school || '',
-        shs_12_year: profile?.shs_12_year || '',
-        // College
-        college_degree: profile?.college_degree || '',
-        college_school_name: profile?.college_school_name || '',
-        college_year_graduated: profile?.college_year_graduated || '',
-        is_transferee: profile?.is_transferee || false,
-        // Graduate School
-        grad_masteral_school: profile?.grad_masteral_school || '',
-        grad_masteral_year: profile?.grad_masteral_year || '',
-        grad_doctoral_school: profile?.grad_doctoral_school || '',
-        grad_doctoral_year: profile?.grad_doctoral_year || '',
-        // Application Details
-        department_id: activeApplication ? String(activeApplication.department_id) : '',
-        course_id: activeApplication ? String(activeApplication.course_id) : '',
-        major: activeApplication?.major || '',
-        degree_title: activeApplication?.degree_title || '',
-        presence: (activeApplication?.presence as 'attending' | 'not attending') || 'attending',
-        // Graduate program fields (start with 1, can add more)
-        graduate_subjects: existingGraduateSubjects.length > 0
-            ? existingGraduateSubjects
-            : [{ subject_code: '', subject_title: '', units: 0 }],
-        thesis_dissertation_title: activeApplication?.thesis_dissertation_title || '',
-        thesis_dissertation_adviser: activeApplication?.thesis_dissertation_adviser || '',
-        // Undergraduate subject enrollments
-        subject_enrollments: existingSubjectEnrollments,
-    });
+            course_id: activeApplication
+                ? String(activeApplication.course_id)
+                : '',
+            major: activeApplication?.major || '',
+            degree_title: activeApplication?.degree_title || '',
+            presence:
+                (activeApplication?.presence as
+                    | 'attending'
+                    | 'not attending') || 'attending',
+            // Graduate program fields (start with 1, can add more)
+            graduate_subjects:
+                existingGraduateSubjects.length > 0
+                    ? existingGraduateSubjects
+                    : [{ subject_code: '', subject_title: '', units: 0 }],
+            thesis_dissertation_title:
+                activeApplication?.thesis_dissertation_title || '',
+            thesis_dissertation_adviser:
+                activeApplication?.thesis_dissertation_adviser || '',
+            // Undergraduate subject enrollments
+            subject_enrollments: existingSubjectEnrollments,
+        });
 
     // Initialize date_of_birth from dropdowns on mount
     useEffect(() => {
@@ -396,7 +435,9 @@ export function ApplicationWizard({
         if (selectedDepartment && selectedCourse) {
             let degreeTitle = selectedCourse.name;
             if (selectedMajorId && selectedCourse.majors.length > 0) {
-                const major = selectedCourse.majors.find((m) => m.id === selectedMajorId);
+                const major = selectedCourse.majors.find(
+                    (m) => m.id === selectedMajorId,
+                );
                 if (major) {
                     degreeTitle = `${selectedCourse.name} - ${major.name}`;
                 }
@@ -407,7 +448,11 @@ export function ApplicationWizard({
     }, [selectedDepartment, selectedCourse, selectedMajorId]);
 
     useEffect(() => {
-        if (! activeApplication?.major || ! selectedCourse || selectedMajorId !== '') {
+        if (
+            !activeApplication?.major ||
+            !selectedCourse ||
+            selectedMajorId !== ''
+        ) {
             return;
         }
 
@@ -421,37 +466,40 @@ export function ApplicationWizard({
     }, [activeApplication?.major, selectedCourse, selectedMajorId]);
 
     useEffect(() => {
-        if (! profile) {
+        if (!profile) {
             return;
         }
 
-        const noSeniorHighData = ! profile.shs_11_school && ! profile.shs_12_school
-            && ! profile.shs_11_year && ! profile.shs_12_year;
+        const noSeniorHighData =
+            !profile.shs_11_school &&
+            !profile.shs_12_school &&
+            !profile.shs_11_year &&
+            !profile.shs_12_year;
 
         setDidNotAttendSeniorHigh(noSeniorHighData);
     }, [profile]);
 
     useEffect(() => {
-        if (! activeApplication) {
+        if (!activeApplication) {
             return;
         }
 
         setNoThesisRequired(
-            ! activeApplication.thesis_dissertation_title
-            && ! activeApplication.thesis_dissertation_adviser,
+            !activeApplication.thesis_dissertation_title &&
+                !activeApplication.thesis_dissertation_adviser,
         );
     }, [activeApplication]);
 
     useEffect(() => {
-        if (! formRef.current) {
+        if (!formRef.current) {
             return;
         }
 
         formRef.current.classList.remove('was-validated');
 
-        const elements = formRef.current.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
-            '[data-slot="input"], select, textarea',
-        );
+        const elements = formRef.current.querySelectorAll<
+            HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+        >('[data-slot="input"], select, textarea');
 
         elements.forEach((element) => {
             element.removeAttribute('aria-invalid');
@@ -476,7 +524,11 @@ export function ApplicationWizard({
     const shsSchoolFields = ['shs_11_school', 'shs_12_school'] as const;
 
     const syncSchoolGroup = (
-        fields: ReadonlyArray<typeof gradeSchoolFields[number] | typeof jhsSchoolFields[number] | typeof shsSchoolFields[number]>,
+        fields: ReadonlyArray<
+            | (typeof gradeSchoolFields)[number]
+            | (typeof jhsSchoolFields)[number]
+            | (typeof shsSchoolFields)[number]
+        >,
         schoolName: string,
     ) => {
         setData((currentData) => {
@@ -492,27 +544,27 @@ export function ApplicationWizard({
 
     const resolveErrorStep = (field: string): Step => {
         if (
-            field === 'highest_education_level'
-            || field === 'is_transferee'
-            || field.startsWith('grade_')
-            || field.startsWith('jhs_')
-            || field.startsWith('shs_')
-            || field.startsWith('college_')
-            || field.startsWith('grad_')
+            field === 'highest_education_level' ||
+            field === 'is_transferee' ||
+            field.startsWith('grade_') ||
+            field.startsWith('jhs_') ||
+            field.startsWith('shs_') ||
+            field.startsWith('college_') ||
+            field.startsWith('grad_')
         ) {
             return 'educational';
         }
 
         if (
-            field === 'window_id'
-            || field === 'department_id'
-            || field === 'course_id'
-            || field === 'major'
-            || field === 'degree_title'
-            || field === 'presence'
-            || field.startsWith('graduate_subjects')
-            || field.startsWith('subject_enrollments')
-            || field.startsWith('thesis_')
+            field === 'window_id' ||
+            field === 'department_id' ||
+            field === 'course_id' ||
+            field === 'major' ||
+            field === 'degree_title' ||
+            field === 'presence' ||
+            field.startsWith('graduate_subjects') ||
+            field.startsWith('subject_enrollments') ||
+            field.startsWith('thesis_')
         ) {
             return 'application';
         }
@@ -521,11 +573,11 @@ export function ApplicationWizard({
     };
 
     const handlePhotoChange = (file: File | null, input: HTMLInputElement) => {
-        if (! file) {
+        if (!file) {
             return;
         }
 
-        if (! file.type.startsWith('image/')) {
+        if (!file.type.startsWith('image/')) {
             addToast({
                 variant: 'error',
                 title: 'Invalid file type',
@@ -571,18 +623,21 @@ export function ApplicationWizard({
         const form = e.currentTarget;
         form.classList.add('was-validated');
 
-        if (! form.reportValidity()) {
+        if (!form.reportValidity()) {
             return;
         }
 
-        const onError = (formErrors: Record<string, string | string[] | undefined>) => {
-            const [firstField, firstMessage] = Object.entries(formErrors).find(([, message]) => {
-                if (Array.isArray(message)) {
-                    return message.length > 0;
-                }
+        const onError = (
+            formErrors: Record<string, string | string[] | undefined>,
+        ) => {
+            const [firstField, firstMessage] =
+                Object.entries(formErrors).find(([, message]) => {
+                    if (Array.isArray(message)) {
+                        return message.length > 0;
+                    }
 
-                return Boolean(message);
-            }) ?? [];
+                    return Boolean(message);
+                }) ?? [];
 
             if (firstField) {
                 setCurrentStep(resolveErrorStep(firstField));
@@ -593,15 +648,21 @@ export function ApplicationWizard({
                 title: isEditMode ? 'Update Failed' : 'Submission Failed',
                 description: Array.isArray(firstMessage)
                     ? firstMessage[0]
-                    : firstMessage || 'Please check the form for errors and try again.',
+                    : firstMessage ||
+                      'Please check the form for errors and try again.',
                 duration: 7000,
             });
         };
 
         if (isEditMode && activeApplication) {
-            const updateRoute = portalMode === 'guest'
-                ? applyRoutes.portal.update(activeApplication.application_number).url
-                : applicationRoutes.update(activeApplication.application_number).url;
+            const updateRoute =
+                portalMode === 'guest'
+                    ? applyRoutes.portal.update(
+                          activeApplication.application_number,
+                      ).url
+                    : applicationRoutes.update(
+                          activeApplication.application_number,
+                      ).url;
 
             put(updateRoute, { forceFormData: true, onError });
 
@@ -623,7 +684,9 @@ export function ApplicationWizard({
 
             // Mark invalid fields and log them for debugging
             const elements = Array.from(
-                form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-slot="input"], select, textarea'),
+                form.querySelectorAll<
+                    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+                >('[data-slot="input"], select, textarea'),
             );
 
             const invalidFields: string[] = [];
@@ -641,9 +704,16 @@ export function ApplicationWizard({
             });
 
             if (invalidFields.length > 0) {
-                console.log(`Application ${mode} - invalid fields in step`, currentStep, ':', invalidFields);
+                console.log(
+                    `Application ${mode} - invalid fields in step`,
+                    currentStep,
+                    ':',
+                    invalidFields,
+                );
             } else {
-                console.log(`Application ${mode} - current step passed client-side required validation`);
+                console.log(
+                    `Application ${mode} - current step passed client-side required validation`,
+                );
             }
 
             // Validate visible required fields in the current step before continuing
@@ -652,7 +722,8 @@ export function ApplicationWizard({
                 addToast({
                     variant: 'error',
                     title: 'Missing required information',
-                    description: 'Please fill in all required fields in this step before continuing.',
+                    description:
+                        'Please fill in all required fields in this step before continuing.',
                     duration: 6000,
                 });
 
@@ -734,7 +805,8 @@ export function ApplicationWizard({
                 <CardHeader>
                     <CardTitle>Profile Required</CardTitle>
                     <CardDescription>
-                        Please complete your profile before submitting an application.
+                        Please complete your profile before submitting an
+                        application.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -749,113 +821,148 @@ export function ApplicationWizard({
     const steps: Array<{ id: Step; label: string; description: string }> = [
         {
             id: 'personal',
-            label: isGuestMode ? 'Contact & Personal Info' : 'Personal Information',
+            label: isGuestMode
+                ? 'Contact & Personal Info'
+                : 'Personal Information',
             description: isGuestMode
                 ? 'Tell us how to reach you and review your personal details'
                 : 'Review and edit your personal details',
         },
-        { id: 'educational', label: 'Educational Background', description: 'Review and edit your educational history' },
-        { id: 'application', label: 'Application Details', description: 'Complete your graduation application' },
+        {
+            id: 'educational',
+            label: 'Educational Background',
+            description: 'Review and edit your educational history',
+        },
+        {
+            id: 'application',
+            label: 'Application Details',
+            description: 'Complete your graduation application',
+        },
     ];
 
-    const pageTitle = isGuestMode ? 'Apply for Graduation' : 'Graduation Application';
+    const pageTitle = isGuestMode
+        ? 'Apply for Graduation'
+        : 'Graduation Application';
     const introText = isGuestMode
-        ? 'Complete the full graduation wizard now. We will email a verification link after you submit.'
+        ? 'Complete the full graduation application now. We will email a verification link after you submit.'
         : 'Complete your graduation application details.';
     const expectedStudentId = String(
         data.student_id ||
-        user?.student_id ||
-        activeApplication?.user?.student_id ||
-        '',
+            user?.student_id ||
+            activeApplication?.user?.student_id ||
+            '',
     ).trim();
     const confirmationMatches = isGuestMode
-        ? data.email.trim().toLowerCase() !== '' && emailConfirmation.trim().toLowerCase() === data.email.trim().toLowerCase()
-        : expectedStudentId !== '' && studentIdConfirmation.trim() === expectedStudentId;
-    const submitLabel = isEditMode ? 'Update Application' : isGuestMode ? 'Submit & Verify by Email' : 'Submit Application';
-    const cancelHref = isEditMode && activeApplication
-        ? (
-            portalMode === 'guest'
-                ? applyRoutes.portal.show(activeApplication.application_number).url
-                : applicationRoutes.show(activeApplication.application_number).url
-        )
-        : null;
+        ? data.email.trim().toLowerCase() !== '' &&
+          emailConfirmation.trim().toLowerCase() ===
+              data.email.trim().toLowerCase()
+        : expectedStudentId !== '' &&
+          studentIdConfirmation.trim() === expectedStudentId;
+    const submitLabel = isEditMode
+        ? 'Update Application'
+        : isGuestMode
+          ? 'Submit & Verify by Email'
+          : 'Submit Application';
+    const cancelHref =
+        isEditMode && activeApplication
+            ? portalMode === 'guest'
+                ? applyRoutes.portal.show(activeApplication.application_number)
+                      .url
+                : applicationRoutes.show(activeApplication.application_number)
+                      .url
+            : null;
 
     return (
-            <div className="flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-x-auto rounded-xl">
-                <div className="mx-auto w-full max-w-4xl space-y-4 md:space-y-8">
-                    <div>
-                        <h1 className="text-xl md:text-2xl lg:text-3xl font-semibold">
-                            {pageTitle}
-                        </h1>
-                        <p className="mt-1.5 md:mt-2 text-xs md:text-sm text-muted-foreground">
-                            Application Window: {window.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{introText}</p>
-                    </div>
+        <div className="mt-10 flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl md:gap-6">
+            <div className="mx-auto w-full max-w-4xl space-y-4 md:space-y-8">
+                <div>
+                    <h1 className="text-xl font-semibold md:text-2xl lg:text-3xl">
+                        {pageTitle}
+                    </h1>
+                    <p className="mt-1.5 text-xs text-muted-foreground md:mt-2 md:text-sm">
+                        Application Window: {window.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{introText}</p>
+                </div>
 
-                    {/* Step Indicator */}
-                    <div className="flex items-center justify-between">
-                        {steps.map((step, index) => (
-                            <div key={step.id} className="flex items-center flex-1">
-                                <button
-                                    type="button"
-                                    onClick={() => goToStep(step.id)}
-                                    className={`flex flex-col items-center gap-2 ${currentStep === step.id
-                                            ? 'text-primary'
+                {/* Step Indicator */}
+                <div className="flex items-center justify-between">
+                    {steps.map((step, index) => (
+                        <div key={step.id} className="flex flex-1 items-center">
+                            <button
+                                type="button"
+                                onClick={() => goToStep(step.id)}
+                                className={`flex flex-col items-center gap-2 ${
+                                    currentStep === step.id
+                                        ? 'text-primary'
+                                        : confirmedSteps.has(step.id)
+                                          ? 'text-muted-foreground'
+                                          : 'text-muted-foreground opacity-50'
+                                } ${confirmedSteps.has(step.id) || step.id === 'personal' ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                            >
+                                <div
+                                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 ${
+                                        currentStep === step.id
+                                            ? 'border-primary bg-primary text-primary-foreground'
                                             : confirmedSteps.has(step.id)
-                                                ? 'text-muted-foreground'
-                                                : 'text-muted-foreground opacity-50'
-                                        } ${confirmedSteps.has(step.id) || step.id === 'personal' ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                                              ? 'border-green-500 bg-green-500 text-white'
+                                              : 'border-muted-foreground bg-background'
+                                    }`}
                                 >
-                                    <div
-                                        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 ${currentStep === step.id
-                                                ? 'border-primary bg-primary text-primary-foreground'
-                                                : confirmedSteps.has(step.id)
-                                                    ? 'border-green-500 bg-green-500 text-white'
-                                                    : 'border-muted-foreground bg-background'
-                                            }`}
-                                    >
-                                        {confirmedSteps.has(step.id) ? (
-                                            <CheckCircle2 className="h-5 w-5" />
-                                        ) : (
-                                            <span>{index + 1}</span>
-                                        )}
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-sm font-medium">{step.label}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {step.description}
-                                        </p>
-                                    </div>
-                                </button>
-                                {index < steps.length - 1 && (
-                                    <div
-                                        className={`mx-2 h-0.5 flex-1 ${confirmedSteps.has(step.id)
-                                                ? 'bg-green-500'
-                                                : 'bg-muted-foreground'
-                                            }`}
-                                    />
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                                    {confirmedSteps.has(step.id) ? (
+                                        <CheckCircle2 className="h-5 w-5" />
+                                    ) : (
+                                        <span>{index + 1}</span>
+                                    )}
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm font-medium">
+                                        {step.label}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {step.description}
+                                    </p>
+                                </div>
+                            </button>
+                            {index < steps.length - 1 && (
+                                <div
+                                    className={`mx-2 h-0.5 flex-1 ${
+                                        confirmedSteps.has(step.id)
+                                            ? 'bg-green-500'
+                                            : 'bg-muted-foreground'
+                                    }`}
+                                />
+                            )}
+                        </div>
+                    ))}
+                </div>
 
-                    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 md:space-y-8">
-                        <ValidationSummary
-                            errors={errors as Record<string, string | string[] | undefined>}
-                            title="Please fix the following issues before submitting your application:"
-                        />
+                <form
+                    ref={formRef}
+                    onSubmit={handleSubmit}
+                    className="space-y-4 md:space-y-8"
+                >
+                    <ValidationSummary
+                        errors={
+                            errors as Record<
+                                string,
+                                string | string[] | undefined
+                            >
+                        }
+                        title="Please fix the following issues before submitting your application:"
+                    />
 
-                        {/* Step 1: Personal Information */}
-                        {currentStep === 'personal' && (
-                            <>
-
-                                <Card>
+                    {/* Step 1: Personal Information */}
+                    {currentStep === 'personal' && (
+                        <>
+                            <Card>
                                 <CardHeader>
-                                    <CardTitle>Step 1: Personal Information</CardTitle>
+                                    <CardTitle>
+                                        Step 1: Personal Information
+                                    </CardTitle>
                                     <CardDescription>
                                         {isGuestMode
-                                            ? 'Enter your email, student ID, and personal details. You can finish the whole wizard before verifying your email.'
+                                            ? 'Enter your email, student ID, and personal details. You can finish the whole form before verifying your email.'
                                             : 'Review and edit your personal details. You can override any information from your profile if needed.'}
                                     </CardDescription>
                                 </CardHeader>
@@ -867,34 +974,59 @@ export function ApplicationWizard({
                                                     Contact & Identity
                                                 </h3>
                                                 <p className="text-xs text-muted-foreground">
-                                                    We will send your verification and guest portal links to this email address.
+                                                    We will send your
+                                                    verification and guest
+                                                    portal links to the email
+                                                    address you will provide so
+                                                    make sure the email you will
+                                                    provide is active.
                                                 </p>
                                             </div>
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div className="grid gap-2">
-                                                    <Label htmlFor="email">Email Address *</Label>
+                                                    <Label htmlFor="email">
+                                                        Email Address *
+                                                    </Label>
                                                     <Input
                                                         id="email"
                                                         name="email"
                                                         type="email"
                                                         value={data.email}
-                                                        onChange={(e) => setData('email', e.target.value)}
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'email',
+                                                                e.target.value,
+                                                            )
+                                                        }
                                                         autoComplete="email"
                                                         required
                                                     />
-                                                    <InputError message={errors.email} />
+                                                    <InputError
+                                                        message={errors.email}
+                                                    />
                                                 </div>
                                                 <div className="grid gap-2">
-                                                    <Label htmlFor="student_id">Student ID *</Label>
+                                                    <Label htmlFor="student_id">
+                                                        Student ID *
+                                                    </Label>
                                                     <Input
                                                         id="student_id"
                                                         name="student_id"
                                                         value={data.student_id}
-                                                        onChange={(e) => setData('student_id', e.target.value)}
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'student_id',
+                                                                e.target.value,
+                                                            )
+                                                        }
                                                         autoComplete="off"
                                                         required
                                                     />
-                                                    <InputError message={errors.student_id} />
+                                                    <InputError
+                                                        message={
+                                                            errors.student_id
+                                                        }
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
@@ -906,7 +1038,9 @@ export function ApplicationWizard({
                                                 2x2 ID Photo with Name Tag
                                             </h3>
                                             <p className="text-xs text-muted-foreground">
-                                                Upload a JPG or PNG with a white background. Maximum file size: 2MB.
+                                                Upload a JPG or PNG with a white
+                                                background. Maximum file size:
+                                                2MB.
                                             </p>
                                         </div>
                                         <div className="flex flex-col items-center gap-4">
@@ -920,10 +1054,12 @@ export function ApplicationWizard({
                                                         />
                                                         <button
                                                             type="button"
-                                                            onClick={handleRemovePhoto}
+                                                            onClick={
+                                                                handleRemovePhoto
+                                                            }
                                                             aria-label="Remove photo"
                                                             title="Remove photo"
-                                                            className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                                                            className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
                                                         >
                                                             <X className="h-4 w-4" />
                                                         </button>
@@ -944,12 +1080,16 @@ export function ApplicationWizard({
                                                     className="cursor-pointer"
                                                     onChange={(e) =>
                                                         handlePhotoChange(
-                                                            e.target.files?.[0] ?? null,
+                                                            e.target
+                                                                .files?.[0] ??
+                                                                null,
                                                             e.currentTarget,
                                                         )
                                                     }
                                                 />
-                                                <InputError message={errors.photo} />
+                                                <InputError
+                                                    message={errors.photo}
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -961,17 +1101,24 @@ export function ApplicationWizard({
                                         </h3>
                                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                             <div className="grid gap-2">
-                                                <Label htmlFor="first_name">First Name *</Label>
+                                                <Label htmlFor="first_name">
+                                                    First Name *
+                                                </Label>
                                                 <Input
                                                     id="first_name"
                                                     name="first_name"
                                                     value={data.first_name}
                                                     onChange={(e) =>
-                                                        setData('first_name', e.target.value)
+                                                        setData(
+                                                            'first_name',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     required
                                                 />
-                                                <InputError message={errors.first_name} />
+                                                <InputError
+                                                    message={errors.first_name}
+                                                />
                                             </div>
                                             <div className="grid gap-2">
                                                 <Label htmlFor="middle_name">
@@ -980,39 +1127,60 @@ export function ApplicationWizard({
                                                 <Input
                                                     id="middle_name"
                                                     name="middle_name"
-                                                    value={data.middle_name || ''}
+                                                    value={
+                                                        data.middle_name || ''
+                                                    }
                                                     onChange={(e) =>
-                                                        setData('middle_name', e.target.value)
+                                                        setData(
+                                                            'middle_name',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     placeholder="Enter full middle name"
                                                 />
-                                                <InputError message={errors.middle_name} />
+                                                <InputError
+                                                    message={errors.middle_name}
+                                                />
                                             </div>
                                             <div className="grid gap-2">
-                                                <Label htmlFor="last_name">Last Name *</Label>
+                                                <Label htmlFor="last_name">
+                                                    Last Name *
+                                                </Label>
                                                 <Input
                                                     id="last_name"
                                                     name="last_name"
                                                     value={data.last_name}
                                                     onChange={(e) =>
-                                                        setData('last_name', e.target.value)
+                                                        setData(
+                                                            'last_name',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     required
                                                 />
-                                                <InputError message={errors.last_name} />
+                                                <InputError
+                                                    message={errors.last_name}
+                                                />
                                             </div>
                                             <div className="grid gap-2">
-                                                <Label htmlFor="suffix">Suffix (Optional)</Label>
+                                                <Label htmlFor="suffix">
+                                                    Suffix (Optional)
+                                                </Label>
                                                 <Input
                                                     id="suffix"
                                                     name="suffix"
                                                     value={data.suffix}
                                                     onChange={(e) =>
-                                                        setData('suffix', e.target.value)
+                                                        setData(
+                                                            'suffix',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     placeholder="Jr., Sr., III"
                                                 />
-                                                <InputError message={errors.suffix} />
+                                                <InputError
+                                                    message={errors.suffix}
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -1031,82 +1199,140 @@ export function ApplicationWizard({
                                                     <select
                                                         id="dob_month"
                                                         aria-label="Birth month"
-                                                        value={dobMonth === '' ? '' : dobMonth}
+                                                        value={
+                                                            dobMonth === ''
+                                                                ? ''
+                                                                : dobMonth
+                                                        }
                                                         onChange={(e) => {
-                                                            const month = e.target.value
-                                                                ? Number(e.target.value)
+                                                            const month = e
+                                                                .target.value
+                                                                ? Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  )
                                                                 : '';
                                                             setDobMonth(month);
-                                                            if (month && dobDay && dobYear) {
+                                                            if (
+                                                                month &&
+                                                                dobDay &&
+                                                                dobYear
+                                                            ) {
                                                                 setData(
                                                                     'date_of_birth',
                                                                     `${dobYear}-${String(month).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`,
                                                                 );
                                                             }
                                                         }}
-                                                        className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                                         required
                                                     >
-                                                        <option value="">Month</option>
-                                                        {MONTHS.map((m, index) => (
-                                                            <option key={m} value={index + 1}>
-                                                                {m}
-                                                            </option>
-                                                        ))}
+                                                        <option value="">
+                                                            Month
+                                                        </option>
+                                                        {MONTHS.map(
+                                                            (m, index) => (
+                                                                <option
+                                                                    key={m}
+                                                                    value={
+                                                                        index +
+                                                                        1
+                                                                    }
+                                                                >
+                                                                    {m}
+                                                                </option>
+                                                            ),
+                                                        )}
                                                     </select>
                                                     <select
                                                         id="dob_day"
                                                         aria-label="Birth day"
-                                                        value={dobDay === '' ? '' : dobDay}
+                                                        value={
+                                                            dobDay === ''
+                                                                ? ''
+                                                                : dobDay
+                                                        }
                                                         onChange={(e) => {
-                                                            const day = e.target.value
-                                                                ? Number(e.target.value)
+                                                            const day = e.target
+                                                                .value
+                                                                ? Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  )
                                                                 : '';
                                                             setDobDay(day);
-                                                            if (dobMonth && day && dobYear) {
+                                                            if (
+                                                                dobMonth &&
+                                                                day &&
+                                                                dobYear
+                                                            ) {
                                                                 setData(
                                                                     'date_of_birth',
                                                                     `${dobYear}-${String(dobMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
                                                                 );
                                                             }
                                                         }}
-                                                        className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                                         required
                                                     >
-                                                        <option value="">Day</option>
-                                                        {Array.from({ length: 31 }, (_, i) => i + 1).map(
-                                                            (day) => (
-                                                                <option key={day} value={day}>
-                                                                    {day}
-                                                                </option>
-                                                            ),
-                                                        )}
+                                                        <option value="">
+                                                            Day
+                                                        </option>
+                                                        {Array.from(
+                                                            { length: 31 },
+                                                            (_, i) => i + 1,
+                                                        ).map((day) => (
+                                                            <option
+                                                                key={day}
+                                                                value={day}
+                                                            >
+                                                                {day}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                     <select
                                                         id="dob_year"
                                                         aria-label="Birth year"
-                                                        value={dobYear === '' ? '' : dobYear}
+                                                        value={
+                                                            dobYear === ''
+                                                                ? ''
+                                                                : dobYear
+                                                        }
                                                         onChange={(e) => {
-                                                            const year = e.target.value
-                                                                ? Number(e.target.value)
+                                                            const year = e
+                                                                .target.value
+                                                                ? Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  )
                                                                 : '';
                                                             setDobYear(year);
-                                                            if (dobMonth && dobDay && year) {
+                                                            if (
+                                                                dobMonth &&
+                                                                dobDay &&
+                                                                year
+                                                            ) {
                                                                 setData(
                                                                     'date_of_birth',
                                                                     `${year}-${String(dobMonth).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`,
                                                                 );
                                                             }
                                                         }}
-                                                        className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                                         required
                                                     >
-                                                        <option value="">Year</option>
+                                                        <option value="">
+                                                            Year
+                                                        </option>
                                                         {Array.from(
                                                             { length: 100 },
-                                                            (_, i) => currentYear - i,
+                                                            (_, i) =>
+                                                                currentYear - i,
                                                         ).map((year) => (
-                                                            <option key={year} value={year}>
+                                                            <option
+                                                                key={year}
+                                                                value={year}
+                                                            >
                                                                 {year}
                                                             </option>
                                                         ))}
@@ -1116,12 +1342,18 @@ export function ApplicationWizard({
                                                     type="hidden"
                                                     name="date_of_birth"
                                                     value={
-                                                        dobYear && dobMonth && dobDay
+                                                        dobYear &&
+                                                        dobMonth &&
+                                                        dobDay
                                                             ? `${dobYear}-${String(dobMonth).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`
                                                             : ''
                                                     }
                                                 />
-                                                <InputError message={errors.date_of_birth} />
+                                                <InputError
+                                                    message={
+                                                        errors.date_of_birth
+                                                    }
+                                                />
                                             </div>
                                             <div className="grid gap-2">
                                                 <Label htmlFor="place_of_birth">
@@ -1132,11 +1364,18 @@ export function ApplicationWizard({
                                                     name="place_of_birth"
                                                     value={data.place_of_birth}
                                                     onChange={(e) =>
-                                                        setData('place_of_birth', e.target.value)
+                                                        setData(
+                                                            'place_of_birth',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     required
                                                 />
-                                                <InputError message={errors.place_of_birth} />
+                                                <InputError
+                                                    message={
+                                                        errors.place_of_birth
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -1148,24 +1387,39 @@ export function ApplicationWizard({
                                         </h3>
                                         <div className="grid gap-4 md:grid-cols-3">
                                             <div className="grid gap-2">
-                                                <Label htmlFor="sex">Sex *</Label>
+                                                <Label htmlFor="sex">
+                                                    Sex *
+                                                </Label>
                                                 <select
                                                     id="sex"
                                                     name="sex"
                                                     aria-label="Sex"
                                                     value={data.sex}
-                                                    onChange={(e) => setData('sex', e.target.value)}
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'sex',
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     required
-                                                    className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                    className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                                 >
-                                                    <option value="">Select sex</option>
-                                                    <option value="Male">Male</option>
-                                                    <option value="Female">Female</option>
+                                                    <option value="">
+                                                        Select sex
+                                                    </option>
+                                                    <option value="Male">
+                                                        Male
+                                                    </option>
+                                                    <option value="Female">
+                                                        Female
+                                                    </option>
                                                     <option value="Prefer not to say">
                                                         Prefer not to say
                                                     </option>
                                                 </select>
-                                                <InputError message={errors.sex} />
+                                                <InputError
+                                                    message={errors.sex}
+                                                />
                                             </div>
                                             <div className="grid gap-2">
                                                 <Label htmlFor="civil_status">
@@ -1177,70 +1431,131 @@ export function ApplicationWizard({
                                                     aria-label="Civil status"
                                                     value={data.civil_status}
                                                     onChange={(e) =>
-                                                        setData('civil_status', e.target.value)
+                                                        setData(
+                                                            'civil_status',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     required
-                                                    className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                    className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                                 >
-                                                    <option value="">Select civil status</option>
-                                                    <option value="Single">Single</option>
-                                                    <option value="Married">Married</option>
-                                                    <option value="Divorced">Divorced</option>
-                                                    <option value="Separated">Separated</option>
-                                                    <option value="Widowed">Widowed</option>
+                                                    <option value="">
+                                                        Select civil status
+                                                    </option>
+                                                    <option value="Single">
+                                                        Single
+                                                    </option>
+                                                    <option value="Married">
+                                                        Married
+                                                    </option>
+                                                    <option value="Divorced">
+                                                        Divorced
+                                                    </option>
+                                                    <option value="Separated">
+                                                        Separated
+                                                    </option>
+                                                    <option value="Widowed">
+                                                        Widowed
+                                                    </option>
                                                 </select>
-                                                <InputError message={errors.civil_status} />
+                                                <InputError
+                                                    message={
+                                                        errors.civil_status
+                                                    }
+                                                />
                                             </div>
-                                            <div className="grid gap-2 relative">
-                                                <Label htmlFor="religion">Religion</Label>
+                                            <div className="relative grid gap-2">
+                                                <Label htmlFor="religion">
+                                                    Religion
+                                                </Label>
                                                 <Input
                                                     id="religion"
                                                     name="religion"
                                                     value={religionInput}
                                                     onChange={(e) => {
-                                                        setReligionInput(e.target.value);
-                                                        setData('religion', e.target.value);
-                                                        setShowReligionSuggestions(true);
+                                                        setReligionInput(
+                                                            e.target.value,
+                                                        );
+                                                        setData(
+                                                            'religion',
+                                                            e.target.value,
+                                                        );
+                                                        setShowReligionSuggestions(
+                                                            true,
+                                                        );
                                                     }}
                                                     onFocus={() => {
-                                                        if (religionInput.trim() !== '') {
-                                                            setShowReligionSuggestions(true);
+                                                        if (
+                                                            religionInput.trim() !==
+                                                            ''
+                                                        ) {
+                                                            setShowReligionSuggestions(
+                                                                true,
+                                                            );
                                                         }
                                                     }}
                                                     onBlur={() => {
                                                         setTimeout(() => {
-                                                            setShowReligionSuggestions(false);
+                                                            setShowReligionSuggestions(
+                                                                false,
+                                                            );
                                                         }, 200);
                                                     }}
                                                     placeholder="Start typing to search religions"
                                                     autoComplete="off"
                                                 />
-                                                {showReligionSuggestions && religionInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
-                                                        {RELIGIONS.filter((religion) =>
-                                                            religion
-                                                                .toLowerCase()
-                                                                .includes(religionInput.toLowerCase().trim()),
-                                                        )
-                                                            .slice(0, 8)
-                                                            .map((religion) => (
-                                                                <button
-                                                                    key={religion}
-                                                                    type="button"
-                                                                    className="flex w-full cursor-pointer items-center px-2 py-1 text-left hover:bg-muted"
-                                                                    onMouseDown={(e) => {
-                                                                        e.preventDefault();
-                                                                        setReligionInput(religion);
-                                                                        setData('religion', religion);
-                                                                        setShowReligionSuggestions(false);
-                                                                    }}
-                                                                >
-                                                                    {religion}
-                                                                </button>
-                                                            ))}
-                                                    </div>
-                                                )}
-                                                <InputError message={errors.religion} />
+                                                {showReligionSuggestions &&
+                                                    religionInput.trim() !==
+                                                        '' && (
+                                                        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                            {RELIGIONS.filter(
+                                                                (religion) =>
+                                                                    religion
+                                                                        .toLowerCase()
+                                                                        .includes(
+                                                                            religionInput
+                                                                                .toLowerCase()
+                                                                                .trim(),
+                                                                        ),
+                                                            )
+                                                                .slice(0, 8)
+                                                                .map(
+                                                                    (
+                                                                        religion,
+                                                                    ) => (
+                                                                        <button
+                                                                            key={
+                                                                                religion
+                                                                            }
+                                                                            type="button"
+                                                                            className="flex w-full cursor-pointer items-center px-2 py-1 text-left hover:bg-muted"
+                                                                            onMouseDown={(
+                                                                                e,
+                                                                            ) => {
+                                                                                e.preventDefault();
+                                                                                setReligionInput(
+                                                                                    religion,
+                                                                                );
+                                                                                setData(
+                                                                                    'religion',
+                                                                                    religion,
+                                                                                );
+                                                                                setShowReligionSuggestions(
+                                                                                    false,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                religion
+                                                                            }
+                                                                        </button>
+                                                                    ),
+                                                                )}
+                                                        </div>
+                                                    )}
+                                                <InputError
+                                                    message={errors.religion}
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -1251,57 +1566,99 @@ export function ApplicationWizard({
                                             Contact Information
                                         </h3>
                                         <div className="grid gap-4 md:grid-cols-2">
-                                            <div className="grid gap-2 relative">
-                                                <Label htmlFor="nationality">Nationality *</Label>
+                                            <div className="relative grid gap-2">
+                                                <Label htmlFor="nationality">
+                                                    Nationality *
+                                                </Label>
                                                 <Input
                                                     id="nationality"
                                                     name="nationality"
                                                     value={nationalityInput}
                                                     onChange={(e) => {
-                                                        setNationalityInput(e.target.value);
-                                                        setData('nationality', e.target.value);
-                                                        setShowNationalitySuggestions(true);
+                                                        setNationalityInput(
+                                                            e.target.value,
+                                                        );
+                                                        setData(
+                                                            'nationality',
+                                                            e.target.value,
+                                                        );
+                                                        setShowNationalitySuggestions(
+                                                            true,
+                                                        );
                                                     }}
                                                     onFocus={() => {
-                                                        if (nationalityInput.trim() !== '') {
-                                                            setShowNationalitySuggestions(true);
+                                                        if (
+                                                            nationalityInput.trim() !==
+                                                            ''
+                                                        ) {
+                                                            setShowNationalitySuggestions(
+                                                                true,
+                                                            );
                                                         }
                                                     }}
                                                     onBlur={() => {
                                                         setTimeout(() => {
-                                                            setShowNationalitySuggestions(false);
+                                                            setShowNationalitySuggestions(
+                                                                false,
+                                                            );
                                                         }, 200);
                                                     }}
                                                     placeholder="Start typing to search nationalities"
                                                     required
                                                     autoComplete="off"
                                                 />
-                                                {showNationalitySuggestions && nationalityInput.trim() !== '' && (
-                                                    <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm text-popover-foreground shadow-md">
-                                                        {NATIONALITIES.filter((nationality) =>
-                                                            nationality
-                                                                .toLowerCase()
-                                                                .includes(nationalityInput.toLowerCase().trim()),
-                                                        )
-                                                            .slice(0, 8)
-                                                            .map((nationality) => (
-                                                                <button
-                                                                    key={nationality}
-                                                                    type="button"
-                                                                    className="flex w-full cursor-pointer items-center px-2 py-1 text-left hover:bg-muted"
-                                                                    onMouseDown={(e) => {
-                                                                        e.preventDefault();
-                                                                        setNationalityInput(nationality);
-                                                                        setData('nationality', nationality);
-                                                                        setShowNationalitySuggestions(false);
-                                                                    }}
-                                                                >
-                                                                    {nationality}
-                                                                </button>
-                                                            ))}
-                                                    </div>
-                                                )}
-                                                <InputError message={errors.nationality} />
+                                                {showNationalitySuggestions &&
+                                                    nationalityInput.trim() !==
+                                                        '' && (
+                                                        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+                                                            {NATIONALITIES.filter(
+                                                                (nationality) =>
+                                                                    nationality
+                                                                        .toLowerCase()
+                                                                        .includes(
+                                                                            nationalityInput
+                                                                                .toLowerCase()
+                                                                                .trim(),
+                                                                        ),
+                                                            )
+                                                                .slice(0, 8)
+                                                                .map(
+                                                                    (
+                                                                        nationality,
+                                                                    ) => (
+                                                                        <button
+                                                                            key={
+                                                                                nationality
+                                                                            }
+                                                                            type="button"
+                                                                            className="flex w-full cursor-pointer items-center px-2 py-1 text-left hover:bg-muted"
+                                                                            onMouseDown={(
+                                                                                e,
+                                                                            ) => {
+                                                                                e.preventDefault();
+                                                                                setNationalityInput(
+                                                                                    nationality,
+                                                                                );
+                                                                                setData(
+                                                                                    'nationality',
+                                                                                    nationality,
+                                                                                );
+                                                                                setShowNationalitySuggestions(
+                                                                                    false,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                nationality
+                                                                            }
+                                                                        </button>
+                                                                    ),
+                                                                )}
+                                                        </div>
+                                                    )}
+                                                <InputError
+                                                    message={errors.nationality}
+                                                />
                                             </div>
                                             <div className="grid gap-2">
                                                 <Label htmlFor="contact_number">
@@ -1312,12 +1669,19 @@ export function ApplicationWizard({
                                                     name="contact_number"
                                                     value={data.contact_number}
                                                     onChange={(e) =>
-                                                        setData('contact_number', e.target.value)
+                                                        setData(
+                                                            'contact_number',
+                                                            e.target.value,
+                                                        )
                                                     }
                                                     placeholder="Enter Contact Number"
                                                     required
                                                 />
-                                                <InputError message={errors.contact_number} />
+                                                <InputError
+                                                    message={
+                                                        errors.contact_number
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                         <div className="grid gap-2">
@@ -1329,134 +1693,363 @@ export function ApplicationWizard({
                                                 name="permanent_address"
                                                 value={data.permanent_address}
                                                 onChange={(e) =>
-                                                    setData('permanent_address', e.target.value)
+                                                    setData(
+                                                        'permanent_address',
+                                                        e.target.value,
+                                                    )
                                                 }
                                                 required
                                                 rows={3}
                                             />
-                                            <InputError message={errors.permanent_address} />
+                                            <InputError
+                                                message={
+                                                    errors.permanent_address
+                                                }
+                                            />
                                         </div>
                                     </div>
 
                                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
                                             {cancelHref ? (
-                                                <Button asChild type="button" variant="ghost">
-                                                    <Link href={cancelHref}>Cancel</Link>
+                                                <Button
+                                                    asChild
+                                                    type="button"
+                                                    variant="ghost"
+                                                >
+                                                    <Link href={cancelHref}>
+                                                        Cancel
+                                                    </Link>
                                                 </Button>
                                             ) : null}
                                         </div>
-                                        <Button type="button" onClick={confirmStep}>
+                                        <Button
+                                            type="button"
+                                            onClick={confirmStep}
+                                        >
                                             Confirm & Continue
                                             <ChevronRight className="ml-2 h-4 w-4" />
                                         </Button>
                                     </div>
                                 </CardContent>
                             </Card>
-                            </>
-                        )}
+                        </>
+                    )}
 
-                        {/* Step 2: Educational Background */}
-                        {currentStep === 'educational' && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Step 2: Educational Background</CardTitle>
-                                    <CardDescription>
-                                        Review and edit your educational history. You can override
-                                        any information from your profile if needed.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Highest Education Level */}
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="highest_education_level">
-                                            Highest Education Level Completed *
-                                        </Label>
-                                        <select
-                                            id="highest_education_level"
-                                            name="highest_education_level"
-                                            aria-label="Highest education level completed"
-                                            value={data.highest_education_level || ''}
-                                            onChange={(e) =>
-                                                setData('highest_education_level', e.target.value)
-                                            }
-                                            required
-                                            className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
-                                        >
-                                            <option value="">Select highest education level</option>
-                                            <option value="elementary">
-                                                Elementary (Grade School)
-                                            </option>
-                                            <option value="junior_high_school">
-                                                Junior High School
-                                            </option>
-                                            <option value="senior_high_school">
-                                                Senior High School
-                                            </option>
-                                            <option value="college">College</option>
-                                            <option value="masters">Masters</option>
-                                            <option value="doctor">Doctor</option>
-                                        </select>
-                                        <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                                            <strong>Note:</strong> This refers to your highest
-                                            completed education level, <strong>not</strong> your
-                                            current enrolled program. For example, if you are
-                                            currently enrolled in a master&apos;s program that you
-                                            are applying to graduate from, select
-                                            {' '}<strong>College</strong> as your highest completed
-                                            education level.
-                                        </p>
-                                        <InputError message={errors.highest_education_level} />
+                    {/* Step 2: Educational Background */}
+                    {currentStep === 'educational' && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>
+                                    Step 2: Educational Background
+                                </CardTitle>
+                                <CardDescription>
+                                    Review and edit your educational history.
+                                    You can override any information from your
+                                    profile if needed.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Highest Education Level */}
+                                <div className="grid gap-2">
+                                    <Label htmlFor="highest_education_level">
+                                        Highest Education Level Completed *
+                                    </Label>
+                                    <select
+                                        id="highest_education_level"
+                                        name="highest_education_level"
+                                        aria-label="Highest education level completed"
+                                        value={
+                                            data.highest_education_level || ''
+                                        }
+                                        onChange={(e) =>
+                                            setData(
+                                                'highest_education_level',
+                                                e.target.value,
+                                            )
+                                        }
+                                        required
+                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
+                                    >
+                                        <option value="">
+                                            Select highest education level
+                                        </option>
+                                        <option value="elementary">
+                                            Elementary (Grade School)
+                                        </option>
+                                        <option value="junior_high_school">
+                                            Junior High School
+                                        </option>
+                                        <option value="senior_high_school">
+                                            Senior High School
+                                        </option>
+                                        <option value="college">College</option>
+                                        <option value="masters">Masters</option>
+                                        <option value="doctor">Doctor</option>
+                                    </select>
+                                    <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                                        <strong>Note:</strong> This refers to
+                                        your highest completed education level,{' '}
+                                        <strong>not</strong> your current
+                                        enrolled program. For example, if you
+                                        are currently enrolled in a
+                                        master&apos;s program that you are
+                                        applying to graduate from, select{' '}
+                                        <strong>College</strong> as your highest
+                                        completed education level.
+                                    </p>
+                                    <InputError
+                                        message={errors.highest_education_level}
+                                    />
+                                </div>
+
+                                {/* Grade School */}
+                                {data.highest_education_level && (
+                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-foreground">
+                                                    Grade School
+                                                </h3>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Provide the name of school
+                                                    and year graduated for each
+                                                    grade level (Grade 1-6).
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Checkbox
+                                                    id="same_grade_school"
+                                                    checked={
+                                                        useSingleGradeSchool
+                                                    }
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        const enabled =
+                                                            checked === true;
+                                                        const schoolName =
+                                                            singleGradeSchoolName ||
+                                                            data.grade_1_school ||
+                                                            '';
+                                                        setUseSingleGradeSchool(
+                                                            enabled,
+                                                        );
+                                                        if (enabled) {
+                                                            setSingleGradeSchoolName(
+                                                                schoolName,
+                                                            );
+                                                            syncSchoolGroup(
+                                                                gradeSchoolFields,
+                                                                schoolName,
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <Label
+                                                    htmlFor="same_grade_school"
+                                                    className="text-xs text-muted-foreground"
+                                                >
+                                                    Same school for all grades
+                                                    (1-6) - enter school name
+                                                    once
+                                                </Label>
+                                            </div>
+                                        </div>
+
+                                        {useSingleGradeSchool && (
+                                            <div className="space-y-2">
+                                                <Label
+                                                    htmlFor="grade_school_all"
+                                                    className="text-xs text-muted-foreground"
+                                                >
+                                                    School name (Grades 1-6)
+                                                </Label>
+                                                <Input
+                                                    id="grade_school_all"
+                                                    placeholder="Name of School"
+                                                    value={
+                                                        singleGradeSchoolName
+                                                    }
+                                                    onChange={(e) => {
+                                                        const schoolName =
+                                                            e.target.value;
+                                                        setSingleGradeSchoolName(
+                                                            schoolName,
+                                                        );
+                                                        syncSchoolGroup(
+                                                            gradeSchoolFields,
+                                                            schoolName,
+                                                        );
+                                                    }}
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-3">
+                                            {[1, 2, 3, 4, 5, 6].map((grade) => (
+                                                <div
+                                                    key={grade}
+                                                    className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[auto,1fr,1fr]"
+                                                >
+                                                    <Label
+                                                        htmlFor={`grade_${grade}_school`}
+                                                        className="w-auto text-sm font-medium sm:w-20"
+                                                    >
+                                                        GRADE {grade}:
+                                                    </Label>
+
+                                                    {useSingleGradeSchool ? (
+                                                        <div className="text-xs text-muted-foreground italic">
+                                                            {singleGradeSchoolName ||
+                                                                'Same as above'}
+                                                        </div>
+                                                    ) : (
+                                                        <Input
+                                                            id={`grade_${grade}_school`}
+                                                            name={`grade_${grade}_school`}
+                                                            value={
+                                                                (data[
+                                                                    `grade_${grade}_school` as keyof typeof data
+                                                                ] as string) ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    `grade_${grade}_school` as any,
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Name of School"
+                                                            required
+                                                        />
+                                                    )}
+
+                                                    <Input
+                                                        id={`grade_${grade}_year`}
+                                                        name={`grade_${grade}_year`}
+                                                        type="number"
+                                                        value={
+                                                            (data[
+                                                                `grade_${grade}_year` as keyof typeof data
+                                                            ] as number) || ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                `grade_${grade}_year` as any,
+                                                                e.target.value
+                                                                    ? Number(
+                                                                          e
+                                                                              .target
+                                                                              .value,
+                                                                      )
+                                                                    : '',
+                                                            )
+                                                        }
+                                                        placeholder="Year Graduated"
+                                                        min={1900}
+                                                        max={new Date().getFullYear()}
+                                                        required
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
+                                )}
 
-                                    {/* Grade School */}
-                                    {data.highest_education_level && (
+                                {/* Junior High School */}
+                                {data.highest_education_level &&
+                                    (data.highest_education_level ===
+                                        'junior_high_school' ||
+                                        data.highest_education_level ===
+                                            'senior_high_school' ||
+                                        data.highest_education_level ===
+                                            'college' ||
+                                        data.highest_education_level ===
+                                            'masters' ||
+                                        data.highest_education_level ===
+                                            'doctor') && (
                                         <div className="space-y-4 rounded-md border bg-muted/40 p-4">
                                             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                                                 <div>
                                                     <h3 className="text-sm font-semibold text-foreground">
-                                                        Grade School
+                                                        Junior High School
                                                     </h3>
                                                     <p className="text-xs text-muted-foreground">
-                                                        Provide the name of school and year graduated for each grade level (Grade 1-6).
+                                                        Provide the name of
+                                                        school and year
+                                                        graduated for each year
+                                                        level (1st-4th Year).
                                                     </p>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Checkbox
-                                                        id="same_grade_school"
-                                                        checked={useSingleGradeSchool}
-                                                        onCheckedChange={(checked) => {
-                                                            const enabled = checked === true;
-                                                            const schoolName = singleGradeSchoolName || data.grade_1_school || '';
-                                                            setUseSingleGradeSchool(enabled);
+                                                        id="same_jhs_school"
+                                                        checked={
+                                                            useSingleJhsSchool
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) => {
+                                                            const enabled =
+                                                                checked ===
+                                                                true;
+                                                            const schoolName =
+                                                                singleJhsSchoolName ||
+                                                                data.jhs_1_school ||
+                                                                '';
+                                                            setUseSingleJhsSchool(
+                                                                enabled,
+                                                            );
                                                             if (enabled) {
-                                                                setSingleGradeSchoolName(schoolName);
-                                                                syncSchoolGroup(gradeSchoolFields, schoolName);
+                                                                setSingleJhsSchoolName(
+                                                                    schoolName,
+                                                                );
+                                                                syncSchoolGroup(
+                                                                    jhsSchoolFields,
+                                                                    schoolName,
+                                                                );
                                                             }
                                                         }}
                                                     />
                                                     <Label
-                                                        htmlFor="same_grade_school"
+                                                        htmlFor="same_jhs_school"
                                                         className="text-xs text-muted-foreground"
                                                     >
-                                                        Same school for all grades (1-6) - enter school name once
+                                                        Same school for all JHS
+                                                        years (1st-4th) - enter
+                                                        school name once
                                                     </Label>
                                                 </div>
                                             </div>
 
-                                            {useSingleGradeSchool && (
+                                            {useSingleJhsSchool && (
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="grade_school_all" className="text-xs text-muted-foreground">
-                                                        School name (Grades 1-6)
+                                                    <Label
+                                                        htmlFor="jhs_school_all"
+                                                        className="text-xs text-muted-foreground"
+                                                    >
+                                                        School name (1st-4th
+                                                        Year)
                                                     </Label>
                                                     <Input
-                                                        id="grade_school_all"
+                                                        id="jhs_school_all"
                                                         placeholder="Name of School"
-                                                        value={singleGradeSchoolName}
+                                                        value={
+                                                            singleJhsSchoolName
+                                                        }
                                                         onChange={(e) => {
-                                                            const schoolName = e.target.value;
-                                                            setSingleGradeSchoolName(schoolName);
-                                                            syncSchoolGroup(gradeSchoolFields, schoolName);
+                                                            const schoolName =
+                                                                e.target.value;
+                                                            setSingleJhsSchoolName(
+                                                                schoolName,
+                                                            );
+                                                            syncSchoolGroup(
+                                                                jhsSchoolFields,
+                                                                schoolName,
+                                                            );
                                                         }}
                                                         required
                                                     />
@@ -1464,35 +2057,55 @@ export function ApplicationWizard({
                                             )}
 
                                             <div className="space-y-3">
-                                                {[1, 2, 3, 4, 5, 6].map((grade) => (
+                                                {[
+                                                    {
+                                                        num: 1,
+                                                        label: '1ST YEAR',
+                                                    },
+                                                    {
+                                                        num: 2,
+                                                        label: '2ND YEAR',
+                                                    },
+                                                    {
+                                                        num: 3,
+                                                        label: '3RD YEAR',
+                                                    },
+                                                    {
+                                                        num: 4,
+                                                        label: '4TH YEAR',
+                                                    },
+                                                ].map(({ num, label }) => (
                                                     <div
-                                                        key={grade}
+                                                        key={num}
                                                         className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[auto,1fr,1fr]"
                                                     >
                                                         <Label
-                                                            htmlFor={`grade_${grade}_school`}
-                                                            className="w-auto text-sm font-medium sm:w-20"
+                                                            htmlFor={`jhs_${num}_school`}
+                                                            className="w-auto text-sm font-medium sm:w-24"
                                                         >
-                                                            GRADE {grade}:
+                                                            {label}:
                                                         </Label>
 
-                                                        {useSingleGradeSchool ? (
-                                                            <div className="text-xs italic text-muted-foreground">
-                                                                {singleGradeSchoolName || 'Same as above'}
+                                                        {useSingleJhsSchool ? (
+                                                            <div className="text-xs text-muted-foreground italic">
+                                                                {singleJhsSchoolName ||
+                                                                    'Same as above'}
                                                             </div>
                                                         ) : (
                                                             <Input
-                                                                id={`grade_${grade}_school`}
-                                                                name={`grade_${grade}_school`}
+                                                                id={`jhs_${num}_school`}
+                                                                name={`jhs_${num}_school`}
                                                                 value={
                                                                     (data[
-                                                                        `grade_${grade}_school` as keyof typeof data
-                                                                    ] as string) || ''
+                                                                        `jhs_${num}_school` as keyof typeof data
+                                                                    ] as string) ||
+                                                                    ''
                                                                 }
                                                                 onChange={(e) =>
                                                                     setData(
-                                                                        `grade_${grade}_school` as any,
-                                                                        e.target.value,
+                                                                        `jhs_${num}_school` as any,
+                                                                        e.target
+                                                                            .value,
                                                                     )
                                                                 }
                                                                 placeholder="Name of School"
@@ -1501,18 +2114,26 @@ export function ApplicationWizard({
                                                         )}
 
                                                         <Input
-                                                            id={`grade_${grade}_year`}
-                                                            name={`grade_${grade}_year`}
+                                                            id={`jhs_${num}_year`}
+                                                            name={`jhs_${num}_year`}
                                                             type="number"
                                                             value={
                                                                 (data[
-                                                                    `grade_${grade}_year` as keyof typeof data
-                                                                ] as number) || ''
+                                                                    `jhs_${num}_year` as keyof typeof data
+                                                                ] as number) ||
+                                                                ''
                                                             }
                                                             onChange={(e) =>
                                                                 setData(
-                                                                    `grade_${grade}_year` as any,
-                                                                    e.target.value ? Number(e.target.value) : '',
+                                                                    `jhs_${num}_year` as any,
+                                                                    e.target
+                                                                        .value
+                                                                        ? Number(
+                                                                              e
+                                                                                  .target
+                                                                                  .value,
+                                                                          )
+                                                                        : '',
                                                                 )
                                                             }
                                                             placeholder="Year Graduated"
@@ -1526,220 +2147,164 @@ export function ApplicationWizard({
                                         </div>
                                     )}
 
-                                    {/* Junior High School */}
-                                    {data.highest_education_level &&
-                                        (data.highest_education_level === 'junior_high_school' ||
-                                            data.highest_education_level === 'senior_high_school' ||
-                                            data.highest_education_level === 'college' ||
-                                            data.highest_education_level === 'masters' ||
-                                            data.highest_education_level === 'doctor') && (
-                                            <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                                                    <div>
-                                                        <h3 className="text-sm font-semibold text-foreground">
-                                                            Junior High School
-                                                        </h3>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Provide the name of school and year graduated for each year level (1st-4th Year).
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Checkbox
-                                                            id="same_jhs_school"
-                                                            checked={useSingleJhsSchool}
-                                                            onCheckedChange={(checked) => {
-                                                                const enabled = checked === true;
-                                                                const schoolName = singleJhsSchoolName || data.jhs_1_school || '';
-                                                                setUseSingleJhsSchool(enabled);
-                                                                if (enabled) {
-                                                                    setSingleJhsSchoolName(schoolName);
-                                                                    syncSchoolGroup(jhsSchoolFields, schoolName);
+                                {/* Senior High School */}
+                                {data.highest_education_level &&
+                                    (data.highest_education_level ===
+                                        'senior_high_school' ||
+                                        data.highest_education_level ===
+                                            'college' ||
+                                        data.highest_education_level ===
+                                            'masters' ||
+                                        data.highest_education_level ===
+                                            'doctor') && (
+                                        <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="did_not_attend_senior_high"
+                                                    checked={
+                                                        didNotAttendSeniorHigh
+                                                    }
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        const enabled =
+                                                            checked === true;
+                                                        setDidNotAttendSeniorHigh(
+                                                            enabled,
+                                                        );
+                                                        if (enabled) {
+                                                            setUseSingleShsSchool(
+                                                                false,
+                                                            );
+                                                            setSingleShsSchoolName(
+                                                                '',
+                                                            );
+                                                            setData(
+                                                                'shs_11_school',
+                                                                '',
+                                                            );
+                                                            setData(
+                                                                'shs_11_year',
+                                                                '',
+                                                            );
+                                                            setData(
+                                                                'shs_12_school',
+                                                                '',
+                                                            );
+                                                            setData(
+                                                                'shs_12_year',
+                                                                '',
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <Label
+                                                    htmlFor="did_not_attend_senior_high"
+                                                    className={`cursor-pointer font-normal ${didNotAttendSeniorHigh ? 'text-base font-semibold' : 'text-sm'}`}
+                                                >
+                                                    I didn't attend senior high
+                                                    school
+                                                </Label>
+                                            </div>
+
+                                            {!didNotAttendSeniorHigh && (
+                                                <>
+                                                    <div className="flex flex-col gap-4 border-t pt-2 lg:flex-row lg:items-end lg:justify-between">
+                                                        <div>
+                                                            <h3 className="mb-1 text-sm font-semibold text-foreground">
+                                                                Senior High
+                                                                School
+                                                            </h3>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Provide the name
+                                                                of school and
+                                                                year graduated
+                                                                for each grade
+                                                                level (Grade
+                                                                11-12).
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Checkbox
+                                                                id="same_shs_school"
+                                                                checked={
+                                                                    useSingleShsSchool
                                                                 }
-                                                            }}
-                                                        />
-                                                        <Label
-                                                            htmlFor="same_jhs_school"
-                                                            className="text-xs text-muted-foreground"
-                                                        >
-                                                            Same school for all JHS years (1st-4th) - enter school name once
-                                                        </Label>
-                                                    </div>
-                                                </div>
-
-                                                {useSingleJhsSchool && (
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="jhs_school_all" className="text-xs text-muted-foreground">
-                                                            School name (1st-4th Year)
-                                                        </Label>
-                                                        <Input
-                                                            id="jhs_school_all"
-                                                            placeholder="Name of School"
-                                                            value={singleJhsSchoolName}
-                                                            onChange={(e) => {
-                                                                const schoolName = e.target.value;
-                                                                setSingleJhsSchoolName(schoolName);
-                                                                syncSchoolGroup(jhsSchoolFields, schoolName);
-                                                            }}
-                                                            required
-                                                        />
-                                                    </div>
-                                                )}
-
-                                                <div className="space-y-3">
-                                                    {[
-                                                        { num: 1, label: '1ST YEAR' },
-                                                        { num: 2, label: '2ND YEAR' },
-                                                        { num: 3, label: '3RD YEAR' },
-                                                        { num: 4, label: '4TH YEAR' },
-                                                    ].map(({ num, label }) => (
-                                                        <div
-                                                            key={num}
-                                                            className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[auto,1fr,1fr]"
-                                                        >
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) => {
+                                                                    const enabled =
+                                                                        checked ===
+                                                                        true;
+                                                                    const schoolName =
+                                                                        singleShsSchoolName ||
+                                                                        data.shs_11_school ||
+                                                                        '';
+                                                                    setUseSingleShsSchool(
+                                                                        enabled,
+                                                                    );
+                                                                    if (
+                                                                        enabled
+                                                                    ) {
+                                                                        setSingleShsSchoolName(
+                                                                            schoolName,
+                                                                        );
+                                                                        syncSchoolGroup(
+                                                                            shsSchoolFields,
+                                                                            schoolName,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            />
                                                             <Label
-                                                                htmlFor={`jhs_${num}_school`}
-                                                                className="w-auto text-sm font-medium sm:w-24"
+                                                                htmlFor="same_shs_school"
+                                                                className="text-xs text-muted-foreground"
                                                             >
-                                                                {label}:
+                                                                Same school for
+                                                                Grades 11-12 -
+                                                                enter school
+                                                                name once
                                                             </Label>
+                                                        </div>
+                                                    </div>
 
-                                                            {useSingleJhsSchool ? (
-                                                                <div className="text-xs italic text-muted-foreground">
-                                                                    {singleJhsSchoolName || 'Same as above'}
-                                                                </div>
-                                                            ) : (
-                                                                <Input
-                                                                    id={`jhs_${num}_school`}
-                                                                    name={`jhs_${num}_school`}
-                                                                    value={
-                                                                        (data[
-                                                                            `jhs_${num}_school` as keyof typeof data
-                                                                        ] as string) || ''
-                                                                    }
-                                                                    onChange={(e) =>
-                                                                        setData(
-                                                                            `jhs_${num}_school` as any,
-                                                                            e.target.value,
-                                                                        )
-                                                                    }
-                                                                    placeholder="Name of School"
-                                                                    required
-                                                                />
-                                                            )}
-
+                                                    {useSingleShsSchool && (
+                                                        <div className="space-y-2">
+                                                            <Label
+                                                                htmlFor="shs_school_all"
+                                                                className="text-xs text-muted-foreground"
+                                                            >
+                                                                School name
+                                                                (Grades 11-12)
+                                                            </Label>
                                                             <Input
-                                                                id={`jhs_${num}_year`}
-                                                                name={`jhs_${num}_year`}
-                                                                type="number"
+                                                                id="shs_school_all"
+                                                                placeholder="Name of School"
                                                                 value={
-                                                                    (data[
-                                                                        `jhs_${num}_year` as keyof typeof data
-                                                                    ] as number) || ''
+                                                                    singleShsSchoolName
                                                                 }
-                                                                onChange={(e) =>
-                                                                    setData(
-                                                                        `jhs_${num}_year` as any,
-                                                                        e.target.value ? Number(e.target.value) : '',
-                                                                    )
-                                                                }
-                                                                placeholder="Year Graduated"
-                                                                min={1900}
-                                                                max={new Date().getFullYear()}
+                                                                onChange={(
+                                                                    e,
+                                                                ) => {
+                                                                    const schoolName =
+                                                                        e.target
+                                                                            .value;
+                                                                    setSingleShsSchoolName(
+                                                                        schoolName,
+                                                                    );
+                                                                    syncSchoolGroup(
+                                                                        shsSchoolFields,
+                                                                        schoolName,
+                                                                    );
+                                                                }}
                                                                 required
                                                             />
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                                    )}
 
-                                    {/* Senior High School */}
-                                    {data.highest_education_level &&
-                                        (data.highest_education_level === 'senior_high_school' ||
-                                            data.highest_education_level === 'college' ||
-                                            data.highest_education_level === 'masters' ||
-                                            data.highest_education_level === 'doctor') && (
-                                            <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                                <div className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id="did_not_attend_senior_high"
-                                                        checked={didNotAttendSeniorHigh}
-                                                        onCheckedChange={(checked) => {
-                                                            const enabled = checked === true;
-                                                            setDidNotAttendSeniorHigh(enabled);
-                                                            if (enabled) {
-                                                                setUseSingleShsSchool(false);
-                                                                setSingleShsSchoolName('');
-                                                                setData('shs_11_school', '');
-                                                                setData('shs_11_year', '');
-                                                                setData('shs_12_school', '');
-                                                                setData('shs_12_year', '');
-                                                            }
-                                                        }}
-                                                    />
-                                                    <Label
-                                                        htmlFor="did_not_attend_senior_high"
-                                                        className={`font-normal cursor-pointer ${didNotAttendSeniorHigh ? 'text-base font-semibold' : 'text-sm'}`}
-                                                    >
-                                                        I didn't attend senior high school
-                                                    </Label>
-                                                </div>
-
-                                                {!didNotAttendSeniorHigh && (
-                                                    <>
-                                                        <div className="flex flex-col gap-4 border-t pt-2 lg:flex-row lg:items-end lg:justify-between">
-                                                            <div>
-                                                                <h3 className="mb-1 text-sm font-semibold text-foreground">
-                                                                    Senior High School
-                                                                </h3>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Provide the name of school and year graduated for each grade level (Grade 11-12).
-                                                                </p>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <Checkbox
-                                                                    id="same_shs_school"
-                                                                    checked={useSingleShsSchool}
-                                                                    onCheckedChange={(checked) => {
-                                                                        const enabled = checked === true;
-                                                                        const schoolName = singleShsSchoolName || data.shs_11_school || '';
-                                                                        setUseSingleShsSchool(enabled);
-                                                                        if (enabled) {
-                                                                            setSingleShsSchoolName(schoolName);
-                                                                            syncSchoolGroup(shsSchoolFields, schoolName);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                                <Label
-                                                                    htmlFor="same_shs_school"
-                                                                    className="text-xs text-muted-foreground"
-                                                                >
-                                                                    Same school for Grades 11-12 - enter school name once
-                                                                </Label>
-                                                            </div>
-                                                        </div>
-
-                                                        {useSingleShsSchool && (
-                                                            <div className="space-y-2">
-                                                                <Label htmlFor="shs_school_all" className="text-xs text-muted-foreground">
-                                                                    School name (Grades 11-12)
-                                                                </Label>
-                                                                <Input
-                                                                    id="shs_school_all"
-                                                                    placeholder="Name of School"
-                                                                    value={singleShsSchoolName}
-                                                                    onChange={(e) => {
-                                                                        const schoolName = e.target.value;
-                                                                        setSingleShsSchoolName(schoolName);
-                                                                        syncSchoolGroup(shsSchoolFields, schoolName);
-                                                                    }}
-                                                                    required
-                                                                />
-                                                            </div>
-                                                        )}
-
-                                                        <div className="space-y-3">
-                                                            {[11, 12].map((grade) => (
+                                                    <div className="space-y-3">
+                                                        {[11, 12].map(
+                                                            (grade) => (
                                                                 <div
                                                                     key={grade}
                                                                     className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[auto,1fr,1fr]"
@@ -1748,12 +2313,14 @@ export function ApplicationWizard({
                                                                         htmlFor={`shs_${grade}_school`}
                                                                         className="w-auto text-sm font-medium sm:w-24"
                                                                     >
-                                                                        GRADE {grade}:
+                                                                        GRADE{' '}
+                                                                        {grade}:
                                                                     </Label>
 
                                                                     {useSingleShsSchool ? (
-                                                                        <div className="text-xs italic text-muted-foreground">
-                                                                            {singleShsSchoolName || 'Same as above'}
+                                                                        <div className="text-xs text-muted-foreground italic">
+                                                                            {singleShsSchoolName ||
+                                                                                'Same as above'}
                                                                         </div>
                                                                     ) : (
                                                                         <Input
@@ -1762,12 +2329,17 @@ export function ApplicationWizard({
                                                                             value={
                                                                                 (data[
                                                                                     `shs_${grade}_school` as keyof typeof data
-                                                                                ] as string) || ''
+                                                                                ] as string) ||
+                                                                                ''
                                                                             }
-                                                                            onChange={(e) =>
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
                                                                                 setData(
                                                                                     `shs_${grade}_school` as any,
-                                                                                    e.target.value,
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
                                                                                 )
                                                                             }
                                                                             placeholder="Name of School"
@@ -1782,12 +2354,23 @@ export function ApplicationWizard({
                                                                         value={
                                                                             (data[
                                                                                 `shs_${grade}_year` as keyof typeof data
-                                                                            ] as number) || ''
+                                                                            ] as number) ||
+                                                                            ''
                                                                         }
-                                                                        onChange={(e) =>
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
                                                                             setData(
                                                                                 `shs_${grade}_year` as any,
-                                                                                e.target.value ? Number(e.target.value) : '',
+                                                                                e
+                                                                                    .target
+                                                                                    .value
+                                                                                    ? Number(
+                                                                                          e
+                                                                                              .target
+                                                                                              .value,
+                                                                                      )
+                                                                                    : '',
                                                                             )
                                                                         }
                                                                         placeholder="Year Graduated"
@@ -1796,101 +2379,141 @@ export function ApplicationWizard({
                                                                         required
                                                                     />
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
-                                    {/* College */}
-                                    {data.highest_education_level &&
-                                        (data.highest_education_level === 'college' ||
-                                            data.highest_education_level === 'masters' ||
-                                            data.highest_education_level === 'doctor') && (
-                                            <div className="space-y-3 rounded-md border bg-muted/40 p-4">
-                                                <div>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                {/* College */}
+                                {data.highest_education_level &&
+                                    (data.highest_education_level ===
+                                        'college' ||
+                                        data.highest_education_level ===
+                                            'masters' ||
+                                        data.highest_education_level ===
+                                            'doctor') && (
+                                        <div className="space-y-3 rounded-md border bg-muted/40 p-4">
+                                            <div>
                                                 <h3 className="text-sm font-semibold text-foreground">
                                                     College
                                                 </h3>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Provide your college degree and year graduated. If you graduated in SPUP, you don&apos;t need to enter the college/university name.
-                                                    </p>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id="is_transferee"
-                                                        checked={data.is_transferee || false}
-                                                        onCheckedChange={(checked) => {
-                                                            setData('is_transferee', checked === true);
-                                                            if (checked) {
-                                                                // Clear college/university name when checked (graduated from St. Paul)
-                                                                setData('college_school_name', '');
-                                                            }
-                                                        }}
-                                                    />
-                                                    <Label
-                                                        htmlFor="is_transferee"
-                                                        className="text-sm font-normal cursor-pointer"
-                                                    >
-                                                        I graduated in St. Paul University Philippines
+                                                <p className="text-xs text-muted-foreground">
+                                                    Provide your college degree
+                                                    and year graduated. If you
+                                                    graduated in SPUP, you
+                                                    don&apos;t need to enter the
+                                                    college/university name.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="is_transferee"
+                                                    checked={
+                                                        data.is_transferee ||
+                                                        false
+                                                    }
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        setData(
+                                                            'is_transferee',
+                                                            checked === true,
+                                                        );
+                                                        if (checked) {
+                                                            // Clear college/university name when checked (graduated from St. Paul)
+                                                            setData(
+                                                                'college_school_name',
+                                                                '',
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <Label
+                                                    htmlFor="is_transferee"
+                                                    className="cursor-pointer text-sm font-normal"
+                                                >
+                                                    I graduated in St. Paul
+                                                    University Philippines
+                                                </Label>
+                                            </div>
+                                            <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="college_degree">
+                                                        Degree / course *
                                                     </Label>
+                                                    <Input
+                                                        id="college_degree"
+                                                        name="college_degree"
+                                                        value={
+                                                            data.college_degree ||
+                                                            ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'college_degree',
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        required={
+                                                            data.highest_education_level ===
+                                                                'college' ||
+                                                            data.highest_education_level ===
+                                                                'masters' ||
+                                                            data.highest_education_level ===
+                                                                'doctor'
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            errors.college_degree
+                                                        }
+                                                    />
                                                 </div>
-                                                <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor="college_degree">
-                                                            Degree / course *
-                                                        </Label>
-                                                        <Input
-                                                            id="college_degree"
-                                                            name="college_degree"
-                                                            value={data.college_degree || ''}
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    'college_degree',
-                                                                    e.target.value,
-                                                                )
-                                                            }
-                                                            required={
-                                                                data.highest_education_level === 'college' ||
-                                                                data.highest_education_level === 'masters' ||
-                                                                data.highest_education_level === 'doctor'
-                                                            }
-                                                        />
-                                                        <InputError
-                                                            message={errors.college_degree}
-                                                        />
-                                                    </div>
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor="college_year_graduated">
-                                                            Year graduated *
-                                                        </Label>
-                                                        <Input
-                                                            id="college_year_graduated"
-                                                            name="college_year_graduated"
-                                                            type="number"
-                                                            value={data.college_year_graduated || ''}
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    'college_year_graduated',
-                                                                    e.target.value
-                                                                        ? Number(e.target.value)
-                                                                        : '',
-                                                                )
-                                                            }
-                                                            min={1900}
-                                                            max={new Date().getFullYear()}
-                                                            required={
-                                                                data.highest_education_level === 'college' ||
-                                                                data.highest_education_level === 'masters' ||
-                                                                data.highest_education_level === 'doctor'
-                                                            }
-                                                        />
-                                                        <InputError
-                                                            message={errors.college_year_graduated}
-                                                        />
-                                                    </div>
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="college_year_graduated">
+                                                        Year graduated *
+                                                    </Label>
+                                                    <Input
+                                                        id="college_year_graduated"
+                                                        name="college_year_graduated"
+                                                        type="number"
+                                                        value={
+                                                            data.college_year_graduated ||
+                                                            ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'college_year_graduated',
+                                                                e.target.value
+                                                                    ? Number(
+                                                                          e
+                                                                              .target
+                                                                              .value,
+                                                                      )
+                                                                    : '',
+                                                            )
+                                                        }
+                                                        min={1900}
+                                                        max={new Date().getFullYear()}
+                                                        required={
+                                                            data.highest_education_level ===
+                                                                'college' ||
+                                                            data.highest_education_level ===
+                                                                'masters' ||
+                                                            data.highest_education_level ===
+                                                                'doctor'
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            errors.college_year_graduated
+                                                        }
+                                                    />
                                                 </div>
-                                                {!data.is_transferee && (
+                                            </div>
+                                            {!data.is_transferee && (
                                                 <div className="grid gap-2">
                                                     <Label htmlFor="college_school_name">
                                                         College / university *
@@ -1898,7 +2521,10 @@ export function ApplicationWizard({
                                                     <Input
                                                         id="college_school_name"
                                                         name="college_school_name"
-                                                        value={data.college_school_name || ''}
+                                                        value={
+                                                            data.college_school_name ||
+                                                            ''
+                                                        }
                                                         onChange={(e) =>
                                                             setData(
                                                                 'college_school_name',
@@ -1908,19 +2534,79 @@ export function ApplicationWizard({
                                                         required
                                                     />
                                                     <InputError
-                                                        message={errors.college_school_name}
+                                                        message={
+                                                            errors.college_school_name
+                                                        }
                                                     />
                                                 </div>
-                                                )}
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
+                                    )}
 
-                                    {/* Masters */}
-                                    {data.highest_education_level === 'masters' && (
-                                        <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                            <h3 className="text-sm font-semibold text-foreground">
-                                                Masters
-                                            </h3>
+                                {/* Masters */}
+                                {data.highest_education_level === 'masters' && (
+                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                        <h3 className="text-sm font-semibold text-foreground">
+                                            Masters
+                                        </h3>
+                                        <div className="grid grid-cols-[auto,1fr,1fr] items-center gap-3">
+                                            <Label
+                                                htmlFor="grad_masteral_school"
+                                                className="w-28 text-sm font-medium"
+                                            >
+                                                MASTERAL:
+                                            </Label>
+                                            <Input
+                                                id="grad_masteral_school"
+                                                name="grad_masteral_school"
+                                                value={
+                                                    data.grad_masteral_school ||
+                                                    ''
+                                                }
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'grad_masteral_school',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Name of School"
+                                                required
+                                            />
+                                            <Input
+                                                id="grad_masteral_year"
+                                                name="grad_masteral_year"
+                                                type="number"
+                                                value={
+                                                    data.grad_masteral_year ||
+                                                    ''
+                                                }
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'grad_masteral_year',
+                                                        e.target.value
+                                                            ? Number(
+                                                                  e.target
+                                                                      .value,
+                                                              )
+                                                            : '',
+                                                    )
+                                                }
+                                                placeholder="Year Graduated (or 0000)"
+                                                min={0}
+                                                max={new Date().getFullYear()}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Doctor */}
+                                {data.highest_education_level === 'doctor' && (
+                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                        <h3 className="text-sm font-semibold text-foreground">
+                                            Doctor
+                                        </h3>
+                                        <div className="space-y-3">
                                             <div className="grid grid-cols-[auto,1fr,1fr] items-center gap-3">
                                                 <Label
                                                     htmlFor="grad_masteral_school"
@@ -1931,7 +2617,10 @@ export function ApplicationWizard({
                                                 <Input
                                                     id="grad_masteral_school"
                                                     name="grad_masteral_school"
-                                                    value={data.grad_masteral_school || ''}
+                                                    value={
+                                                        data.grad_masteral_school ||
+                                                        ''
+                                                    }
                                                     onChange={(e) =>
                                                         setData(
                                                             'grad_masteral_school',
@@ -1945,12 +2634,66 @@ export function ApplicationWizard({
                                                     id="grad_masteral_year"
                                                     name="grad_masteral_year"
                                                     type="number"
-                                                    value={data.grad_masteral_year || ''}
+                                                    value={
+                                                        data.grad_masteral_year ||
+                                                        ''
+                                                    }
                                                     onChange={(e) =>
                                                         setData(
                                                             'grad_masteral_year',
                                                             e.target.value
-                                                                ? Number(e.target.value)
+                                                                ? Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  )
+                                                                : '',
+                                                        )
+                                                    }
+                                                    placeholder="Year Graduated (or 0000)"
+                                                    min={0}
+                                                    max={new Date().getFullYear()}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-[auto,1fr,1fr] items-center gap-3">
+                                                <Label
+                                                    htmlFor="grad_doctoral_school"
+                                                    className="w-28 text-sm font-medium"
+                                                >
+                                                    DOCTORAL:
+                                                </Label>
+                                                <Input
+                                                    id="grad_doctoral_school"
+                                                    name="grad_doctoral_school"
+                                                    value={
+                                                        data.grad_doctoral_school ||
+                                                        ''
+                                                    }
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'grad_doctoral_school',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    placeholder="Name of School"
+                                                    required
+                                                />
+                                                <Input
+                                                    id="grad_doctoral_year"
+                                                    name="grad_doctoral_year"
+                                                    type="number"
+                                                    value={
+                                                        data.grad_doctoral_year ||
+                                                        ''
+                                                    }
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'grad_doctoral_year',
+                                                            e.target.value
+                                                                ? Number(
+                                                                      e.target
+                                                                          .value,
+                                                                  )
                                                                 : '',
                                                         )
                                                     }
@@ -1961,271 +2704,260 @@ export function ApplicationWizard({
                                                 />
                                             </div>
                                         </div>
-                                    )}
-
-                                    {/* Doctor */}
-                                    {data.highest_education_level === 'doctor' && (
-                                        <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                            <h3 className="text-sm font-semibold text-foreground">
-                                                Doctor
-                                            </h3>
-                                            <div className="space-y-3">
-                                                <div className="grid grid-cols-[auto,1fr,1fr] items-center gap-3">
-                                                    <Label
-                                                        htmlFor="grad_masteral_school"
-                                                        className="w-28 text-sm font-medium"
-                                                    >
-                                                        MASTERAL:
-                                                    </Label>
-                                                    <Input
-                                                        id="grad_masteral_school"
-                                                        name="grad_masteral_school"
-                                                        value={data.grad_masteral_school || ''}
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'grad_masteral_school',
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        placeholder="Name of School"
-                                                        required
-                                                    />
-                                                    <Input
-                                                        id="grad_masteral_year"
-                                                        name="grad_masteral_year"
-                                                        type="number"
-                                                        value={data.grad_masteral_year || ''}
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'grad_masteral_year',
-                                                                e.target.value
-                                                                    ? Number(e.target.value)
-                                                                    : '',
-                                                            )
-                                                        }
-                                                        placeholder="Year Graduated (or 0000)"
-                                                        min={0}
-                                                        max={new Date().getFullYear()}
-                                                        required
-                                                    />
-                                                </div>
-                                                <div className="grid grid-cols-[auto,1fr,1fr] items-center gap-3">
-                                                    <Label
-                                                        htmlFor="grad_doctoral_school"
-                                                        className="w-28 text-sm font-medium"
-                                                    >
-                                                        DOCTORAL:
-                                                    </Label>
-                                                    <Input
-                                                        id="grad_doctoral_school"
-                                                        name="grad_doctoral_school"
-                                                        value={data.grad_doctoral_school || ''}
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'grad_doctoral_school',
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        placeholder="Name of School"
-                                                        required
-                                                    />
-                                                    <Input
-                                                        id="grad_doctoral_year"
-                                                        name="grad_doctoral_year"
-                                                        type="number"
-                                                        value={data.grad_doctoral_year || ''}
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'grad_doctoral_year',
-                                                                e.target.value
-                                                                    ? Number(e.target.value)
-                                                                    : '',
-                                                            )
-                                                        }
-                                                        placeholder="Year Graduated (or 0000)"
-                                                        min={0}
-                                                        max={new Date().getFullYear()}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            {cancelHref ? (
-                                                <Button asChild type="button" variant="ghost">
-                                                    <Link href={cancelHref}>Cancel</Link>
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => setCurrentStep('personal')}
-                                            >
-                                                <ChevronLeft className="mr-2 h-4 w-4" />
-                                                Back
-                                            </Button>
-                                            <Button type="button" onClick={confirmStep}>
-                                                Confirm & Continue
-                                                <ChevronRight className="ml-2 h-4 w-4" />
-                                            </Button>
-                                        </div>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        )}
+                                )}
 
-                        {/* Step 3: Application Details */}
-                        {currentStep === 'application' && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Step 3: Application Details</CardTitle>
-                                    <CardDescription>
-                                        Complete your graduation application details
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Graduation Appearance */}
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        {cancelHref ? (
+                                            <Button
+                                                asChild
+                                                type="button"
+                                                variant="ghost"
+                                            >
+                                                <Link href={cancelHref}>
+                                                    Cancel
+                                                </Link>
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() =>
+                                                setCurrentStep('personal')
+                                            }
+                                        >
+                                            <ChevronLeft className="mr-2 h-4 w-4" />
+                                            Back
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            onClick={confirmStep}
+                                        >
+                                            Confirm & Continue
+                                            <ChevronRight className="ml-2 h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Step 3: Application Details */}
+                    {currentStep === 'application' && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>
+                                    Step 3: Application Details
+                                </CardTitle>
+                                <CardDescription>
+                                    Complete your graduation application details
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Graduation Appearance */}
+                                <div className="grid gap-2">
+                                    <Label htmlFor="presence">
+                                        Graduation Appearance *
+                                    </Label>
+                                    <select
+                                        id="presence"
+                                        name="presence"
+                                        aria-label="Graduation appearance"
+                                        value={data.presence}
+                                        onChange={(e) =>
+                                            setData(
+                                                'presence',
+                                                e.target.value as
+                                                    | 'attending'
+                                                    | 'not attending',
+                                            )
+                                        }
+                                        required
+                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
+                                    >
+                                        <option value="attending">
+                                            Attending
+                                        </option>
+                                        <option value="not attending">
+                                            Not Attending
+                                        </option>
+                                    </select>
+                                    <InputError message={errors.presence} />
+                                </div>
+
+                                {/* Department */}
+                                <div className="grid gap-2">
+                                    <Label htmlFor="department_id">
+                                        Department *
+                                    </Label>
+                                    <select
+                                        id="department_id"
+                                        name="department_id"
+                                        aria-label="Department"
+                                        value={
+                                            selectedDepartmentId === ''
+                                                ? ''
+                                                : selectedDepartmentId
+                                        }
+                                        onChange={(e) => {
+                                            const deptId = e.target.value
+                                                ? Number(e.target.value)
+                                                : '';
+                                            setSelectedDepartmentId(deptId);
+                                            setSelectedCourseId('');
+                                            setSelectedMajorId('');
+                                            setData(
+                                                'department_id',
+                                                deptId ? String(deptId) : '',
+                                            );
+                                            setData('course_id', '');
+                                            setData('major', '');
+                                        }}
+                                        required
+                                        className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
+                                    >
+                                        <option value="">
+                                            Select Department
+                                        </option>
+                                        {departments.map((dept) => (
+                                            <option
+                                                key={dept.id}
+                                                value={dept.id}
+                                            >
+                                                {dept.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <InputError
+                                        message={errors.department_id}
+                                    />
+                                </div>
+
+                                {/* Course */}
+                                {selectedDepartment && (
                                     <div className="grid gap-2">
-                                        <Label htmlFor="presence">
-                                            Graduation Appearance *
+                                        <Label htmlFor="course_id">
+                                            Degree *
                                         </Label>
                                         <select
-                                            id="presence"
-                                            name="presence"
-                                            aria-label="Graduation appearance"
-                                            value={data.presence}
-                                            onChange={(e) =>
-                                                setData(
-                                                    'presence',
-                                                    e.target.value as 'attending' | 'not attending',
-                                                )
+                                            id="course_id"
+                                            name="course_id"
+                                            aria-label="Degree"
+                                            value={
+                                                selectedCourseId === ''
+                                                    ? ''
+                                                    : selectedCourseId
                                             }
-                                            required
-                                            className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
-                                        >
-                                            <option value="attending">Attending</option>
-                                            <option value="not attending">Not Attending</option>
-                                        </select>
-                                        <InputError message={errors.presence} />
-                                    </div>
-
-                                    {/* Department */}
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="department_id">Department *</Label>
-                                        <select
-                                            id="department_id"
-                                            name="department_id"
-                                            aria-label="Department"
-                                            value={selectedDepartmentId === '' ? '' : selectedDepartmentId}
                                             onChange={(e) => {
-                                                const deptId = e.target.value
+                                                const courseId = e.target.value
                                                     ? Number(e.target.value)
                                                     : '';
-                                                setSelectedDepartmentId(deptId);
-                                                setSelectedCourseId('');
+                                                setSelectedCourseId(courseId);
                                                 setSelectedMajorId('');
-                                                setData('department_id', deptId ? String(deptId) : '');
-                                                setData('course_id', '');
+                                                setData(
+                                                    'course_id',
+                                                    courseId
+                                                        ? String(courseId)
+                                                        : '',
+                                                );
                                                 setData('major', '');
                                             }}
                                             required
-                                            className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                            className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                         >
-                                            <option value="">Select Department</option>
-                                            {departments.map((dept) => (
-                                                <option key={dept.id} value={dept.id}>
-                                                    {dept.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <InputError message={errors.department_id} />
-                                    </div>
-
-                                    {/* Course */}
-                                    {selectedDepartment && (
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="course_id">Degree *</Label>
-                                            <select
-                                                id="course_id"
-                                                name="course_id"
-                                                aria-label="Degree"
-                                                value={selectedCourseId === '' ? '' : selectedCourseId}
-                                                onChange={(e) => {
-                                                    const courseId = e.target.value
-                                                        ? Number(e.target.value)
-                                                        : '';
-                                                    setSelectedCourseId(courseId);
-                                                    setSelectedMajorId('');
-                                                    setData('course_id', courseId ? String(courseId) : '');
-                                                    setData('major', '');
-                                                }}
-                                                required
-                                                className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
-                                            >
-                                                <option value="">Select Course</option>
-                                                {selectedDepartment.courses.map((course) => (
-                                                    <option key={course.id} value={course.id}>
+                                            <option value="">
+                                                Select Course
+                                            </option>
+                                            {selectedDepartment.courses.map(
+                                                (course) => (
+                                                    <option
+                                                        key={course.id}
+                                                        value={course.id}
+                                                    >
                                                         {course.name}
                                                     </option>
-                                                ))}
-                                            </select>
-                                            <InputError message={errors.course_id} />
-                                        </div>
-                                    )}
+                                                ),
+                                            )}
+                                        </select>
+                                        <InputError
+                                            message={errors.course_id}
+                                        />
+                                    </div>
+                                )}
 
-                                    {/* Major (optional) */}
-                                    {selectedCourse && selectedCourse.majors.length > 0 && (
+                                {/* Major (optional) */}
+                                {selectedCourse &&
+                                    selectedCourse.majors.length > 0 && (
                                         <div className="grid gap-2">
-                                            <Label htmlFor="major">Major (optional)</Label>
+                                            <Label htmlFor="major">
+                                                Major (optional)
+                                            </Label>
                                             <select
                                                 id="major"
                                                 name="major"
                                                 aria-label="Major"
-                                                value={selectedMajorId === '' ? '' : selectedMajorId}
+                                                value={
+                                                    selectedMajorId === ''
+                                                        ? ''
+                                                        : selectedMajorId
+                                                }
                                                 onChange={(e) => {
-                                                    const majorId = e.target.value
+                                                    const majorId = e.target
+                                                        .value
                                                         ? Number(e.target.value)
                                                         : '';
                                                     const majorName =
                                                         selectedCourse.majors.find(
-                                                            (m) => m.id === majorId,
+                                                            (m) =>
+                                                                m.id ===
+                                                                majorId,
                                                         )?.name || '';
                                                     setSelectedMajorId(majorId);
                                                     setData('major', majorName);
                                                 }}
-                                                className="border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] rounded-md"
+                                                className="rounded-md border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none"
                                             >
-                                                <option value="">No major / Not applicable</option>
-                                                {selectedCourse.majors.map((major) => (
-                                                    <option key={major.id} value={major.id}>
-                                                        {major.name}
-                                                    </option>
-                                                ))}
+                                                <option value="">
+                                                    No major / Not applicable
+                                                </option>
+                                                {selectedCourse.majors.map(
+                                                    (major) => (
+                                                        <option
+                                                            key={major.id}
+                                                            value={major.id}
+                                                        >
+                                                            {major.name}
+                                                        </option>
+                                                    ),
+                                                )}
                                             </select>
-                                            <InputError message={errors.major} />
+                                            <InputError
+                                                message={errors.major}
+                                            />
                                         </div>
                                     )}
 
-                                    {/* Degree Title - Display Only */}
-                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                        <Label className="text-sm font-semibold text-foreground">
-                                            Degree / Title Applying For
-                                        </Label>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <Label className="text-xs text-muted-foreground">
-                                                    Degree
-                                                </Label>
-                                                <p className="text-sm font-medium">
-                                                    {selectedCourse?.name || 'Not selected'}
-                                                </p>
-                                            </div>
-                                            {selectedCourse && selectedCourse.majors.length > 0 && (
+                                {/* Degree Title - Display Only */}
+                                <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                    <Label className="text-sm font-semibold text-foreground">
+                                        Degree / Title Applying For
+                                    </Label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <Label className="text-xs text-muted-foreground">
+                                                Degree
+                                            </Label>
+                                            <p className="text-sm font-medium">
+                                                {selectedCourse?.name ||
+                                                    'Not selected'}
+                                            </p>
+                                        </div>
+                                        {selectedCourse &&
+                                            selectedCourse.majors.length >
+                                                0 && (
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">
                                                         Major
@@ -2233,55 +2965,68 @@ export function ApplicationWizard({
                                                     <p className="text-sm font-medium">
                                                         {selectedMajorId
                                                             ? selectedCourse.majors.find(
-                                                                (m) => m.id === selectedMajorId,
-                                                            )?.name || 'Not selected'
+                                                                  (m) =>
+                                                                      m.id ===
+                                                                      selectedMajorId,
+                                                              )?.name ||
+                                                              'Not selected'
                                                             : 'Not selected'}
                                                     </p>
                                                 </div>
                                             )}
-                                        </div>
-                                        <input
-                                            type="hidden"
-                                            name="degree_title"
-                                            value={data.degree_title}
-                                        />
-                                        <InputError message={errors.degree_title} />
                                     </div>
+                                    <input
+                                        type="hidden"
+                                        name="degree_title"
+                                        value={data.degree_title}
+                                    />
+                                    <InputError message={errors.degree_title} />
+                                </div>
 
-                                    {/* Graduate Program Fields */}
-                                    {isGraduateProgram && (
-                                        <>
-                                            {/* Multiple Subject Code/Title/Units - Dynamic rows */}
-                                            <div className="space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <Label>Subjects Presently Enrolled *</Label>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={addGraduateSubject}
-                                                    >
-                                                        <Plus className="mr-2 h-4 w-4" />
-                                                        Add Subject
-                                                    </Button>
-                                                </div>
-                                                <div className="space-y-3">
-                                                    {data.graduate_subjects.map((subject, index) => (
+                                {/* Graduate Program Fields */}
+                                {isGraduateProgram && (
+                                    <>
+                                        {/* Multiple Subject Code/Title/Units - Dynamic rows */}
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <Label>
+                                                    Subjects Presently Enrolled
+                                                    *
+                                                </Label>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={addGraduateSubject}
+                                                >
+                                                    <Plus className="mr-2 h-4 w-4" />
+                                                    Add Subject
+                                                </Button>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {data.graduate_subjects.map(
+                                                    (subject, index) => (
                                                         <div
                                                             key={index}
-                                                            className="grid grid-cols-5 gap-4 items-end"
+                                                            className="grid grid-cols-5 items-end gap-4"
                                                         >
                                                             <div>
                                                                 <Label className="text-sm">
                                                                     Code
                                                                 </Label>
                                                                 <Input
-                                                                    value={subject.subject_code}
-                                                                    onChange={(e) =>
+                                                                    value={
+                                                                        subject.subject_code
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
                                                                         updateGraduateSubject(
                                                                             index,
                                                                             'subject_code',
-                                                                            e.target.value,
+                                                                            e
+                                                                                .target
+                                                                                .value,
                                                                         )
                                                                     }
                                                                     placeholder="e.g., THESIS 101"
@@ -2292,12 +3037,18 @@ export function ApplicationWizard({
                                                                     Title
                                                                 </Label>
                                                                 <Input
-                                                                    value={subject.subject_title}
-                                                                    onChange={(e) =>
+                                                                    value={
+                                                                        subject.subject_title
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
                                                                         updateGraduateSubject(
                                                                             index,
                                                                             'subject_title',
-                                                                            e.target.value,
+                                                                            e
+                                                                                .target
+                                                                                .value,
                                                                         )
                                                                     }
                                                                     placeholder="e.g., Thesis Writing"
@@ -2310,216 +3061,294 @@ export function ApplicationWizard({
                                                                     </Label>
                                                                     <Input
                                                                         type="number"
-                                                                        value={subject.units ?? 0}
-                                                                        onChange={(e) =>
+                                                                        value={
+                                                                            subject.units ??
+                                                                            0
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
                                                                             updateGraduateSubject(
                                                                                 index,
                                                                                 'units',
-                                                                                e.target.value === ''
+                                                                                e
+                                                                                    .target
+                                                                                    .value ===
+                                                                                    ''
                                                                                     ? 0
-                                                                                    : Number(e.target.value),
+                                                                                    : Number(
+                                                                                          e
+                                                                                              .target
+                                                                                              .value,
+                                                                                      ),
                                                                             )
                                                                         }
                                                                         placeholder="Units"
                                                                         min={0}
                                                                     />
                                                                 </div>
-                                                                {data.graduate_subjects.length > 1 && (
+                                                                {data
+                                                                    .graduate_subjects
+                                                                    .length >
+                                                                    1 && (
                                                                     <Button
                                                                         type="button"
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-10 w-10 shrink-0"
-                                                                        onClick={() => removeGraduateSubject(index)}
+                                                                        onClick={() =>
+                                                                            removeGraduateSubject(
+                                                                                index,
+                                                                            )
+                                                                        }
                                                                     >
                                                                         <X className="h-4 w-4" />
                                                                     </Button>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    ),
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="no_thesis_required"
+                                                    checked={noThesisRequired}
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        const enabled =
+                                                            checked === true;
+                                                        setNoThesisRequired(
+                                                            enabled,
+                                                        );
+                                                        if (enabled) {
+                                                            setData(
+                                                                'thesis_dissertation_title',
+                                                                '',
+                                                            );
+                                                            setData(
+                                                                'thesis_dissertation_adviser',
+                                                                '',
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <Label
+                                                    htmlFor="no_thesis_required"
+                                                    className="cursor-pointer text-sm font-normal"
+                                                >
+                                                    Thesis / dissertation not
+                                                    required for this program
+                                                </Label>
                                             </div>
 
-                                            <div className="space-y-3">
-                                                <div className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id="no_thesis_required"
-                                                        checked={noThesisRequired}
-                                                        onCheckedChange={(checked) => {
-                                                            const enabled = checked === true;
-                                                            setNoThesisRequired(enabled);
-                                                            if (enabled) {
-                                                                setData('thesis_dissertation_title', '');
-                                                                setData('thesis_dissertation_adviser', '');
+                                            {!noThesisRequired && (
+                                                <>
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor="thesis_dissertation_title">
+                                                            Thesis/Dissertation
+                                                            Title
+                                                        </Label>
+                                                        <Textarea
+                                                            id="thesis_dissertation_title"
+                                                            name="thesis_dissertation_title"
+                                                            value={
+                                                                data.thesis_dissertation_title
                                                             }
-                                                        }}
-                                                    />
-                                                    <Label
-                                                        htmlFor="no_thesis_required"
-                                                        className="text-sm font-normal cursor-pointer"
-                                                    >
-                                                        Thesis / dissertation not required for this program
-                                                    </Label>
-                                                </div>
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'thesis_dissertation_title',
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Enter your thesis or dissertation title"
+                                                            rows={3}
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                errors.thesis_dissertation_title
+                                                            }
+                                                        />
+                                                    </div>
 
-                                                {!noThesisRequired && (
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor="thesis_dissertation_adviser">
+                                                            Thesis/Dissertation
+                                                            Adviser
+                                                        </Label>
+                                                        <Input
+                                                            id="thesis_dissertation_adviser"
+                                                            name="thesis_dissertation_adviser"
+                                                            value={
+                                                                data.thesis_dissertation_adviser
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'thesis_dissertation_adviser',
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Enter your adviser's name"
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                errors.thesis_dissertation_adviser
+                                                            }
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Confirmation Section */}
+                                <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                    <Label className="text-sm font-semibold text-foreground">
+                                        Confirmation
+                                    </Label>
+                                    <div className="space-y-4">
+                                        <div className="flex items-start gap-3">
+                                            <input
+                                                type="checkbox"
+                                                id="agreed_to_requirements"
+                                                aria-label="Agree to comply with requirements"
+                                                checked={agreedToRequirements}
+                                                onChange={(e) =>
+                                                    setAgreedToRequirements(
+                                                        e.target.checked,
+                                                    )
+                                                }
+                                                className="mt-1 h-4 w-4 rounded border-gray-300"
+                                            />
+                                            <Label
+                                                htmlFor="agreed_to_requirements"
+                                                className="cursor-pointer text-sm leading-relaxed"
+                                            >
+                                                I agree to comply with the
+                                                requirements for the degree I am
+                                                applying for.
+                                            </Label>
+                                        </div>
+                                        {agreedToRequirements && (
+                                            <div className="grid gap-2">
+                                                <Label
+                                                    htmlFor={
+                                                        isGuestMode
+                                                            ? 'email_confirmation'
+                                                            : 'student_id_confirmation'
+                                                    }
+                                                >
+                                                    {isGuestMode
+                                                        ? 'Enter your email address to confirm *'
+                                                        : 'Enter your Student ID Number to confirm *'}
+                                                </Label>
+                                                {isGuestMode ? (
                                                     <>
-                                                        <div className="grid gap-2">
-                                                            <Label htmlFor="thesis_dissertation_title">
-                                                                Thesis/Dissertation Title
-                                                            </Label>
-                                                            <Textarea
-                                                                id="thesis_dissertation_title"
-                                                                name="thesis_dissertation_title"
-                                                                value={data.thesis_dissertation_title}
-                                                                onChange={(e) =>
-                                                                    setData(
-                                                                        'thesis_dissertation_title',
-                                                                        e.target.value,
-                                                                    )
-                                                                }
-                                                                placeholder="Enter your thesis or dissertation title"
-                                                                rows={3}
-                                                            />
-                                                            <InputError
-                                                                message={errors.thesis_dissertation_title}
-                                                            />
-                                                        </div>
-
-                                                        <div className="grid gap-2">
-                                                            <Label htmlFor="thesis_dissertation_adviser">
-                                                                Thesis/Dissertation Adviser
-                                                            </Label>
-                                                            <Input
-                                                                id="thesis_dissertation_adviser"
-                                                                name="thesis_dissertation_adviser"
-                                                                value={data.thesis_dissertation_adviser}
-                                                                onChange={(e) =>
-                                                                    setData(
-                                                                        'thesis_dissertation_adviser',
-                                                                        e.target.value,
-                                                                    )
-                                                                }
-                                                                placeholder="Enter your adviser&apos;s name"
-                                                            />
-                                                            <InputError
-                                                                message={errors.thesis_dissertation_adviser}
-                                                            />
-                                                        </div>
+                                                        <Input
+                                                            id="email_confirmation"
+                                                            name="email_confirmation"
+                                                            type="email"
+                                                            value={
+                                                                emailConfirmation
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEmailConfirmation(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Enter your email address"
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Please enter the
+                                                            same email you used
+                                                            above:{' '}
+                                                            {data.email ||
+                                                                'you@example.com'}
+                                                        </p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Input
+                                                            id="student_id_confirmation"
+                                                            name="student_id_confirmation"
+                                                            value={
+                                                                studentIdConfirmation
+                                                            }
+                                                            onChange={(e) =>
+                                                                setStudentIdConfirmation(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Enter your Student ID"
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Please enter your
+                                                            Student ID:{' '}
+                                                            {expectedStudentId ||
+                                                                'N/A'}
+                                                        </p>
                                                     </>
                                                 )}
                                             </div>
-                                        </>
-                                    )}
-
-                                    {/* Confirmation Section */}
-                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                        <Label className="text-sm font-semibold text-foreground">
-                                            Confirmation
-                                        </Label>
-                                        <div className="space-y-4">
-                                            <div className="flex items-start gap-3">
-                                                <input
-                                                    type="checkbox"
-                                                    id="agreed_to_requirements"
-                                                    aria-label="Agree to comply with requirements"
-                                                    checked={agreedToRequirements}
-                                                    onChange={(e) =>
-                                                        setAgreedToRequirements(e.target.checked)
-                                                    }
-                                                    className="mt-1 h-4 w-4 rounded border-gray-300"
-                                                />
-                                                <Label
-                                                    htmlFor="agreed_to_requirements"
-                                                    className="text-sm leading-relaxed cursor-pointer"
-                                                >
-                                                    I agree to comply with the requirements for the
-                                                    degree I am applying for.
-                                                </Label>
-                                            </div>
-                                            {agreedToRequirements && (
-                                                <div className="grid gap-2">
-                                                    <Label htmlFor={isGuestMode ? 'email_confirmation' : 'student_id_confirmation'}>
-                                                        {isGuestMode
-                                                            ? 'Enter your email address to confirm *'
-                                                            : 'Enter your Student ID Number to confirm *'}
-                                                    </Label>
-                                                    {isGuestMode ? (
-                                                        <>
-                                                            <Input
-                                                                id="email_confirmation"
-                                                                name="email_confirmation"
-                                                                type="email"
-                                                                value={emailConfirmation}
-                                                                onChange={(e) =>
-                                                                    setEmailConfirmation(e.target.value)
-                                                                }
-                                                                placeholder="Enter your email address"
-                                                            />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Please enter the same email you used above: {data.email || 'you@example.com'}
-                                                            </p>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Input
-                                                                id="student_id_confirmation"
-                                                                name="student_id_confirmation"
-                                                                value={studentIdConfirmation}
-                                                                onChange={(e) =>
-                                                                    setStudentIdConfirmation(
-                                                                        e.target.value,
-                                                                    )
-                                                                }
-                                                                placeholder="Enter your Student ID"
-                                                            />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Please enter your Student ID:{' '}
-                                                                {expectedStudentId || 'N/A'}
-                                                            </p>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
+                                        )}
                                     </div>
+                                </div>
 
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            {cancelHref ? (
-                                                <Button asChild type="button" variant="ghost">
-                                                    <Link href={cancelHref}>Cancel</Link>
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        {cancelHref ? (
                                             <Button
+                                                asChild
                                                 type="button"
-                                                variant="outline"
-                                                onClick={() => setCurrentStep('educational')}
+                                                variant="ghost"
                                             >
-                                                <ChevronLeft className="mr-2 h-4 w-4" />
-                                                Back
+                                                <Link href={cancelHref}>
+                                                    Cancel
+                                                </Link>
                                             </Button>
-                                            <Button
-                                                type="submit"
-                                                disabled={
-                                                    processing ||
-                                                    !agreedToRequirements ||
-                                                    !confirmationMatches
-                                                }
-                                            >
-                                                {processing ? (isEditMode ? 'Updating...' : 'Submitting...') : submitLabel}
-                                            </Button>
-                                        </div>
+                                        ) : null}
                                     </div>
-                                </CardContent>
-                            </Card>
-                        )}
-                    </form>
-                </div>
+                                    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() =>
+                                                setCurrentStep('educational')
+                                            }
+                                        >
+                                            <ChevronLeft className="mr-2 h-4 w-4" />
+                                            Back
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            disabled={
+                                                processing ||
+                                                !agreedToRequirements ||
+                                                !confirmationMatches
+                                            }
+                                        >
+                                            {processing
+                                                ? isEditMode
+                                                    ? 'Updating...'
+                                                    : 'Submitting...'
+                                                : submitLabel}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </form>
             </div>
+        </div>
     );
 }
-

@@ -428,6 +428,40 @@ test('public tracking lookup redirects to the guest status page when tracking co
         );
 });
 
+test('public tracking lookup redirects verified applications directly to the guest portal', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+    $payload = guestApplicationPayload($window, $department, $course);
+
+    $this->post(route('apply.store'), $payload);
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $verifyUrl = URL::temporarySignedRoute(
+        'apply.verify',
+        now()->addMinutes(config('auth.verification.expire', 60)),
+        ['draft' => $draft->id, 'hash' => sha1($draft->email)],
+    );
+
+    $this->get($verifyUrl);
+
+    $draft->refresh();
+    $application = Application::findOrFail($draft->application_id);
+
+    $this->post(route('apply.track'), [
+        'tracking_code' => strtolower($draft->tracking_code),
+        'tracking_pin' => $draft->tracking_pin,
+    ])->assertRedirect(route('apply.portal.show', $application->application_number, absolute: false));
+
+    $this->get(route('apply.portal.show', $application->application_number))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('applications/show')
+            ->where('application.application_number', $application->application_number)
+            ->where('portalMode', 'guest')
+        );
+});
+
 test('tracking recovery by email resends the verification details for an unverified draft', function () {
     Notification::fake();
 
