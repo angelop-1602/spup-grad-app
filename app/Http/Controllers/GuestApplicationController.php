@@ -9,10 +9,12 @@ use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
 use App\Models\Department;
 use App\Models\GuestApplicationDraft;
+use App\Models\SystemHealthCheck;
 use App\Models\User;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use App\Support\ApplicationWorkflowService;
+use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +70,7 @@ class GuestApplicationController extends Controller
 
         if ($draft) {
             $this->rememberDraft($request, $draft);
+            $this->logGuestEvent($draft, 'graduation_application', 'guest.draft.reused', 'Guest reopened an existing application draft.');
 
             return redirect()->route('apply.pending.show', $draft)
                 ->with('status', $draft->hasBeenVerified()
@@ -96,6 +99,7 @@ class GuestApplicationController extends Controller
                 ]);
 
                 $this->rememberDraft($request, $draft);
+                $this->logGuestEvent($draft, 'graduation_application', 'guest.existing_application.found', 'Guest matched an existing application for this window.', subject: $existingApplication);
 
                 return redirect()->route('apply.pending.show', $draft)
                     ->with('status', 'An application already exists for this email and graduation window.');
@@ -109,7 +113,8 @@ class GuestApplicationController extends Controller
             'payload' => $draftPayload,
         ]);
 
-        $draft->notify(new GuestApplicationVerificationNotification($draft));
+        $this->logGuestEvent($draft, 'graduation_application', 'guest.draft.created', 'Guest application draft was created.');
+        $this->notifyDraft($draft, new GuestApplicationVerificationNotification($draft), 'email.verification.sent', 'Verification email sent to guest applicant.');
         $this->rememberDraft($request, $draft);
 
         return redirect()->route('apply.pending.show', $draft)
@@ -147,6 +152,15 @@ class GuestApplicationController extends Controller
             ->first();
 
         if (! $draft || ! hash_equals($draft->ensureTrackingPin(), $trackingPin)) {
+            app(SystemEventLogger::class)->log(
+                module: 'graduation_application',
+                action: 'guest.tracking.failed',
+                message: 'Guest tracking lookup failed.',
+                status: 'failed',
+                severity: 'warning',
+                meta: ['tracking_code' => $trackingCode],
+            );
+
             return redirect()->route('home')
                 ->withErrors([
                     'tracking_code' => 'We could not find an application that matches that tracking code and PIN.',
@@ -158,12 +172,14 @@ class GuestApplicationController extends Controller
         }
 
         $this->rememberDraft($request, $draft);
+        $this->logGuestEvent($draft, 'graduation_application', 'guest.tracking.success', 'Guest tracking lookup succeeded.');
 
         if ($draft->application_id) {
             $draft->loadMissing('application');
 
             if ($draft->application) {
                 $this->grantPortalAccess($request, $draft->application->id);
+                $this->logGuestEvent($draft, 'graduation_application', 'guest.portal.opened_from_tracking', 'Guest opened the application portal from tracking.', subject: $draft->application);
 
                 return redirect()->route('apply.portal.show', $draft->application);
             }
@@ -195,11 +211,20 @@ class GuestApplicationController extends Controller
             ->first();
 
         if ($draft) {
+            $this->logGuestEvent($draft, 'graduation_application', 'guest.tracking.recovery_requested', 'Guest requested tracking recovery.');
+
             if ($draft->hasBeenVerified()) {
-                $draft->notify(new GuestApplicationAccessNotification($draft));
+                $this->notifyDraft($draft, new GuestApplicationAccessNotification($draft), 'email.access.sent', 'Guest portal access email sent.');
             } else {
-                $draft->notify(new GuestApplicationVerificationNotification($draft));
+                $this->notifyDraft($draft, new GuestApplicationVerificationNotification($draft), 'email.verification.sent', 'Verification email sent to guest applicant.');
             }
+        } else {
+            app(SystemEventLogger::class)->log(
+                module: 'graduation_application',
+                action: 'guest.tracking.recovery_requested',
+                message: 'Guest requested tracking recovery for an unknown email.',
+                meta: SystemEventLogger::emailMeta($email),
+            );
         }
 
         return redirect()->route('home')
@@ -213,13 +238,13 @@ class GuestApplicationController extends Controller
         }
 
         if ($draft->hasBeenVerified()) {
-            $draft->notify(new GuestApplicationAccessNotification($draft));
+            $this->notifyDraft($draft, new GuestApplicationAccessNotification($draft), 'email.access.sent', 'Guest portal access email sent.');
 
             return redirect()->route('apply.pending.show', $draft)
                 ->with('status', 'A fresh guest portal access link has been sent to your email.');
         }
 
-        $draft->notify(new GuestApplicationVerificationNotification($draft));
+        $this->notifyDraft($draft, new GuestApplicationVerificationNotification($draft), 'email.verification.sent', 'Verification email sent to guest applicant.');
 
         return redirect()->route('apply.pending.show', $draft)
             ->with('status', 'A fresh verification email has been sent.');
@@ -264,18 +289,36 @@ class GuestApplicationController extends Controller
                 ->withErrors(['email' => 'This email is already associated with a different student ID.']);
         }
 
-        $userForStudentId = User::query()
-            ->where('student_id', $draft->student_id)
+        $applicationForEmail = Application::query()
+            ->where('window_id', $draft->window_id)
+            ->whereHas('user', fn ($query) => $query->whereRaw('lower(email) = ?', [$newEmail]))
+            ->with('user:id,student_id,email')
             ->first();
 
-        if ($userForStudentId && strcasecmp($userForStudentId->email, $newEmail) !== 0) {
+        if ($applicationForEmail?->user?->student_id && strcasecmp((string) $applicationForEmail->user->student_id, $draft->student_id) !== 0) {
             return redirect()->route('apply.pending.show', $draft)
-                ->withErrors(['email' => 'This student ID is already associated with another email address.']);
+                ->withErrors(['email' => 'This email already has an application for the current graduation window.']);
         }
 
+        $applicationForStudentId = Application::query()
+            ->where('window_id', $draft->window_id)
+            ->whereHas('user', fn ($query) => $query->where('student_id', $draft->student_id))
+            ->with('user:id,student_id,email')
+            ->first();
+
+        if ($applicationForStudentId?->user?->email && strcasecmp($applicationForStudentId->user->email, $newEmail) !== 0) {
+            return redirect()->route('apply.pending.show', $draft)
+                ->withErrors(['email' => 'This student ID already has an application for the current graduation window.']);
+        }
+
+        $oldEmail = $draft->email;
         $draft->update(['email' => $newEmail]);
         $this->rememberDraft($request, $draft);
-        $draft->notify(new GuestApplicationVerificationNotification($draft));
+        $this->logGuestEvent($draft, 'graduation_application', 'guest.email.changed', 'Guest application email was changed.', meta: [
+            'old_email' => SystemEventLogger::emailMeta($oldEmail),
+            'new_email' => SystemEventLogger::emailMeta($newEmail),
+        ]);
+        $this->notifyDraft($draft, new GuestApplicationVerificationNotification($draft), 'email.verification.sent', 'Verification email sent to guest applicant.');
 
         return redirect()->route('apply.pending.show', $draft)
             ->with('status', 'Your email address has been updated and a new verification email has been sent.');
@@ -292,7 +335,10 @@ class GuestApplicationController extends Controller
         $this->rememberDraft($request, $draft);
 
         if ($newlyFinalized) {
-            $draft->notify(new GuestApplicationAccessNotification($draft));
+            $this->logGuestEvent($draft, 'graduation_application', 'guest.application.verified', 'Guest verified and finalized the graduation application.', subject: $draft->application);
+            $this->notifyDraft($draft, new GuestApplicationAccessNotification($draft), 'email.access.sent', 'Guest portal access email sent.');
+        } else {
+            $this->logGuestEvent($draft, 'graduation_application', 'guest.application.already_verified', 'Guest opened an already verified application link.', subject: $draft->application);
         }
 
         return Inertia::render('apply/verified', [
@@ -313,6 +359,7 @@ class GuestApplicationController extends Controller
 
         $this->rememberDraft($request, $draft);
         $this->grantPortalAccess($request, $draft->application->id);
+        $this->logGuestEvent($draft, 'graduation_application', 'guest.portal.accessed', 'Guest opened the application portal from an access link.', subject: $draft->application);
 
         return redirect()->route('apply.portal.show', $draft->application);
     }
@@ -356,11 +403,15 @@ class GuestApplicationController extends Controller
 
     public function download(Application $application): BinaryFileResponse
     {
+        $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.application.downloaded', 'Guest downloaded the application document.');
+
         return ApplicationController::generatePdf($application);
     }
 
     public function downloadPhoto(Application $application): BinaryFileResponse
     {
+        $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.photo.downloaded', 'Guest downloaded the profile photo.');
+
         return ApplicationController::generateProfilePhotoDownload($application);
     }
 
@@ -391,6 +442,11 @@ class GuestApplicationController extends Controller
             $message .= " Application status updated from '{$oldStatus}' to '{$newStatus}' based on requirements checklist.";
         }
 
+        $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.application.updated', 'Guest updated the graduation application.', meta: [
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+        ]);
+
         return redirect()->route('apply.portal.show', $application)
             ->with('success', $message.' Your profile has been updated with the changes you made.');
     }
@@ -407,6 +463,11 @@ class GuestApplicationController extends Controller
 
         $updatedRequirement = $workflow->storeRequirementFile($application, $requirement, $request->file('file'));
         $workflow->notifyRequirementUploaded($application, $updatedRequirement);
+        $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.requirement.uploaded', 'Guest uploaded a requirement file.', subject: $updatedRequirement, meta: [
+            'requirement_label' => $updatedRequirement->requirement_label,
+            'mime_type' => $request->file('file')?->getMimeType(),
+            'size' => $request->file('file')?->getSize(),
+        ]);
 
         return redirect()->route('apply.portal.show', $application)
             ->with('success', 'File uploaded successfully.');
@@ -432,7 +493,7 @@ class GuestApplicationController extends Controller
             $payload = $lockedDraft->payload ?? [];
             $payload['window_id'] = $lockedDraft->window_id;
 
-            $user = User::query()
+            $emailUser = User::query()
                 ->whereRaw('lower(email) = ?', [$lockedDraft->email])
                 ->lockForUpdate()
                 ->first();
@@ -442,13 +503,31 @@ class GuestApplicationController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if ($user && $user->student_id && strcasecmp((string) $user->student_id, $lockedDraft->student_id) !== 0) {
+            if ($emailUser && $emailUser->student_id && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
                 abort(409, 'This email is already associated with a different student ID.');
             }
 
-            if ($studentUser && (! $user || $studentUser->id !== $user->id)) {
-                abort(409, 'This student ID is already associated with another email address.');
+            $applicationForEmail = $emailUser
+                ? $emailUser->applications()->where('window_id', $lockedDraft->window_id)->first()
+                : null;
+
+            if ($applicationForEmail && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
+                abort(409, 'This email already has an application for the current graduation window.');
             }
+
+            $applicationForStudentId = $studentUser
+                ? $studentUser->applications()->where('window_id', $lockedDraft->window_id)->first()
+                : null;
+
+            if ($applicationForStudentId && strcasecmp((string) $studentUser->email, $lockedDraft->email) !== 0) {
+                abort(409, 'This student ID already has an application for the current graduation window.');
+            }
+
+            if ($emailUser && $studentUser && $emailUser->id !== $studentUser->id) {
+                abort(409, 'This email is already associated with a different student ID.');
+            }
+
+            $user = $studentUser ?: $emailUser;
 
             if (! $user) {
                 $user = User::create([
@@ -465,6 +544,10 @@ class GuestApplicationController extends Controller
 
                 if (! $user->student_id) {
                     $updates['student_id'] = $lockedDraft->student_id;
+                }
+
+                if (strcasecmp($user->email, $lockedDraft->email) !== 0) {
+                    $updates['email'] = $lockedDraft->email;
                 }
 
                 if (! $user->email_verified_at) {
@@ -563,5 +646,51 @@ class GuestApplicationController extends Controller
                 $query->active()->orderBy('name');
             },
         ])->active()->orderBy('name')->get();
+    }
+
+    private function notifyDraft(GuestApplicationDraft $draft, object $notification, string $action, string $message): void
+    {
+        try {
+            $draft->notify($notification);
+            SystemHealthCheck::record('mail', 'ok', $message, [
+                'notification' => $notification::class,
+            ]);
+            $this->logGuestEvent($draft, 'email', $action, $message, meta: [
+                'notification' => $notification::class,
+            ]);
+        } catch (\Throwable $e) {
+            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), [
+                'notification' => $notification::class,
+            ]);
+            $this->logGuestEvent($draft, 'email', $action, $message, status: 'failed', severity: 'error', meta: [
+                'notification' => $notification::class,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+    }
+
+    private function logApplicationGuestEvent(Application $application, string $module, string $action, string $message, string $status = 'success', string $severity = 'info', ?object $subject = null, array $meta = []): void
+    {
+        $draft = GuestApplicationDraft::query()->where('application_id', $application->id)->latest('id')->first();
+
+        if ($draft) {
+            $this->logGuestEvent($draft, $module, $action, $message, $status, $severity, $subject instanceof \Illuminate\Database\Eloquent\Model ? $subject : $application, $meta);
+        }
+    }
+
+    private function logGuestEvent(GuestApplicationDraft $draft, string $module, string $action, string $message, string $status = 'success', string $severity = 'info', ?object $subject = null, array $meta = []): void
+    {
+        app(SystemEventLogger::class)->log(
+            module: $module,
+            action: $action,
+            message: $message,
+            status: $status,
+            severity: $severity,
+            subject: $subject instanceof \Illuminate\Database\Eloquent\Model ? $subject : $draft,
+            meta: $meta,
+            actor: SystemEventLogger::studentGuest($draft),
+        );
     }
 }

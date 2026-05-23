@@ -4,6 +4,8 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Application\ApplicationFormRules;
 use App\Http\Requests\Application\Concerns\NormalizesApplicationInput;
+use App\Models\Application;
+use App\Models\GuestApplicationDraft;
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -43,6 +45,7 @@ class StoreGuestApplicationRequest extends FormRequest
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     $email = strtolower((string) $value);
                     $studentId = (string) $this->input('student_id');
+                    $windowId = (int) $this->input('window_id');
 
                     $user = User::query()
                         ->whereRaw('lower(email) = ?', [$email])
@@ -50,6 +53,29 @@ class StoreGuestApplicationRequest extends FormRequest
 
                     if ($user && $user->student_id && strcasecmp($user->student_id, $studentId) !== 0) {
                         $fail('This email is already associated with a different student ID.');
+                    }
+
+                    if (! $windowId || $studentId === '') {
+                        return;
+                    }
+
+                    $draft = GuestApplicationDraft::query()
+                        ->where('window_id', $windowId)
+                        ->whereRaw('lower(email) = ?', [$email])
+                        ->first();
+
+                    if ($draft && strcasecmp($draft->student_id, $studentId) !== 0) {
+                        $fail('This email already has an application draft for the current graduation window.');
+                    }
+
+                    $application = Application::query()
+                        ->where('window_id', $windowId)
+                        ->whereHas('user', fn ($query) => $query->whereRaw('lower(email) = ?', [$email]))
+                        ->with('user:id,student_id,email')
+                        ->first();
+
+                    if ($application?->user?->student_id && strcasecmp($application->user->student_id, $studentId) !== 0) {
+                        $fail('This email already has an application for the current graduation window.');
                     }
                 },
             ],
@@ -61,13 +87,29 @@ class StoreGuestApplicationRequest extends FormRequest
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     $studentId = (string) $value;
                     $email = strtolower((string) $this->input('email'));
+                    $windowId = (int) $this->input('window_id');
 
-                    $user = User::query()
+                    if (! $windowId || $email === '') {
+                        return;
+                    }
+
+                    $draft = GuestApplicationDraft::query()
+                        ->where('window_id', $windowId)
                         ->where('student_id', $studentId)
                         ->first();
 
-                    if ($user && strcasecmp($user->email, $email) !== 0) {
-                        $fail('This student ID is already associated with another email address.');
+                    if ($draft && strcasecmp($draft->email, $email) !== 0) {
+                        $fail('This student ID already has an application draft for the current graduation window.');
+                    }
+
+                    $application = Application::query()
+                        ->where('window_id', $windowId)
+                        ->whereHas('user', fn ($query) => $query->where('student_id', $studentId))
+                        ->with('user:id,student_id,email')
+                        ->first();
+
+                    if ($application?->user?->email && strcasecmp($application->user->email, $email) !== 0) {
+                        $fail('This student ID already has an application for the current graduation window.');
                     }
                 },
             ],

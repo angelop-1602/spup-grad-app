@@ -53,12 +53,12 @@ class ApplicationFormRules
                 Rule::requiredIf(fn () => in_array($request->input('highest_education_level'), ['college', 'masters', 'doctor'], true)),
                 'nullable',
                 'string',
-                'max:255',
+                'max:85',
             ],
             'college_school_name' => [
                 'nullable',
                 'string',
-                'max:255',
+                'max:85',
                 Rule::requiredIf(fn () => in_array($request->input('highest_education_level'), ['college', 'masters', 'doctor'], true)
                     && ! $request->boolean('is_transferee')),
             ],

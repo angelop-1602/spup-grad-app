@@ -138,6 +138,23 @@ export interface ExistingApplication {
 
 type WizardMode = 'create' | 'edit' | 'guest';
 type PortalMode = 'student' | 'guest';
+const COLLEGE_EXPORT_FIELD_LIMIT = 85;
+type YearField =
+    | 'grade_1_year'
+    | 'grade_2_year'
+    | 'grade_3_year'
+    | 'grade_4_year'
+    | 'grade_5_year'
+    | 'grade_6_year'
+    | 'jhs_1_year'
+    | 'jhs_2_year'
+    | 'jhs_3_year'
+    | 'jhs_4_year'
+    | 'shs_11_year'
+    | 'shs_12_year'
+    | 'college_year_graduated'
+    | 'grad_masteral_year'
+    | 'grad_doctoral_year';
 
 interface ApplicationWizardData {
     window_id: number;
@@ -197,11 +214,11 @@ interface ApplicationWizardData {
     graduate_subjects: Array<{
         subject_code: string;
         subject_title: string;
-        units: number | null;
+        units: number | '';
     }>;
     thesis_dissertation_title: string;
     thesis_dissertation_adviser: string;
-    subject_enrollments: Array<{ subject_name: string; units: number }>;
+    subject_enrollments: Array<{ subject_name: string; units: number | '' }>;
 }
 
 export interface ApplicationWizardProps {
@@ -288,6 +305,10 @@ export function ApplicationWizard({
     );
     const [dobYear, setDobYear] = useState<number | ''>(
         parsedDob ? parsedDob.getFullYear() : '',
+    );
+    const yearOptions = Array.from(
+        { length: currentYear - 1900 + 1 },
+        (_, index) => currentYear - index,
     );
 
     const selectedDepartment = departments.find(
@@ -522,6 +543,21 @@ export function ApplicationWizard({
         'jhs_4_school',
     ] as const;
     const shsSchoolFields = ['shs_11_school', 'shs_12_school'] as const;
+    const gradeSchoolYearFields = [
+        'grade_1_year',
+        'grade_2_year',
+        'grade_3_year',
+        'grade_4_year',
+        'grade_5_year',
+        'grade_6_year',
+    ] as const;
+    const jhsYearFields = [
+        'jhs_1_year',
+        'jhs_2_year',
+        'jhs_3_year',
+        'jhs_4_year',
+    ] as const;
+    const shsYearFields = ['shs_11_year', 'shs_12_year'] as const;
 
     const syncSchoolGroup = (
         fields: ReadonlyArray<
@@ -541,6 +577,61 @@ export function ApplicationWizard({
             return updatedData;
         });
     };
+
+    const setYearField = (field: YearField, value: string) => {
+        setData(field, value === '' ? '' : Number(value));
+    };
+
+    const fillSequentialYears = (
+        fields: ReadonlyArray<YearField>,
+        endingYear: number | '',
+    ) => {
+        const normalizedEndingYear =
+            typeof endingYear === 'number' && endingYear >= 1900
+                ? endingYear
+                : currentYear;
+
+        setData((currentData) => {
+            const updatedData = { ...currentData };
+            const firstYear = normalizedEndingYear - fields.length + 1;
+
+            fields.forEach((field, index) => {
+                const year = firstYear + index;
+                updatedData[field] =
+                    year >= 1900 && year <= currentYear ? year : '';
+            });
+
+            return updatedData;
+        });
+    };
+
+    const YearSelect = ({
+        id,
+        name,
+        value,
+        required = false,
+    }: {
+        id: YearField;
+        name: YearField;
+        value: number | '';
+        required?: boolean;
+    }) => (
+        <select
+            id={id}
+            name={name}
+            value={value === '' ? '' : String(value)}
+            onChange={(e) => setYearField(name, e.target.value)}
+            required={required}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+            <option value="">Year Graduated</option>
+            {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                    {year}
+                </option>
+            ))}
+        </select>
+    );
 
     const resolveErrorStep = (field: string): Step => {
         if (
@@ -766,7 +857,7 @@ export function ApplicationWizard({
     const updateGraduateSubject = (
         index: number,
         field: 'subject_code' | 'subject_title' | 'units',
-        value: string | number | null,
+        value: string | number,
     ) => {
         const updated = [...data.graduate_subjects];
         updated[index] = { ...updated[index], [field]: value };
@@ -1817,43 +1908,60 @@ export function ApplicationWizard({
                                                     grade level (Grade 1-6).
                                                 </p>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <Checkbox
-                                                    id="same_grade_school"
-                                                    checked={
-                                                        useSingleGradeSchool
-                                                    }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) => {
-                                                        const enabled =
-                                                            checked === true;
-                                                        const schoolName =
-                                                            singleGradeSchoolName ||
-                                                            data.grade_1_school ||
-                                                            '';
-                                                        setUseSingleGradeSchool(
-                                                            enabled,
-                                                        );
-                                                        if (enabled) {
-                                                            setSingleGradeSchoolName(
-                                                                schoolName,
-                                                            );
-                                                            syncSchoolGroup(
-                                                                gradeSchoolFields,
-                                                                schoolName,
-                                                            );
+                                            <div className="flex flex-col gap-3 sm:items-end">
+                                                <div className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id="same_grade_school"
+                                                        checked={
+                                                            useSingleGradeSchool
                                                         }
-                                                    }}
-                                                />
-                                                <Label
-                                                    htmlFor="same_grade_school"
-                                                    className="text-xs text-muted-foreground"
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) => {
+                                                            const enabled =
+                                                                checked ===
+                                                                true;
+                                                            const schoolName =
+                                                                singleGradeSchoolName ||
+                                                                data.grade_1_school ||
+                                                                '';
+                                                            setUseSingleGradeSchool(
+                                                                enabled,
+                                                            );
+                                                            if (enabled) {
+                                                                setSingleGradeSchoolName(
+                                                                    schoolName,
+                                                                );
+                                                                syncSchoolGroup(
+                                                                    gradeSchoolFields,
+                                                                    schoolName,
+                                                                );
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label
+                                                        htmlFor="same_grade_school"
+                                                        className="text-xs text-muted-foreground"
+                                                    >
+                                                        Same school for all
+                                                        grades (1-6) - enter
+                                                        school name once
+                                                    </Label>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        fillSequentialYears(
+                                                            gradeSchoolYearFields,
+                                                            data.grade_6_year,
+                                                        )
+                                                    }
                                                 >
-                                                    Same school for all grades
-                                                    (1-6) - enter school name
-                                                    once
-                                                </Label>
+                                                    <Plus className="mr-2 h-4 w-4" />
+                                                    Fill years
+                                                </Button>
                                             </div>
                                         </div>
 
@@ -1927,30 +2035,19 @@ export function ApplicationWizard({
                                                         />
                                                     )}
 
-                                                    <Input
-                                                        id={`grade_${grade}_year`}
-                                                        name={`grade_${grade}_year`}
-                                                        type="number"
+                                                    <YearSelect
+                                                        id={
+                                                            `grade_${grade}_year` as YearField
+                                                        }
+                                                        name={
+                                                            `grade_${grade}_year` as YearField
+                                                        }
                                                         value={
                                                             (data[
                                                                 `grade_${grade}_year` as keyof typeof data
-                                                            ] as number) || ''
+                                                            ] as number | '') ||
+                                                            ''
                                                         }
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                `grade_${grade}_year` as any,
-                                                                e.target.value
-                                                                    ? Number(
-                                                                          e
-                                                                              .target
-                                                                              .value,
-                                                                      )
-                                                                    : '',
-                                                            )
-                                                        }
-                                                        placeholder="Year Graduated"
-                                                        min={1900}
-                                                        max={new Date().getFullYear()}
                                                         required
                                                     />
                                                 </div>
@@ -1984,44 +2081,61 @@ export function ApplicationWizard({
                                                         level (1st-4th Year).
                                                     </p>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Checkbox
-                                                        id="same_jhs_school"
-                                                        checked={
-                                                            useSingleJhsSchool
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) => {
-                                                            const enabled =
-                                                                checked ===
-                                                                true;
-                                                            const schoolName =
-                                                                singleJhsSchoolName ||
-                                                                data.jhs_1_school ||
-                                                                '';
-                                                            setUseSingleJhsSchool(
-                                                                enabled,
-                                                            );
-                                                            if (enabled) {
-                                                                setSingleJhsSchoolName(
-                                                                    schoolName,
-                                                                );
-                                                                syncSchoolGroup(
-                                                                    jhsSchoolFields,
-                                                                    schoolName,
-                                                                );
+                                                <div className="flex flex-col gap-3 sm:items-end">
+                                                    <div className="flex items-center gap-2">
+                                                        <Checkbox
+                                                            id="same_jhs_school"
+                                                            checked={
+                                                                useSingleJhsSchool
                                                             }
-                                                        }}
-                                                    />
-                                                    <Label
-                                                        htmlFor="same_jhs_school"
-                                                        className="text-xs text-muted-foreground"
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) => {
+                                                                const enabled =
+                                                                    checked ===
+                                                                    true;
+                                                                const schoolName =
+                                                                    singleJhsSchoolName ||
+                                                                    data.jhs_1_school ||
+                                                                    '';
+                                                                setUseSingleJhsSchool(
+                                                                    enabled,
+                                                                );
+                                                                if (enabled) {
+                                                                    setSingleJhsSchoolName(
+                                                                        schoolName,
+                                                                    );
+                                                                    syncSchoolGroup(
+                                                                        jhsSchoolFields,
+                                                                        schoolName,
+                                                                    );
+                                                                }
+                                                            }}
+                                                        />
+                                                        <Label
+                                                            htmlFor="same_jhs_school"
+                                                            className="text-xs text-muted-foreground"
+                                                        >
+                                                            Same school for all
+                                                            JHS years (1st-4th)
+                                                            - enter school name
+                                                            once
+                                                        </Label>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            fillSequentialYears(
+                                                                jhsYearFields,
+                                                                data.jhs_4_year,
+                                                            )
+                                                        }
                                                     >
-                                                        Same school for all JHS
-                                                        years (1st-4th) - enter
-                                                        school name once
-                                                    </Label>
+                                                        <Plus className="mr-2 h-4 w-4" />
+                                                        Fill years
+                                                    </Button>
                                                 </div>
                                             </div>
 
@@ -2113,32 +2227,20 @@ export function ApplicationWizard({
                                                             />
                                                         )}
 
-                                                        <Input
-                                                            id={`jhs_${num}_year`}
-                                                            name={`jhs_${num}_year`}
-                                                            type="number"
+                                                        <YearSelect
+                                                            id={
+                                                                `jhs_${num}_year` as YearField
+                                                            }
+                                                            name={
+                                                                `jhs_${num}_year` as YearField
+                                                            }
                                                             value={
                                                                 (data[
                                                                     `jhs_${num}_year` as keyof typeof data
-                                                                ] as number) ||
-                                                                ''
+                                                                ] as
+                                                                    | number
+                                                                    | '') || ''
                                                             }
-                                                            onChange={(e) =>
-                                                                setData(
-                                                                    `jhs_${num}_year` as any,
-                                                                    e.target
-                                                                        .value
-                                                                        ? Number(
-                                                                              e
-                                                                                  .target
-                                                                                  .value,
-                                                                          )
-                                                                        : '',
-                                                                )
-                                                            }
-                                                            placeholder="Year Graduated"
-                                                            min={1900}
-                                                            max={new Date().getFullYear()}
                                                             required
                                                         />
                                                     </div>
@@ -2224,47 +2326,64 @@ export function ApplicationWizard({
                                                                 11-12).
                                                             </p>
                                                         </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <Checkbox
-                                                                id="same_shs_school"
-                                                                checked={
-                                                                    useSingleShsSchool
-                                                                }
-                                                                onCheckedChange={(
-                                                                    checked,
-                                                                ) => {
-                                                                    const enabled =
-                                                                        checked ===
-                                                                        true;
-                                                                    const schoolName =
-                                                                        singleShsSchoolName ||
-                                                                        data.shs_11_school ||
-                                                                        '';
-                                                                    setUseSingleShsSchool(
-                                                                        enabled,
-                                                                    );
-                                                                    if (
-                                                                        enabled
-                                                                    ) {
-                                                                        setSingleShsSchoolName(
-                                                                            schoolName,
-                                                                        );
-                                                                        syncSchoolGroup(
-                                                                            shsSchoolFields,
-                                                                            schoolName,
-                                                                        );
+                                                        <div className="flex flex-col gap-3 sm:items-end">
+                                                            <div className="flex items-center gap-2">
+                                                                <Checkbox
+                                                                    id="same_shs_school"
+                                                                    checked={
+                                                                        useSingleShsSchool
                                                                     }
-                                                                }}
-                                                            />
-                                                            <Label
-                                                                htmlFor="same_shs_school"
-                                                                className="text-xs text-muted-foreground"
+                                                                    onCheckedChange={(
+                                                                        checked,
+                                                                    ) => {
+                                                                        const enabled =
+                                                                            checked ===
+                                                                            true;
+                                                                        const schoolName =
+                                                                            singleShsSchoolName ||
+                                                                            data.shs_11_school ||
+                                                                            '';
+                                                                        setUseSingleShsSchool(
+                                                                            enabled,
+                                                                        );
+                                                                        if (
+                                                                            enabled
+                                                                        ) {
+                                                                            setSingleShsSchoolName(
+                                                                                schoolName,
+                                                                            );
+                                                                            syncSchoolGroup(
+                                                                                shsSchoolFields,
+                                                                                schoolName,
+                                                                            );
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <Label
+                                                                    htmlFor="same_shs_school"
+                                                                    className="text-xs text-muted-foreground"
+                                                                >
+                                                                    Same school
+                                                                    for Grades
+                                                                    11-12 -
+                                                                    enter school
+                                                                    name once
+                                                                </Label>
+                                                            </div>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    fillSequentialYears(
+                                                                        shsYearFields,
+                                                                        data.shs_12_year,
+                                                                    )
+                                                                }
                                                             >
-                                                                Same school for
-                                                                Grades 11-12 -
-                                                                enter school
-                                                                name once
-                                                            </Label>
+                                                                <Plus className="mr-2 h-4 w-4" />
+                                                                Fill years
+                                                            </Button>
                                                         </div>
                                                     </div>
 
@@ -2347,35 +2466,21 @@ export function ApplicationWizard({
                                                                         />
                                                                     )}
 
-                                                                    <Input
-                                                                        id={`shs_${grade}_year`}
-                                                                        name={`shs_${grade}_year`}
-                                                                        type="number"
+                                                                    <YearSelect
+                                                                        id={
+                                                                            `shs_${grade}_year` as YearField
+                                                                        }
+                                                                        name={
+                                                                            `shs_${grade}_year` as YearField
+                                                                        }
                                                                         value={
                                                                             (data[
                                                                                 `shs_${grade}_year` as keyof typeof data
-                                                                            ] as number) ||
+                                                                            ] as
+                                                                                | number
+                                                                                | '') ||
                                                                             ''
                                                                         }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) =>
-                                                                            setData(
-                                                                                `shs_${grade}_year` as any,
-                                                                                e
-                                                                                    .target
-                                                                                    .value
-                                                                                    ? Number(
-                                                                                          e
-                                                                                              .target
-                                                                                              .value,
-                                                                                      )
-                                                                                    : '',
-                                                                            )
-                                                                        }
-                                                                        placeholder="Year Graduated"
-                                                                        min={0}
-                                                                        max={new Date().getFullYear()}
                                                                         required
                                                                     />
                                                                 </div>
@@ -2450,6 +2555,9 @@ export function ApplicationWizard({
                                                             data.college_degree ||
                                                             ''
                                                         }
+                                                        maxLength={
+                                                            COLLEGE_EXPORT_FIELD_LIMIT
+                                                        }
                                                         onChange={(e) =>
                                                             setData(
                                                                 'college_degree',
@@ -2470,33 +2578,29 @@ export function ApplicationWizard({
                                                             errors.college_degree
                                                         }
                                                     />
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {
+                                                            data.college_degree
+                                                                .length
+                                                        }
+                                                        /
+                                                        {
+                                                            COLLEGE_EXPORT_FIELD_LIMIT
+                                                        }{' '}
+                                                        characters
+                                                    </p>
                                                 </div>
                                                 <div className="grid gap-2">
                                                     <Label htmlFor="college_year_graduated">
                                                         Year graduated *
                                                     </Label>
-                                                    <Input
+                                                    <YearSelect
                                                         id="college_year_graduated"
                                                         name="college_year_graduated"
-                                                        type="number"
                                                         value={
                                                             data.college_year_graduated ||
                                                             ''
                                                         }
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'college_year_graduated',
-                                                                e.target.value
-                                                                    ? Number(
-                                                                          e
-                                                                              .target
-                                                                              .value,
-                                                                      )
-                                                                    : '',
-                                                            )
-                                                        }
-                                                        min={1900}
-                                                        max={new Date().getFullYear()}
                                                         required={
                                                             data.highest_education_level ===
                                                                 'college' ||
@@ -2525,6 +2629,9 @@ export function ApplicationWizard({
                                                             data.college_school_name ||
                                                             ''
                                                         }
+                                                        maxLength={
+                                                            COLLEGE_EXPORT_FIELD_LIMIT
+                                                        }
                                                         onChange={(e) =>
                                                             setData(
                                                                 'college_school_name',
@@ -2538,6 +2645,18 @@ export function ApplicationWizard({
                                                             errors.college_school_name
                                                         }
                                                     />
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {
+                                                            data
+                                                                .college_school_name
+                                                                .length
+                                                        }
+                                                        /
+                                                        {
+                                                            COLLEGE_EXPORT_FIELD_LIMIT
+                                                        }{' '}
+                                                        characters
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>
@@ -2572,28 +2691,13 @@ export function ApplicationWizard({
                                                 placeholder="Name of School"
                                                 required
                                             />
-                                            <Input
+                                            <YearSelect
                                                 id="grad_masteral_year"
                                                 name="grad_masteral_year"
-                                                type="number"
                                                 value={
                                                     data.grad_masteral_year ||
                                                     ''
                                                 }
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'grad_masteral_year',
-                                                        e.target.value
-                                                            ? Number(
-                                                                  e.target
-                                                                      .value,
-                                                              )
-                                                            : '',
-                                                    )
-                                                }
-                                                placeholder="Year Graduated (or 0000)"
-                                                min={0}
-                                                max={new Date().getFullYear()}
                                                 required
                                             />
                                         </div>
@@ -2630,28 +2734,13 @@ export function ApplicationWizard({
                                                     placeholder="Name of School"
                                                     required
                                                 />
-                                                <Input
+                                                <YearSelect
                                                     id="grad_masteral_year"
                                                     name="grad_masteral_year"
-                                                    type="number"
                                                     value={
                                                         data.grad_masteral_year ||
                                                         ''
                                                     }
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'grad_masteral_year',
-                                                            e.target.value
-                                                                ? Number(
-                                                                      e.target
-                                                                          .value,
-                                                                  )
-                                                                : '',
-                                                        )
-                                                    }
-                                                    placeholder="Year Graduated (or 0000)"
-                                                    min={0}
-                                                    max={new Date().getFullYear()}
                                                     required
                                                 />
                                             </div>
@@ -2678,28 +2767,13 @@ export function ApplicationWizard({
                                                     placeholder="Name of School"
                                                     required
                                                 />
-                                                <Input
+                                                <YearSelect
                                                     id="grad_doctoral_year"
                                                     name="grad_doctoral_year"
-                                                    type="number"
                                                     value={
                                                         data.grad_doctoral_year ||
                                                         ''
                                                     }
-                                                    onChange={(e) =>
-                                                        setData(
-                                                            'grad_doctoral_year',
-                                                            e.target.value
-                                                                ? Number(
-                                                                      e.target
-                                                                          .value,
-                                                                  )
-                                                                : '',
-                                                        )
-                                                    }
-                                                    placeholder="Year Graduated (or 0000)"
-                                                    min={0}
-                                                    max={new Date().getFullYear()}
                                                     required
                                                 />
                                             </div>
@@ -3075,13 +3149,18 @@ export function ApplicationWizard({
                                                                                     .target
                                                                                     .value ===
                                                                                     ''
-                                                                                    ? 0
+                                                                                    ? ''
                                                                                     : Number(
                                                                                           e
                                                                                               .target
                                                                                               .value,
                                                                                       ),
                                                                             )
+                                                                        }
+                                                                        onFocus={(
+                                                                            e,
+                                                                        ) =>
+                                                                            e.target.select()
                                                                         }
                                                                         placeholder="Units"
                                                                         min={0}

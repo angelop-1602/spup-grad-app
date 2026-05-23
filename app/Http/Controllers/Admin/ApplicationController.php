@@ -6,6 +6,7 @@ use App\Http\Controllers\ApplicationController as StudentApplicationController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateApplicationStatusRequest;
 use App\Models\Application;
+use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -123,7 +124,7 @@ class ApplicationController extends Controller
      * Note: Status will be automatically recalculated based on requirements checklist
      * to ensure consistency. Manual status changes may be overridden.
      */
-    public function updateStatus(UpdateApplicationStatusRequest $request, Application $application): RedirectResponse
+    public function updateStatus(UpdateApplicationStatusRequest $request, Application $application, SystemEventLogger $logger): RedirectResponse
     {
         $data = [
             'notes' => $request->notes,
@@ -146,6 +147,17 @@ class ApplicationController extends Controller
         $oldStatus = $application->status;
         $application->recalculateStatusBasedOnRequirements();
         $newStatus = $application->fresh()->status;
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.application.status_updated',
+            message: 'Admin updated application notes/status.',
+            subject: $application,
+            meta: [
+                'application_number' => $application->application_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+            ],
+        );
 
         // Prepare message
         $message = 'Application notes updated successfully.';
@@ -163,7 +175,7 @@ class ApplicationController extends Controller
     /**
      * Update application requirements.
      */
-    public function updateRequirements(Request $request, Application $application): RedirectResponse
+    public function updateRequirements(Request $request, Application $application, SystemEventLogger $logger): RedirectResponse
     {
         $validated = $request->validate([
             'requirements' => 'required|array',
@@ -200,6 +212,18 @@ class ApplicationController extends Controller
         $oldStatus = $application->status;
         $application->recalculateStatusBasedOnRequirements();
         $newStatus = $application->fresh()->status;
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.application.requirements_updated',
+            message: 'Admin updated application requirements.',
+            subject: $application,
+            meta: [
+                'application_number' => $application->application_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'requirements_count' => count($validated['requirements']),
+            ],
+        );
 
         // Prepare success message with status change info if applicable
         $message = 'Requirements updated successfully.';
@@ -243,11 +267,27 @@ class ApplicationController extends Controller
      */
     public function download(Application $application): BinaryFileResponse
     {
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'admin.application.downloaded',
+            message: 'Admin downloaded application document.',
+            subject: $application,
+            meta: ['application_number' => $application->application_number],
+        );
+
         return StudentApplicationController::generatePdf($application);
     }
 
     public function downloadPhoto(Application $application): BinaryFileResponse
     {
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'admin.photo.downloaded',
+            message: 'Admin downloaded application photo.',
+            subject: $application,
+            meta: ['application_number' => $application->application_number],
+        );
+
         return StudentApplicationController::generateProfilePhotoDownload($application);
     }
 

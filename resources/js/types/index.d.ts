@@ -2,9 +2,10 @@ import { InertiaLinkProps } from '@inertiajs/react';
 import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
-    user: User | null;
+    user: User;
     admin: User | null;
     coordinator: User | null;
+    developer: User | null;
 }
 
 export interface BreadcrumbItem {

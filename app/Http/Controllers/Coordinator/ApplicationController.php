@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Coordinator\UpdateApplicationStatusRequest;
 use App\Models\Application;
 use App\Models\ApplicationWindow;
+use App\Support\SystemEventLogger;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -58,7 +59,7 @@ class ApplicationController extends Controller
     /**
      * Export applications for a window to XLSX for the coordinator's assigned departments.
      */
-    public function export(Request $request)
+    public function export(Request $request, SystemEventLogger $logger)
     {
         $coordinator = Auth::guard('coordinator')->user();
 
@@ -73,6 +74,17 @@ class ApplicationController extends Controller
 
         $safeTitle = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $window->title);
         $fileName = $safeTitle.'_coordinator.xlsx';
+        $logger->log(
+            module: 'graduation_application',
+            action: 'coordinator.applications.exported',
+            message: 'Coordinator exported applications.',
+            subject: $window,
+            meta: [
+                'window_id' => $window->id,
+                'search' => $search,
+                'file_name' => $fileName,
+            ],
+        );
 
         return Excel::download($export, $fileName);
     }
@@ -633,7 +645,7 @@ class ApplicationController extends Controller
      * Note: Status will be automatically recalculated based on requirements checklist
      * to ensure consistency. Manual status changes may be overridden.
      */
-    public function updateStatus(UpdateApplicationStatusRequest $request, Application $application): RedirectResponse
+    public function updateStatus(UpdateApplicationStatusRequest $request, Application $application, SystemEventLogger $logger): RedirectResponse
     {
         $coordinator = Auth::guard('coordinator')->user();
 
@@ -666,6 +678,17 @@ class ApplicationController extends Controller
         $oldStatus = $application->status;
         $application->recalculateStatusBasedOnRequirements();
         $newStatus = $application->fresh()->status;
+        $logger->log(
+            module: 'graduation_application',
+            action: 'coordinator.application.status_updated',
+            message: 'Coordinator updated application notes/status.',
+            subject: $application,
+            meta: [
+                'application_number' => $application->application_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+            ],
+        );
 
         // Prepare message
         $message = 'Application notes updated successfully.';
@@ -683,7 +706,7 @@ class ApplicationController extends Controller
     /**
      * Update application requirements.
      */
-    public function updateRequirements(Request $request, Application $application): RedirectResponse
+    public function updateRequirements(Request $request, Application $application, SystemEventLogger $logger): RedirectResponse
     {
         $coordinator = Auth::guard('coordinator')->user();
 
@@ -751,6 +774,18 @@ class ApplicationController extends Controller
         $oldStatus = $application->status;
         $application->recalculateStatusBasedOnRequirements();
         $newStatus = $application->fresh()->status;
+        $logger->log(
+            module: 'graduation_application',
+            action: 'coordinator.application.requirements_updated',
+            message: 'Coordinator updated application requirements.',
+            subject: $application,
+            meta: [
+                'application_number' => $application->application_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'requirements_count' => $updatedCount,
+            ],
+        );
 
         // Prepare success message with status change info if applicable
         $message = 'Requirements updated successfully.';
@@ -801,6 +836,14 @@ class ApplicationController extends Controller
             abort(403, 'Unauthorized access to this application.');
         }
 
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'coordinator.application.downloaded',
+            message: 'Coordinator downloaded application document.',
+            subject: $application,
+            meta: ['application_number' => $application->application_number],
+        );
+
         return \App\Http\Controllers\ApplicationController::generatePdf($application);
     }
 
@@ -812,6 +855,14 @@ class ApplicationController extends Controller
         if (! in_array($application->department_id, $departmentIds, true)) {
             abort(403, 'Unauthorized access to this application.');
         }
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'coordinator.photo.downloaded',
+            message: 'Coordinator downloaded application photo.',
+            subject: $application,
+            meta: ['application_number' => $application->application_number],
+        );
 
         return \App\Http\Controllers\ApplicationController::generateProfilePhotoDownload($application);
     }

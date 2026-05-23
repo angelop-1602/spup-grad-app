@@ -42,6 +42,7 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $admin = $request->user('admin');
         $coordinator = $request->user('coordinator');
+        $developer = $request->user('developer');
 
         // Load profile relationship for avatar access (only for student users)
         if ($user instanceof User) {
@@ -119,6 +120,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'admin' => $admin,
                 'coordinator' => $coordinator,
+                'developer' => $developer,
             ],
             'notifications' => $notifications,
             'unreadNotificationCount' => $unreadNotificationCount,

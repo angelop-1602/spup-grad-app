@@ -121,6 +121,16 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($throttleKey);
         });
 
+        RateLimiter::for('developer-login', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower((string) $request->input('email')).'|'.$request->ip());
+
+            return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for('developer-two-factor', function (Request $request) {
+            return Limit::perMinute(5)->by('developer-two-factor:'.optional($request->user('developer'))->getAuthIdentifier().'|'.$request->ip());
+        });
+
         // Rate limit registration to prevent spam and abuse
         RateLimiter::for('register', function (Request $request) {
             // Limit by IP address - 3 registrations per hour per IP

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationWindow;
 use App\Models\Department;
+use App\Support\SystemEventLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response as ResponseFacade;
 
@@ -14,7 +15,7 @@ class ExportController extends Controller
     /**
      * Export applications.
      */
-    public function applications(Request $request)
+    public function applications(Request $request, SystemEventLogger $logger)
     {
         $query = Application::query()
             ->with(['user.profile', 'window', 'department', 'course']);
@@ -30,6 +31,17 @@ class ExportController extends Controller
         }
 
         $applications = $query->orderBy('created_at', 'desc')->get();
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.applications.exported',
+            message: 'Admin exported applications.',
+            meta: [
+                'format' => $request->get('format', 'csv'),
+                'count' => $applications->count(),
+                'window_id' => $request->input('window_id'),
+                'department_id' => $request->input('department_id'),
+            ],
+        );
 
         $format = $request->get('format', 'csv');
 

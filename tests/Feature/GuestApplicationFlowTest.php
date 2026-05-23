@@ -101,6 +101,38 @@ function guestApplicationPayload(ApplicationWindow $window, Department $departme
     ], $overrides);
 }
 
+function guestApplicationForDocx(array $overrides = []): Application
+{
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $payload = guestApplicationPayload($window, $department, $course, $overrides);
+    $user = User::factory()->create([
+        'email' => $payload['email'],
+        'student_id' => $payload['student_id'],
+    ]);
+
+    return app(\App\Support\ApplicationWorkflowService::class)
+        ->createApplicationForUser($user, $payload);
+}
+
+function guestApplicationDocxXml(Application $application): string
+{
+    $method = new ReflectionMethod(\App\Http\Controllers\ApplicationController::class, 'buildApplicationDocx');
+    $method->setAccessible(true);
+
+    $docx = $method->invoke(null, $application);
+    $zip = new ZipArchive();
+
+    try {
+        $zip->open($docx['path']);
+
+        return (string) $zip->getFromName('word/document.xml');
+    } finally {
+        $zip->close();
+        @unlink($docx['path']);
+    }
+}
+
 test('guest submit stores a draft and sends verification without creating real applications', function () {
     Notification::fake();
 
@@ -129,6 +161,78 @@ test('guest submit stores a draft and sends verification without creating real a
             && collect($mail->introLines)->contains(fn (string $line) => str_contains($line, $draft->tracking_code))
             && collect($mail->introLines)->contains(fn (string $line) => str_contains($line, $draft->tracking_pin));
     });
+});
+
+test('guest submit treats blank graduate subject units as zero', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $this->post(route('apply.store'), guestApplicationPayload($window, $department, $course, [
+        'graduate_subjects' => [
+            [
+                'subject_code' => 'AAN 207',
+                'subject_title' => 'Capstone Project',
+                'units' => '',
+            ],
+        ],
+    ]))->assertRedirect();
+
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    expect($draft->payload['graduate_subjects'][0]['units'])->toBe(0);
+});
+
+test('guest application docx keeps short college degree and school on one line', function () {
+    $application = guestApplicationForDocx([
+        'college_degree' => 'BSIT',
+        'college_school_name' => 'SPUP',
+    ]);
+
+    $xml = guestApplicationDocxXml($application);
+
+    expect($xml)->toContain('BSIT - SPUP')
+        ->not->toMatch('/BSIT.*<w:br\/>.*SPUP/s');
+});
+
+test('guest application docx splits long college degree and school across two lines', function () {
+    $degree = 'Bachelor of Science in Hospitality Management';
+    $school = 'International College of Hospitality and Tourism';
+    $application = guestApplicationForDocx([
+        'college_degree' => $degree,
+        'college_school_name' => $school,
+    ]);
+
+    $xml = guestApplicationDocxXml($application);
+
+    expect($xml)->toContain($degree)
+        ->toContain($school)
+        ->toMatch('/Bachelor of Science in Hospitality Management.*<w:br\/>.*International College of Hospitality and Tourism/s');
+});
+
+test('guest application docx omits school name for spup college graduates', function () {
+    $application = guestApplicationForDocx([
+        'college_degree' => 'Bachelor of Science in Nursing',
+        'college_school_name' => 'St. Paul University Philippines Main Campus Should Not Print',
+        'is_transferee' => true,
+    ]);
+
+    $xml = guestApplicationDocxXml($application);
+
+    expect($xml)->toContain('Bachelor of Science in Nursing')
+        ->not->toContain('Main Campus Should Not Print');
+});
+
+test('guest submit rejects college export fields beyond the fixed space limit', function () {
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $this->post(route('apply.store'), guestApplicationPayload($window, $department, $course, [
+        'college_degree' => str_repeat('A', 86),
+        'college_school_name' => str_repeat('B', 86),
+    ]))
+        ->assertSessionHasErrors(['college_degree', 'college_school_name']);
+
+    expect(GuestApplicationDraft::count())->toBe(0);
 });
 
 test('repeating guest submit for the same email and window reuses the existing draft without overwriting payload', function () {
@@ -530,12 +634,72 @@ test('legacy tracking codes remain usable once a tracking pin exists', function 
     ])->assertRedirect(route('apply.pending.show', $draft, absolute: false));
 });
 
-test('guest submit rejects student id conflicts with an existing account', function () {
+test('guest submit can reuse a previous window account with a new email', function () {
+    Notification::fake();
+
     [$window, $department, $course] = guestApplicationCatalog();
 
-    User::factory()->create([
+    $pastWindow = ApplicationWindow::create([
+        'title' => 'January 2026 Graduation',
+        'description' => 'Past graduation window.',
+        'start_date' => now()->subMonths(2),
+        'end_date' => now()->subMonth(),
+    ]);
+
+    $user = User::factory()->create([
+        'email' => 'previous.email@example.com',
+        'student_id' => '2020-0009',
+    ]);
+
+    $user->applications()->create([
+        'window_id' => $pastWindow->id,
+        'department_id' => $department->id,
+        'course_id' => $course->id,
+        'major' => null,
+        'degree_title' => $course->name,
+        'presence' => 'attending',
+        'status' => 'approved',
+    ]);
+
+    $payload = guestApplicationPayload($window, $department, $course, [
+        'email' => 'current.email@example.com',
+        'student_id' => '2020-0009',
+    ]);
+
+    $this->post(route('apply.store'), $payload)
+        ->assertSessionHasNoErrors();
+
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $verifyUrl = URL::temporarySignedRoute(
+        'apply.verify',
+        now()->addMinutes(config('auth.verification.expire', 60)),
+        ['draft' => $draft->id, 'hash' => sha1($draft->email)],
+    );
+
+    $this->get($verifyUrl)->assertOk();
+
+    expect(User::count())->toBe(1);
+    expect($user->fresh()->email)->toBe('current.email@example.com');
+    expect($user->applications()->where('window_id', $window->id)->exists())->toBeTrue();
+});
+
+test('guest submit rejects student id duplicates in the current window', function () {
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $user = User::factory()->create([
         'email' => 'registered.student@example.com',
         'student_id' => '2020-0009',
+    ]);
+
+    $user->applications()->create([
+        'window_id' => $window->id,
+        'department_id' => $department->id,
+        'course_id' => $course->id,
+        'major' => null,
+        'degree_title' => $course->name,
+        'presence' => 'attending',
+        'status' => 'approved',
     ]);
 
     $payload = guestApplicationPayload($window, $department, $course, [
@@ -547,7 +711,7 @@ test('guest submit rejects student id conflicts with an existing account', funct
         ->assertSessionHasErrors(['student_id']);
 
     expect(GuestApplicationDraft::count())->toBe(0);
-    expect(Application::count())->toBe(0);
+    expect(Application::count())->toBe(1);
 });
 
 test('guest resend verification uses the guest-specific throttle with a friendly redirect', function () {

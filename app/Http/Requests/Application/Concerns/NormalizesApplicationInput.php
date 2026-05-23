@@ -107,10 +107,10 @@ trait NormalizesApplicationInput
             });
 
             $normalized = array_map(function ($subject) {
-                $units = $subject['units'] ?? null;
-                if ($units === '') {
-                    $units = null;
-                } elseif ($units !== null) {
+                $units = $subject['units'] ?? 0;
+                if ($units === '' || $units === null) {
+                    $units = 0;
+                } else {
                     $units = (int) $units;
                 }
                 $subject['units'] = $units;

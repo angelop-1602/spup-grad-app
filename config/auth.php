@@ -48,6 +48,10 @@ return [
             'driver' => 'session',
             'provider' => 'coordinators',
         ],
+        'developer' => [
+            'driver' => 'session',
+            'provider' => 'developers',
+        ],
     ],
 
     /*
@@ -85,6 +89,10 @@ return [
         'coordinators' => [
             'driver' => 'eloquent',
             'model' => App\Models\Coordinator::class,
+        ],
+        'developers' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Developer::class,
         ],
     ],
 

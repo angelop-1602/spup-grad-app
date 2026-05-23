@@ -167,56 +167,58 @@ class HistoricalGraduationApplicationImportService
             return;
         }
 
-        $rows = array_map(function (array $row) {
-            foreach (['subjects_json', 'education_history_json', 'source_payload_json'] as $jsonColumn) {
-                $row[$jsonColumn] = json_encode(
-                    $row[$jsonColumn] ?? [],
-                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                );
-            }
+        foreach (array_chunk($rows, 100) as $chunk) {
+            $chunk = array_map(function (array $row) {
+                foreach (['subjects_json', 'education_history_json', 'source_payload_json'] as $jsonColumn) {
+                    $row[$jsonColumn] = json_encode(
+                        $row[$jsonColumn] ?? [],
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                    );
+                }
 
-            return $row;
-        }, $rows);
+                return $row;
+            }, $chunk);
 
-        DB::table((new HistoricalGraduationApplication)->getTable())->upsert(
-            $rows,
-            ['source_batch', 'source_table', 'source_row_id'],
-            [
-                'source_period_label',
-                'reference_code',
-                'student_id',
-                'full_name',
-                'last_name',
-                'first_name',
-                'middle_name',
-                'attendance',
-                'attendance_raw',
-                'status_bucket',
-                'status_raw',
-                'email',
-                'contact_number',
-                'department_name',
-                'course_name',
-                'major_name',
-                'degree_title',
-                'sex',
-                'civil_status',
-                'religion',
-                'nationality',
-                'address',
-                'date_of_birth',
-                'place_of_birth',
-                'thesis_title',
-                'thesis_adviser',
-                'submitted_at',
-                'source_created_at',
-                'source_updated_at',
-                'subjects_json',
-                'education_history_json',
-                'source_payload_json',
-                'updated_at',
-            ]
-        );
+            DB::table((new HistoricalGraduationApplication)->getTable())->upsert(
+                $chunk,
+                ['source_batch', 'source_table', 'source_row_id'],
+                [
+                    'source_period_label',
+                    'reference_code',
+                    'student_id',
+                    'full_name',
+                    'last_name',
+                    'first_name',
+                    'middle_name',
+                    'attendance',
+                    'attendance_raw',
+                    'status_bucket',
+                    'status_raw',
+                    'email',
+                    'contact_number',
+                    'department_name',
+                    'course_name',
+                    'major_name',
+                    'degree_title',
+                    'sex',
+                    'civil_status',
+                    'religion',
+                    'nationality',
+                    'address',
+                    'date_of_birth',
+                    'place_of_birth',
+                    'thesis_title',
+                    'thesis_adviser',
+                    'submitted_at',
+                    'source_created_at',
+                    'source_updated_at',
+                    'subjects_json',
+                    'education_history_json',
+                    'source_payload_json',
+                    'updated_at',
+                ]
+            );
+        }
     }
 
     /**

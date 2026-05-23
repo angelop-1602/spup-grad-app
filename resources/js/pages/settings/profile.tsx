@@ -84,7 +84,7 @@ export default function Profile({
                                     <Input
                                         id="student_id"
                                         className="mt-1 block w-full"
-                                        value={auth.user!.student_id ?? ''}
+                                        value={String(auth.user.student_id ?? '')}
                                         readOnly
                                         disabled
                                     />

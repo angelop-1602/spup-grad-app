@@ -23,5 +23,22 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->report(function (Throwable $e): void {
+            if (! app()->bound('db')) {
+                return;
+            }
+
+            app(\App\Support\SystemEventLogger::class)->log(
+                module: 'system',
+                action: 'exception.reported',
+                message: $e->getMessage(),
+                status: 'failed',
+                severity: 'error',
+                meta: [
+                    'exception' => $e::class,
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ],
+            );
+        });
     })->create();

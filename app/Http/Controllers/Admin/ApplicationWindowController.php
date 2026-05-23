@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\UpdateApplicationWindowRequest;
 use App\Models\ApplicationWindow;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
+use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -378,7 +379,7 @@ class ApplicationWindowController extends Controller
     /**
      * Export applications for the specified window to XLSX.
      */
-    public function export(Request $request, ApplicationWindow $window)
+    public function export(Request $request, ApplicationWindow $window, SystemEventLogger $logger)
     {
         $departmentName = $request->string('department')->toString() ?: null;
 
@@ -387,6 +388,17 @@ class ApplicationWindowController extends Controller
         $safeTitle = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $window->title);
         $suffix = $departmentName ? '_department_'.str_replace(' ', '_', $departmentName) : '_all_departments';
         $fileName = $safeTitle.$suffix.'.xlsx';
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.window.exported',
+            message: 'Admin exported an application window.',
+            subject: $window,
+            meta: [
+                'window_id' => $window->id,
+                'department' => $departmentName,
+                'file_name' => $fileName,
+            ],
+        );
 
         return Excel::download($export, $fileName);
     }

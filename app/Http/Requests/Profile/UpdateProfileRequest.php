@@ -81,13 +81,13 @@ class UpdateProfileRequest extends FormRequest
                 Rule::requiredIf(fn () => in_array($this->highest_education_level, ['college', 'masters', 'doctor'], true)),
                 'nullable',
                 'string',
-                'max:255',
+                'max:85',
             ],
             // Require college/university name only when NOT graduated in SPUP (is_transferee = false)
             'college_school_name' => [
                 'nullable',
                 'string',
-                'max:255',
+                'max:85',
                 Rule::requiredIf(fn () => in_array($this->highest_education_level, ['college', 'masters', 'doctor'], true)
                     && ! $this->boolean('is_transferee')),
             ],

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Coordinator\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,7 +24,7 @@ class CoordinatorLoginController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SystemEventLogger $logger): RedirectResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'string', 'email'],
@@ -33,12 +34,27 @@ class CoordinatorLoginController extends Controller
         $remember = $request->boolean('remember');
 
         if (! Auth::guard('coordinator')->attempt($credentials, $remember)) {
+            $logger->log(
+                module: 'security',
+                action: 'coordinator.login.failed',
+                message: 'Coordinator login failed.',
+                status: 'failed',
+                severity: 'warning',
+                meta: SystemEventLogger::emailMeta($credentials['email']),
+            );
+
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
         }
 
         $request->session()->regenerate();
+        $logger->log(
+            module: 'security',
+            action: 'coordinator.login.success',
+            message: 'Coordinator logged in.',
+            subject: Auth::guard('coordinator')->user(),
+        );
 
         return redirect()->intended(route('coordinator.dashboard'));
     }
@@ -46,8 +62,18 @@ class CoordinatorLoginController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, SystemEventLogger $logger): RedirectResponse
     {
+        $coordinator = Auth::guard('coordinator')->user();
+        if ($coordinator) {
+            $logger->log(
+                module: 'security',
+                action: 'coordinator.logout',
+                message: 'Coordinator logged out.',
+                subject: $coordinator,
+            );
+        }
+
         Auth::guard('coordinator')->logout();
 
         $request->session()->invalidate();

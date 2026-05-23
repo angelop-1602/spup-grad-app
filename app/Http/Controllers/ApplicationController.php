@@ -7,6 +7,8 @@ use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Models\Application;
 use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
+use App\Models\SystemHealthCheck;
+use App\Support\SystemEventLogger;
 use App\Support\ApplicationWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,12 +18,25 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\TemplateProcessor;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\Process\Process;
 
 class ApplicationController extends Controller
 {
+    private const COLLEGE_EXPORT_ONE_LINE_LIMIT = 62;
+
+    private const COLLEGE_EXPORT_MEDIUM_FONT_LIMIT = 55;
+
+    private const COLLEGE_EXPORT_SMALL_FONT_LIMIT = 70;
+
+    private const COLLEGE_EXPORT_NORMAL_FONT_SIZE = 9;
+
+    private const COLLEGE_EXPORT_MEDIUM_FONT_SIZE = 8;
+
+    private const COLLEGE_EXPORT_SMALL_FONT_SIZE = 7;
+
     /**
      * Display the dashboard.
      */
@@ -194,11 +209,28 @@ class ApplicationController extends Controller
             Log::warning('Application PDF conversion failed; returning DOCX fallback.', [
                 'message' => $e->getMessage(),
             ]);
+            SystemHealthCheck::record('pdf_conversion', 'warning', 'PDF conversion failed; DOCX fallback was returned.');
+            app(SystemEventLogger::class)->log(
+                module: 'document',
+                action: 'pdf_conversion.fallback_docx',
+                message: 'Application PDF conversion failed; DOCX fallback was returned.',
+                status: 'warning',
+                severity: 'warning',
+                subject: $application,
+                meta: ['error' => $e->getMessage()],
+            );
 
             return self::downloadApplicationDocx($docx);
         }
 
         @unlink($docx['path']);
+        SystemHealthCheck::record('pdf_conversion', 'ok', 'Application DOCX converted to PDF successfully.');
+        app(SystemEventLogger::class)->log(
+            module: 'document',
+            action: 'pdf_conversion.success',
+            message: 'Application DOCX converted to PDF successfully.',
+            subject: $application,
+        );
 
         $fileName = preg_replace('/\.docx$/i', '.pdf', $docx['file_name']) ?: 'GraduationApplication.pdf';
 
@@ -365,7 +397,7 @@ class ApplicationController extends Controller
         $replacements['shs_12_school'] = $profile->shs_12_school ?? '';
         $replacements['shs_12_year'] = (string) ($profile->shs_12_year ?? '');
 
-        // Format college information: combine degree and school if both exist, or show individually
+        // Build a simple fallback first; fixed-space export formatting overrides this below.
         $collegeSchool = $profile->college_school_name ?? '';
         $collegeDegree = $profile->college_degree ?? '';
         
@@ -383,6 +415,12 @@ class ApplicationController extends Controller
             $replacements['college_school_name'] = '';
         }
         
+        $collegeExportLines = self::collegeExportLines(
+            $collegeDegree,
+            $collegeSchool,
+            (bool) ($profile->is_transferee ?? false)
+        );
+        $replacements['college_school_name'] = implode("\n", $collegeExportLines);
         $replacements['college_degree'] = $collegeDegree; // Keep separate for backward compatibility
         $replacements['college_year_graduated'] = (string) ($profile->college_year_graduated ?? '');
         $replacements['masters_school'] = $profile->grad_masteral_school ?? '';
@@ -470,9 +508,22 @@ class ApplicationController extends Controller
         $templateProcessor = new TemplateProcessor($templatePath);
 
         foreach ($replacements as $key => $value) {
+            if ($key === 'college_school_name') {
+                continue;
+            }
+
             // TemplateProcessor expects keys without ${}
             // Set empty values to empty string to remove placeholders
             $templateProcessor->setValue($key, (string) $value);
+        }
+
+        if ($collegeExportLines !== []) {
+            $templateProcessor->setComplexValue(
+                'college_school_name',
+                self::collegeExportTextRun($collegeExportLines)
+            );
+        } else {
+            $templateProcessor->setValue('college_school_name', '');
         }
 
         // Save filled DOCX
@@ -552,6 +603,115 @@ class ApplicationController extends Controller
         ];
     }
 
+    /**
+     * @return list<string>
+     */
+    private static function collegeExportLines(?string $degree, ?string $school, bool $graduatedInSpup): array
+    {
+        $degree = self::cleanCollegeExportText($degree);
+        $school = $graduatedInSpup ? '' : self::cleanCollegeExportText($school);
+
+        if ($degree !== '' && $school !== '') {
+            $combined = "{$degree} - {$school}";
+
+            if (mb_strlen($combined) <= self::COLLEGE_EXPORT_ONE_LINE_LIMIT) {
+                return [$combined];
+            }
+
+            return [$degree, $school];
+        }
+
+        if ($degree !== '') {
+            return self::splitSingleCollegeExportLine($degree);
+        }
+
+        if ($school !== '') {
+            return self::splitSingleCollegeExportLine($school);
+        }
+
+        return [];
+    }
+
+    private static function collegeExportTextRun(array $lines): TextRun
+    {
+        $fontStyle = ['size' => self::collegeExportFontSize($lines)];
+        $textRun = new TextRun(['spaceBefore' => 0, 'spaceAfter' => 0]);
+
+        foreach ($lines as $index => $line) {
+            if ($index > 0) {
+                $textRun->addTextBreak();
+            }
+
+            $textRun->addText($line, $fontStyle);
+        }
+
+        return $textRun;
+    }
+
+    private static function collegeExportFontSize(array $lines): int
+    {
+        $longestLine = collect($lines)
+            ->map(fn (string $line) => mb_strlen($line))
+            ->max() ?? 0;
+
+        if ($longestLine > self::COLLEGE_EXPORT_SMALL_FONT_LIMIT) {
+            return self::COLLEGE_EXPORT_SMALL_FONT_SIZE;
+        }
+
+        if ($longestLine > self::COLLEGE_EXPORT_MEDIUM_FONT_LIMIT) {
+            return self::COLLEGE_EXPORT_MEDIUM_FONT_SIZE;
+        }
+
+        return self::COLLEGE_EXPORT_NORMAL_FONT_SIZE;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function splitSingleCollegeExportLine(string $text): array
+    {
+        if (mb_strlen($text) <= self::COLLEGE_EXPORT_ONE_LINE_LIMIT) {
+            return [$text];
+        }
+
+        $breakPosition = self::collegeExportBreakPosition($text);
+
+        return array_values(array_filter([
+            trim(mb_substr($text, 0, $breakPosition)),
+            trim(mb_substr($text, $breakPosition)),
+        ], fn (string $line) => $line !== ''));
+    }
+
+    private static function collegeExportBreakPosition(string $text): int
+    {
+        $length = mb_strlen($text);
+        $target = (int) ceil($length / 2);
+        $prefix = mb_substr($text, 0, $target + 1);
+        $before = mb_strrpos($prefix, ' ');
+        $after = mb_strpos($text, ' ', $target);
+
+        if ($before === false && $after === false) {
+            return min(self::COLLEGE_EXPORT_ONE_LINE_LIMIT, $target);
+        }
+
+        if ($before === false) {
+            return (int) $after;
+        }
+
+        if ($after === false) {
+            return (int) $before;
+        }
+
+        return ($target - $before) <= ($after - $target)
+            ? (int) $before
+            : (int) $after;
+    }
+
+    private static function cleanCollegeExportText(?string $text): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', (string) $text));
+    }
+
     private static function convertDocxToPdf(string $docxPath): string
     {
         try {
@@ -562,6 +722,15 @@ class ApplicationController extends Controller
             Log::warning('FreeConvert DOCX to PDF conversion failed.', [
                 'message' => $e->getMessage(),
             ]);
+            SystemHealthCheck::record('freeconvert', 'warning', $e->getMessage());
+            app(SystemEventLogger::class)->log(
+                module: 'document',
+                action: 'freeconvert.failed',
+                message: 'FreeConvert DOCX to PDF conversion failed.',
+                status: 'failed',
+                severity: 'warning',
+                meta: ['error' => $e->getMessage()],
+            );
         }
 
         if ($pdfPath = self::convertDocxToPdfWithLibreOffice($docxPath)) {
