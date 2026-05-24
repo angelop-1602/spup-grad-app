@@ -1,12 +1,14 @@
 <?php
 
-test('registration screen can be rendered', function () {
+use App\Models\User;
+
+test('registration screen redirects to the application portal', function () {
     $response = $this->get(route('register'));
 
-    $response->assertStatus(200);
+    $response->assertRedirect(route('apply.index', absolute: false));
 });
 
-test('new users can register', function () {
+test('student registration redirects to the application portal without creating an account', function () {
     $response = $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
@@ -14,6 +16,7 @@ test('new users can register', function () {
         'password_confirmation' => 'password',
     ]);
 
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $this->assertGuest();
+    $response->assertRedirect(route('apply.index', absolute: false));
+    expect(User::where('email', 'test@example.com')->exists())->toBeFalse();
 });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\ProfilePhoto;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -82,8 +83,9 @@ class StudentController extends Controller
         // Delete associated profile if exists
         if ($student->profile) {
             // Delete profile photo if exists
-            if ($student->profile->photo_path && \Storage::disk('public')->exists($student->profile->photo_path)) {
-                \Storage::disk('public')->delete($student->profile->photo_path);
+            $photoPath = ProfilePhoto::storagePath($student->profile->photo_path);
+            if ($photoPath && \Storage::disk('public')->exists($photoPath)) {
+                \Storage::disk('public')->delete($photoPath);
             }
             $student->profile->delete();
         }

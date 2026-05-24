@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import { formatName } from '@/utils/format-name';
 
 interface ApplicantProfile {
@@ -7,6 +8,7 @@ interface ApplicantProfile {
     middle_name?: string | null;
     suffix?: string | null;
     photo_path?: string | null;
+    photo_url?: string | null;
 }
 
 interface ApplicationApplicantCellProps {
@@ -34,13 +36,14 @@ export function ApplicationApplicantCell({
         .slice(0, 2)
         .map((part) => part.charAt(0).toUpperCase())
         .join('') || 'AP';
+    const photoUrl = profilePhotoUrl(profile);
 
     return (
         <div className="flex items-center gap-3">
             <Avatar className={compact ? 'h-9 w-9 rounded-xl' : 'h-11 w-11 rounded-xl'}>
-                {profile?.photo_path ? (
+                {photoUrl ? (
                     <AvatarImage
-                        src={`/storage/${profile.photo_path}`}
+                        src={photoUrl}
                         alt={`${displayName} profile`}
                         className="rounded-xl object-cover"
                     />

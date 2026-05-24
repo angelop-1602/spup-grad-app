@@ -71,6 +71,7 @@ class DeveloperDiagnosticsService
             $this->healthCheckCard('queue_worker_heartbeat', 'Queue Worker'),
             $this->healthCheckCard('pdf_conversion', 'PDF Conversion'),
             $this->healthCheckCard('freeconvert', 'FreeConvert API'),
+            $this->healthCheckCard('gotenberg', 'Gotenberg API'),
             [
                 'label' => 'Recent Errors',
                 'status' => SystemEvent::query()->whereIn('severity', ['error', 'critical'])->where('created_at', '>=', now()->startOfDay())->exists() ? 'warning' : 'ok',

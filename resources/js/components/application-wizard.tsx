@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import ValidationSummary from '@/components/validation-summary';
 import { useToast } from '@/contexts/toast-context';
 import { MONTHS, NATIONALITIES, RELIGIONS } from '@/lib/profile-form-options';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import applicationRoutes from '@/routes/applications/index';
 import applyRoutes from '@/routes/apply';
 import { type SharedData } from '@/types';
@@ -64,6 +65,7 @@ export interface StudentProfile {
     permanent_address: string;
     contact_number: string;
     photo_path?: string | null;
+    photo_url?: string | null;
     highest_education_level: string | null;
     // Educational background fields
     grade_1_school?: string | null;
@@ -278,9 +280,7 @@ export function ApplicationWizard({
     );
     const [showNationalitySuggestions, setShowNationalitySuggestions] =
         useState(false);
-    const existingPhotoPreview = profile?.photo_path
-        ? `/storage/${profile.photo_path}`
-        : null;
+    const existingPhotoPreview = profilePhotoUrl(profile);
     const [photoPreview, setPhotoPreview] = useState<string | null>(
         existingPhotoPreview,
     );
@@ -550,14 +550,51 @@ export function ApplicationWizard({
         'grade_4_year',
         'grade_5_year',
         'grade_6_year',
-    ] as const;
+    ] as const satisfies ReadonlyArray<YearField>;
     const jhsYearFields = [
         'jhs_1_year',
         'jhs_2_year',
         'jhs_3_year',
         'jhs_4_year',
-    ] as const;
-    const shsYearFields = ['shs_11_year', 'shs_12_year'] as const;
+    ] as const satisfies ReadonlyArray<YearField>;
+    const shsYearFields = [
+        'shs_11_year',
+        'shs_12_year',
+    ] as const satisfies ReadonlyArray<YearField>;
+
+    const visibleBasicYearFields = (
+        highestEducationLevel: string,
+        includeSeniorHigh: boolean,
+    ): YearField[] => {
+        if (!highestEducationLevel) {
+            return [];
+        }
+
+        const fields: YearField[] = [...gradeSchoolYearFields];
+
+        if (
+            [
+                'junior_high_school',
+                'senior_high_school',
+                'college',
+                'masters',
+                'doctor',
+            ].includes(highestEducationLevel)
+        ) {
+            fields.push(...jhsYearFields);
+        }
+
+        if (
+            includeSeniorHigh &&
+            ['senior_high_school', 'college', 'masters', 'doctor'].includes(
+                highestEducationLevel,
+            )
+        ) {
+            fields.push(...shsYearFields);
+        }
+
+        return fields;
+    };
 
     const syncSchoolGroup = (
         fields: ReadonlyArray<
@@ -579,26 +616,34 @@ export function ApplicationWizard({
     };
 
     const setYearField = (field: YearField, value: string) => {
-        setData(field, value === '' ? '' : Number(value));
-    };
-
-    const fillSequentialYears = (
-        fields: ReadonlyArray<YearField>,
-        endingYear: number | '',
-    ) => {
-        const normalizedEndingYear =
-            typeof endingYear === 'number' && endingYear >= 1900
-                ? endingYear
-                : currentYear;
+        const selectedYear = value === '' ? '' : Number(value);
 
         setData((currentData) => {
-            const updatedData = { ...currentData };
-            const firstYear = normalizedEndingYear - fields.length + 1;
+            const updatedData = {
+                ...currentData,
+                [field]: selectedYear,
+            };
 
-            fields.forEach((field, index) => {
-                const year = firstYear + index;
-                updatedData[field] =
-                    year >= 1900 && year <= currentYear ? year : '';
+            if (selectedYear === '') {
+                return updatedData;
+            }
+
+            const fields = visibleBasicYearFields(
+                currentData.highest_education_level,
+                !didNotAttendSeniorHigh,
+            );
+            const changedIndex = fields.indexOf(field);
+
+            if (changedIndex === -1) {
+                return updatedData;
+            }
+
+            fields.slice(changedIndex + 1).forEach((nextField, offset) => {
+                const nextYear = selectedYear + offset + 1;
+                updatedData[nextField] =
+                    nextYear >= 1900 && nextYear <= currentYear
+                        ? nextYear
+                        : '';
             });
 
             return updatedData;
@@ -1948,20 +1993,6 @@ export function ApplicationWizard({
                                                         school name once
                                                     </Label>
                                                 </div>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        fillSequentialYears(
-                                                            gradeSchoolYearFields,
-                                                            data.grade_6_year,
-                                                        )
-                                                    }
-                                                >
-                                                    <Plus className="mr-2 h-4 w-4" />
-                                                    Fill years
-                                                </Button>
                                             </div>
                                         </div>
 
@@ -2122,20 +2153,6 @@ export function ApplicationWizard({
                                                             once
                                                         </Label>
                                                     </div>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            fillSequentialYears(
-                                                                jhsYearFields,
-                                                                data.jhs_4_year,
-                                                            )
-                                                        }
-                                                    >
-                                                        <Plus className="mr-2 h-4 w-4" />
-                                                        Fill years
-                                                    </Button>
                                                 </div>
                                             </div>
 
@@ -2370,20 +2387,6 @@ export function ApplicationWizard({
                                                                     name once
                                                                 </Label>
                                                             </div>
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() =>
-                                                                    fillSequentialYears(
-                                                                        shsYearFields,
-                                                                        data.shs_12_year,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Plus className="mr-2 h-4 w-4" />
-                                                                Fill years
-                                                            </Button>
                                                         </div>
                                                     </div>
 

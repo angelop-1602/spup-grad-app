@@ -2,93 +2,208 @@
 
 namespace App\Exports;
 
-use App\Models\Application;
-use Illuminate\Support\Collection;
-use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithHeadings;
+use App\Models\ApplicationWindow;
+use App\Support\GraduateExportData;
+use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 
-class WindowApplicationsExport implements FromCollection, WithHeadings
+class WindowApplicationsExport implements FromArray, ShouldAutoSize, WithEvents, WithTitle
 {
+    protected const LAST_COLUMN = 'J';
+
     public function __construct(
         protected int $windowId,
         protected ?string $departmentName = null,
+        protected ?array $departmentIds = null,
+        protected ?string $search = null,
     ) {
     }
 
-    public function collection(): Collection
+    public function title(): string
     {
-        $query = Application::query()
-            ->with(['user.profile', 'department', 'course'])
-            ->where('window_id', $this->windowId);
-
-        if ($this->departmentName) {
-            $query->whereHas('department', function ($q) {
-                $q->where('name', $this->departmentName);
-            });
-        }
-
-        return $query
-            ->get()
-            ->map(function (Application $application) {
-                $profile = $application->user->profile;
-                
-                // Format name as "Last, First Middle" for Excel export
-                if ($profile && $profile->last_name) {
-                    $firstMiddleSuffix = collect([
-                        $profile->first_name ?? '',
-                        $profile->middle_name ?? '',
-                        $profile->suffix ?? '',
-                    ])->filter()->implode(' ');
-                    $name = $firstMiddleSuffix
-                        ? $profile->last_name.', '.$firstMiddleSuffix
-                        : $profile->last_name;
-                } else {
-                    $name = $application->user->name;
-                }
-
-                return [
-                    'Student ID' => $application->user->student_id,
-                    'Name' => $name,
-                    'Department' => $application->department?->name,
-                    'Course' => $application->course?->name,
-                    'Major' => $application->major,
-                    'Birthday' => $profile?->date_of_birth?->format('Y-m-d') ?? '',
-                    'Thesis Title' => $application->thesis_dissertation_title ?? '',
-                    'Thesis Advisor' => $application->thesis_dissertation_adviser ?? '',
-                    'Status' => ucfirst(str_replace('_', ' ', $application->status)),
-                    'Presence' => $application->presence === 'attending' ? 'Attending' : 'Not Attending',
-                    'Submitted At' => $application->created_at->toDateTimeString(),
-                    // Store last name for sorting
-                    '_sort_last_name' => $profile?->last_name ?? '',
-                ];
-            })
-            ->sortBy(function ($item) {
-                return strtolower($item['_sort_last_name']);
-            })
-            ->map(function ($item) {
-                unset($item['_sort_last_name']);
-                
-                return $item;
-            })
-            ->values();
+        return 'Graduate List';
     }
 
-    public function headings(): array
+    public function array(): array
+    {
+        $window = ApplicationWindow::findOrFail($this->windowId);
+        $applications = GraduateExportData::applicationsForWindow(
+            window: $window,
+            departmentIds: $this->departmentIds,
+            departmentName: $this->departmentName,
+            search: $this->search,
+        );
+        $data = GraduateExportData::build(
+            window: $window,
+            applications: $applications,
+            scopeLabel: $this->departmentName ? GraduateExportData::titleCase($this->departmentName) : null,
+        );
+
+        return $this->rows($data);
+    }
+
+    public function registerEvents(): array
     {
         return [
-            'Student ID',
-            'Name',
-            'Department',
-            'Course',
-            'Major',
-            'Birthday',
-            'Thesis Title',
-            'Thesis Advisor',
-            'Status',
-            'Presence',
-            'Submitted At',
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $lastRow = $sheet->getHighestRow();
+                $lastColumn = self::LAST_COLUMN;
+
+                foreach ([1, 2, 3, 4, 5] as $row) {
+                    $sheet->mergeCells("A{$row}:{$lastColumn}{$row}");
+                }
+
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(15);
+                $sheet->getStyle('A1:A5')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("A1:{$lastColumn}{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+                $sheet->getStyle("A1:{$lastColumn}{$lastRow}")->getAlignment()->setWrapText(true);
+
+                for ($row = 1; $row <= $lastRow; $row++) {
+                    $label = trim((string) $sheet->getCell("A{$row}")->getValue());
+
+                    if (str_starts_with($label, 'Department:')) {
+                        $this->styleBand($sheet, $row, '1f4e79', 'ffffff');
+
+                        continue;
+                    }
+
+                    if (str_starts_with($label, 'Program/Degree:')) {
+                        $this->styleBand($sheet, $row, 'd9eaf7', '000000');
+
+                        continue;
+                    }
+
+                    if (str_starts_with($label, 'Major:')) {
+                        $this->styleBand($sheet, $row, 'eaf4e4', '000000');
+
+                        continue;
+                    }
+
+                    if (str_starts_with($label, 'Thesis Category:')) {
+                        $this->styleBand($sheet, $row, 'fff2cc', '000000');
+
+                        continue;
+                    }
+
+                    if ($label === 'No.') {
+                        $sheet->getStyle("A{$row}:{$lastColumn}{$row}")->applyFromArray([
+                            'font' => ['bold' => true],
+                            'fill' => [
+                                'fillType' => Fill::FILL_SOLID,
+                                'startColor' => ['rgb' => 'f3f4f6'],
+                            ],
+                            'borders' => [
+                                'allBorders' => [
+                                    'borderStyle' => Border::BORDER_THIN,
+                                    'color' => ['rgb' => 'd1d5db'],
+                                ],
+                            ],
+                        ]);
+                    }
+                }
+
+                $sheet->getStyle("A1:{$lastColumn}{$lastRow}")->getBorders()->getAllBorders()
+                    ->setBorderStyle(Border::BORDER_HAIR)
+                    ->getColor()
+                    ->setRGB('e5e7eb');
+
+                $sheet->freezePane('A7');
+                $sheet->getPageSetup()
+                    ->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)
+                    ->setFitToWidth(1)
+                    ->setFitToHeight(0);
+            },
         ];
     }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array<int, mixed>>
+     */
+    protected function rows(array $data): array
+    {
+        $rows = [
+            ['Graduate List by Department, Program/Degree, Major, and Thesis Category'],
+            ['Window: '.$data['window_title']],
+            ['Scope: '.$data['scope_label']],
+            ['Generated: '.$data['generated_at']->format('F d, Y h:i A')],
+            ['Total Records: '.$data['total']],
+            [],
+        ];
+
+        foreach ($data['departments'] as $department) {
+            $rows[] = ["Department: {$department['name']}", '', '', '', '', '', '', '', '', "Total: {$department['total']}"];
+
+            foreach ($department['programs'] as $program) {
+                $rows[] = ["Program/Degree: {$program['name']}", '', '', '', '', '', '', '', '', "Total: {$program['total']}"];
+
+                foreach ($program['majors'] as $major) {
+                    $rows[] = ["Major: {$major['name']}", '', '', '', '', '', '', '', '', "Total: {$major['total']}"];
+
+                    foreach ($major['thesis_groups'] as $thesisGroup) {
+                        $rows[] = ["Thesis Category: {$thesisGroup['type']}", '', '', '', '', '', '', '', '', "Total: {$thesisGroup['total']}"];
+
+                        $rows[] = [
+                            'No.',
+                            'Student ID',
+                            'Graduate Name',
+                            'Department',
+                            'Program / Degree',
+                            'Major',
+                            'Thesis Category',
+                            'Thesis / Dissertation Title',
+                            'Adviser',
+                            'Status',
+                        ];
+
+                        foreach ($thesisGroup['graduates'] as $index => $graduate) {
+                            $rows[] = [
+                                $index + 1,
+                                $graduate['student_id'],
+                                $graduate['name'],
+                                $graduate['department'],
+                                $graduate['degree'],
+                                $graduate['major'],
+                                $graduate['thesis_type'],
+                                $graduate['thesis_title'],
+                                $graduate['thesis_adviser'],
+                                $graduate['status'],
+                            ];
+                        }
+
+                        $rows[] = [];
+                    }
+                }
+            }
+        }
+
+        if ((int) $data['total'] === 0) {
+            $rows[] = ['No graduate records found for this export.'];
+        }
+
+        return $rows;
+    }
+
+    protected function styleBand($sheet, int $row, string $background, string $foreground): void
+    {
+        $sheet->getStyle('A'.$row.':'.self::LAST_COLUMN.$row)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => $foreground],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => $background],
+            ],
+        ]);
+    }
+
 }
-
-

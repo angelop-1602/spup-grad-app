@@ -8,13 +8,13 @@ use App\Models\Application;
 use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
 use App\Models\SystemHealthCheck;
-use App\Support\SystemEventLogger;
 use App\Support\ApplicationWorkflowService;
+use App\Support\ProfilePhoto;
+use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,8 +25,6 @@ use Symfony\Component\Process\Process;
 
 class ApplicationController extends Controller
 {
-    private const COLLEGE_EXPORT_ONE_LINE_LIMIT = 62;
-
     private const COLLEGE_EXPORT_MEDIUM_FONT_LIMIT = 55;
 
     private const COLLEGE_EXPORT_SMALL_FONT_LIMIT = 70;
@@ -612,21 +610,15 @@ class ApplicationController extends Controller
         $school = $graduatedInSpup ? '' : self::cleanCollegeExportText($school);
 
         if ($degree !== '' && $school !== '') {
-            $combined = "{$degree} - {$school}";
-
-            if (mb_strlen($combined) <= self::COLLEGE_EXPORT_ONE_LINE_LIMIT) {
-                return [$combined];
-            }
-
-            return [$degree, $school];
+            return ["{$degree} - {$school}"];
         }
 
         if ($degree !== '') {
-            return self::splitSingleCollegeExportLine($degree);
+            return [$degree];
         }
 
         if ($school !== '') {
-            return self::splitSingleCollegeExportLine($school);
+            return [$school];
         }
 
         return [];
@@ -665,48 +657,6 @@ class ApplicationController extends Controller
         return self::COLLEGE_EXPORT_NORMAL_FONT_SIZE;
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function splitSingleCollegeExportLine(string $text): array
-    {
-        if (mb_strlen($text) <= self::COLLEGE_EXPORT_ONE_LINE_LIMIT) {
-            return [$text];
-        }
-
-        $breakPosition = self::collegeExportBreakPosition($text);
-
-        return array_values(array_filter([
-            trim(mb_substr($text, 0, $breakPosition)),
-            trim(mb_substr($text, $breakPosition)),
-        ], fn (string $line) => $line !== ''));
-    }
-
-    private static function collegeExportBreakPosition(string $text): int
-    {
-        $length = mb_strlen($text);
-        $target = (int) ceil($length / 2);
-        $prefix = mb_substr($text, 0, $target + 1);
-        $before = mb_strrpos($prefix, ' ');
-        $after = mb_strpos($text, ' ', $target);
-
-        if ($before === false && $after === false) {
-            return min(self::COLLEGE_EXPORT_ONE_LINE_LIMIT, $target);
-        }
-
-        if ($before === false) {
-            return (int) $after;
-        }
-
-        if ($after === false) {
-            return (int) $before;
-        }
-
-        return ($target - $before) <= ($after - $target)
-            ? (int) $before
-            : (int) $after;
-    }
-
     private static function cleanCollegeExportText(?string $text): string
     {
         return trim((string) preg_replace('/\s+/u', ' ', (string) $text));
@@ -727,6 +677,25 @@ class ApplicationController extends Controller
                 module: 'document',
                 action: 'freeconvert.failed',
                 message: 'FreeConvert DOCX to PDF conversion failed.',
+                status: 'failed',
+                severity: 'warning',
+                meta: ['error' => $e->getMessage()],
+            );
+        }
+
+        try {
+            if ($pdfPath = self::convertDocxToPdfWithGotenberg($docxPath)) {
+                return $pdfPath;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Gotenberg DOCX to PDF conversion failed.', [
+                'message' => $e->getMessage(),
+            ]);
+            SystemHealthCheck::record('gotenberg', 'warning', $e->getMessage());
+            app(SystemEventLogger::class)->log(
+                module: 'document',
+                action: 'gotenberg.failed',
+                message: 'Gotenberg DOCX to PDF conversion failed.',
                 status: 'failed',
                 severity: 'warning',
                 meta: ['error' => $e->getMessage()],
@@ -929,6 +898,60 @@ class ApplicationController extends Controller
         return is_string($url) && $url !== '' ? $url : null;
     }
 
+    private static function convertDocxToPdfWithGotenberg(string $docxPath): ?string
+    {
+        $baseUrl = rtrim((string) config('services.gotenberg.url', ''), '/');
+
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        $timeout = max(10, (int) config('services.gotenberg.timeout', 180));
+        $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
+
+        @unlink($pdfPath);
+
+        $fileHandle = fopen($docxPath, 'r');
+
+        if ($fileHandle === false) {
+            throw new \RuntimeException('Unable to open generated DOCX for Gotenberg upload.');
+        }
+
+        try {
+            $response = Http::timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->accept('application/pdf')
+                ->attach(
+                    'files',
+                    $fileHandle,
+                    basename($docxPath),
+                    ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+                )
+                ->post($baseUrl.'/forms/libreoffice/convert');
+        } finally {
+            fclose($fileHandle);
+        }
+
+        if (! $response->successful()) {
+            $details = trim((string) preg_replace('/\s+/', ' ', $response->body()));
+            $details = $details !== '' ? ': '.Str::limit($details, 240) : '';
+
+            throw new \RuntimeException('Gotenberg conversion failed with status '.$response->status().$details);
+        }
+
+        $body = $response->body();
+
+        if (! str_starts_with($body, '%PDF')) {
+            throw new \RuntimeException('Gotenberg conversion response was not a PDF.');
+        }
+
+        if (file_put_contents($pdfPath, $body) === false || ! file_exists($pdfPath)) {
+            throw new \RuntimeException('Unable to save converted PDF from Gotenberg.');
+        }
+
+        return $pdfPath;
+    }
+
     private static function convertDocxToPdfWithLibreOffice(string $docxPath): ?string
     {
         $binary = self::locateLibreOfficeBinary();
@@ -1042,8 +1065,9 @@ class ApplicationController extends Controller
 
         $profile = $application->user?->profile;
         $photoPath = $profile?->photo_path;
+        $resolvedPhotoPath = ProfilePhoto::path($photoPath);
 
-        if (! $photoPath || ! Storage::disk('public')->exists($photoPath)) {
+        if (! $resolvedPhotoPath) {
             abort(404, 'Profile photo not found.');
         }
 
@@ -1054,11 +1078,11 @@ class ApplicationController extends Controller
             $profile->suffix,
         ]))) ?: ($application->user->name ?? 'Student');
 
-        $safeName = preg_replace('/[\\\\\\/:\*\?"<>\|]+/', '', $fullName) ?: 'Student';
+        $safeName = trim(preg_replace('/[\\\\\\/:\*\?"<>\|]+/', '', $fullName) ?: 'Student', " \t\n\r\0\x0B.");
         $extension = strtolower(pathinfo($photoPath, PATHINFO_EXTENSION) ?: 'jpg');
         $fileName = Str::of($safeName)->trim()->append('.'.$extension)->toString();
 
-        return response()->download(Storage::disk('public')->path($photoPath), $fileName);
+        return response()->download($resolvedPhotoPath, $fileName);
     }
 
     /**

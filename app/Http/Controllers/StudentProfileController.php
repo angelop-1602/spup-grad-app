@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Models\StudentProfile;
+use App\Support\ProfilePhoto;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -56,8 +57,9 @@ class StudentProfileController extends Controller
         // Handle photo upload
         if ($request->hasFile('photo')) {
             // Delete old photo if exists
-            if ($profile->photo_path && \Storage::disk('public')->exists($profile->photo_path)) {
-                \Storage::disk('public')->delete($profile->photo_path);
+            $oldPhotoPath = ProfilePhoto::storagePath($profile->photo_path);
+            if ($oldPhotoPath && \Storage::disk('public')->exists($oldPhotoPath)) {
+                \Storage::disk('public')->delete($oldPhotoPath);
             }
 
             $file = $request->file('photo');

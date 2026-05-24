@@ -7,10 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import ValidationSummary from '@/components/validation-summary';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import * as profileRoutes from '@/routes/profile';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Form, Head, router, usePage } from '@inertiajs/react';
-import { Camera, Plus, X } from 'lucide-react';
+import { Camera, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -251,6 +252,7 @@ interface StudentProfile {
     permanent_address?: string | null;
     contact_number?: string | null;
     photo_path?: string | null;
+    photo_url?: string | null;
     highest_education_level?:
         | 'elementary'
         | 'junior_high_school'
@@ -373,7 +375,7 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
         useState<boolean>(false);
     const collegeSchoolNameRef = useRef<HTMLInputElement>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(
-        initial.photo_path ? `/storage/${initial.photo_path}` : null,
+        profilePhotoUrl(initial),
     );
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const photoInputRef = useRef<HTMLInputElement>(null);
@@ -422,9 +424,59 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
         'grad_masteral_year',
         'grad_doctoral_year',
     ] as const satisfies ReadonlyArray<ProfileYearField>;
-    const gradeSchoolYearFields = profileYearFields.slice(0, 6);
-    const jhsYearFields = profileYearFields.slice(6, 10);
-    const shsYearFields = profileYearFields.slice(10, 12);
+    const gradeSchoolYearFields = [
+        'grade_1_year',
+        'grade_2_year',
+        'grade_3_year',
+        'grade_4_year',
+        'grade_5_year',
+        'grade_6_year',
+    ] as const satisfies ReadonlyArray<ProfileYearField>;
+    const jhsYearFields = [
+        'jhs_1_year',
+        'jhs_2_year',
+        'jhs_3_year',
+        'jhs_4_year',
+    ] as const satisfies ReadonlyArray<ProfileYearField>;
+    const shsYearFields = [
+        'shs_11_year',
+        'shs_12_year',
+    ] as const satisfies ReadonlyArray<ProfileYearField>;
+
+    const visibleBasicYearFields = (
+        highestLevel: typeof highestEducationLevel,
+        includeSeniorHigh: boolean,
+    ): ProfileYearField[] => {
+        if (!highestLevel) {
+            return [];
+        }
+
+        const fields: ProfileYearField[] = [...gradeSchoolYearFields];
+
+        if (
+            [
+                'junior_high_school',
+                'senior_high_school',
+                'college',
+                'masters',
+                'doctor',
+            ].includes(highestLevel)
+        ) {
+            fields.push(...jhsYearFields);
+        }
+
+        if (
+            includeSeniorHigh &&
+            ['senior_high_school', 'college', 'masters', 'doctor'].includes(
+                highestLevel,
+            )
+        ) {
+            fields.push(...shsYearFields);
+        }
+
+        return fields;
+    };
+
     const normalizeYear = (value: number | string | null | undefined) => {
         const year =
             typeof value === 'string' && value !== '' ? Number(value) : value;
@@ -449,29 +501,36 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
     );
 
     const setYearField = (field: ProfileYearField, value: string) => {
+        const selectedYear = value === '' ? '' : Number(value);
+
         setYearValues((currentValues) => ({
             ...currentValues,
-            [field]: value === '' ? '' : Number(value),
+            [field]: selectedYear,
         }));
-    };
 
-    const fillSequentialYears = (
-        fields: ReadonlyArray<ProfileYearField>,
-        endingYear: number | '',
-    ) => {
-        const normalizedEndingYear =
-            typeof endingYear === 'number' && endingYear >= 1900
-                ? endingYear
-                : currentYear;
-        const firstYear = normalizedEndingYear - fields.length + 1;
+        if (selectedYear === '') {
+            return;
+        }
+
+        const fields = visibleBasicYearFields(
+            highestEducationLevel,
+            !didNotAttendSeniorHigh,
+        );
+        const changedIndex = fields.indexOf(field);
+
+        if (changedIndex === -1) {
+            return;
+        }
 
         setYearValues((currentValues) => {
             const updatedValues = { ...currentValues };
 
-            fields.forEach((field, index) => {
-                const year = firstYear + index;
-                updatedValues[field] =
-                    year >= 1900 && year <= currentYear ? year : '';
+            fields.slice(changedIndex + 1).forEach((nextField, offset) => {
+                const nextYear = selectedYear + offset + 1;
+                updatedValues[nextField] =
+                    nextYear >= 1900 && nextYear <= currentYear
+                        ? nextYear
+                        : '';
             });
 
             return updatedValues;
@@ -1426,20 +1485,6 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                                             school name once
                                                         </Label>
                                                     </div>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            fillSequentialYears(
-                                                                gradeSchoolYearFields,
-                                                                yearValues.grade_6_year,
-                                                            )
-                                                        }
-                                                    >
-                                                        <Plus className="mr-2 h-4 w-4" />
-                                                        Fill years
-                                                    </Button>
                                                 </div>
                                             </div>
 
@@ -1601,20 +1646,6 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                                                 name once
                                                             </Label>
                                                         </div>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                fillSequentialYears(
-                                                                    jhsYearFields,
-                                                                    yearValues.jhs_4_year,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Plus className="mr-2 h-4 w-4" />
-                                                            Fill years
-                                                        </Button>
                                                     </div>
                                                 </div>
 
@@ -1859,20 +1890,6 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                                                         once
                                                                     </Label>
                                                                 </div>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                        fillSequentialYears(
-                                                                            shsYearFields,
-                                                                            yearValues.shs_12_year,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <Plus className="mr-2 h-4 w-4" />
-                                                                    Fill years
-                                                                </Button>
                                                             </div>
                                                         </div>
 

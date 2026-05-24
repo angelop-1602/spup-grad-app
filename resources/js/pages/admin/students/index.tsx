@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Users, Eye, MoreVertical, Search, Trash2, KeyRound } from 'lucide-react';
@@ -53,6 +54,7 @@ interface Student {
         last_name: string;
         middle_name: string | null;
         photo_path: string | null;
+        photo_url?: string | null;
     } | null;
 }
 
@@ -263,9 +265,9 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                                     className="border-b transition-colors hover:bg-muted/50"
                                                 >
                                                     <td className="px-4 py-3">
-                                                        {student.profile?.photo_path ? (
+                                                        {profilePhotoUrl(student.profile) ? (
                                                             <img
-                                                                src={`/storage/${student.profile.photo_path}`}
+                                                                src={profilePhotoUrl(student.profile) ?? ''}
                                                                 alt={
                                                                     student.profile
                                                                         ? formatName(

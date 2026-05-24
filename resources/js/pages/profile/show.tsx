@@ -7,6 +7,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import * as profileRoutes from '@/routes/profile';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -34,6 +35,7 @@ interface StudentProfile {
     permanent_address: string;
     contact_number: string;
     photo_path: string | null;
+    photo_url?: string | null;
     grade_school_name: string | null;
     grade_school_year_graduated: number | null;
     junior_high_school_name: string | null;
@@ -108,10 +110,10 @@ export default function ProfileShow({ profile: profileData }: ProfileShowProps) 
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {profileData.photo_path && (
+                        {profilePhotoUrl(profileData) && (
                             <div className="flex justify-center">
                                 <img
-                                    src={`/storage/${profileData.photo_path}`}
+                                    src={profilePhotoUrl(profileData) ?? ''}
                                     alt="Profile photo"
                                     className="h-48 w-48 rounded-lg border-2 border-border object-cover"
                                 />

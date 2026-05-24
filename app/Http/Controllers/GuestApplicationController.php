@@ -266,9 +266,10 @@ class GuestApplicationController extends Controller
         ]);
 
         $newEmail = strtolower($validated['email']);
+        $duplicateWindowId = ApplicationWindow::current()?->id ?? $draft->window_id;
 
         $existingDraft = GuestApplicationDraft::query()
-            ->where('window_id', $draft->window_id)
+            ->where('window_id', $duplicateWindowId)
             ->whereKeyNot($draft->id)
             ->whereRaw('lower(email) = ?', [$newEmail])
             ->first();
@@ -290,7 +291,7 @@ class GuestApplicationController extends Controller
         }
 
         $applicationForEmail = Application::query()
-            ->where('window_id', $draft->window_id)
+            ->where('window_id', $duplicateWindowId)
             ->whereHas('user', fn ($query) => $query->whereRaw('lower(email) = ?', [$newEmail]))
             ->with('user:id,student_id,email')
             ->first();
@@ -301,7 +302,7 @@ class GuestApplicationController extends Controller
         }
 
         $applicationForStudentId = Application::query()
-            ->where('window_id', $draft->window_id)
+            ->where('window_id', $duplicateWindowId)
             ->whereHas('user', fn ($query) => $query->where('student_id', $draft->student_id))
             ->with('user:id,student_id,email')
             ->first();
@@ -650,20 +651,22 @@ class GuestApplicationController extends Controller
 
     private function notifyDraft(GuestApplicationDraft $draft, object $notification, string $action, string $message): void
     {
+        $mailMeta = [
+            'notification' => $notification::class,
+            'mailer' => config('mail.default'),
+            'delivery_mode' => is_subclass_of($notification::class, \Illuminate\Contracts\Queue\ShouldQueue::class)
+                ? 'queued'
+                : 'sync',
+        ];
+
         try {
             $draft->notify($notification);
-            SystemHealthCheck::record('mail', 'ok', $message, [
-                'notification' => $notification::class,
-            ]);
-            $this->logGuestEvent($draft, 'email', $action, $message, meta: [
-                'notification' => $notification::class,
-            ]);
+            SystemHealthCheck::record('mail', 'ok', $message, $mailMeta);
+            $this->logGuestEvent($draft, 'email', $action, $message, meta: $mailMeta);
         } catch (\Throwable $e) {
-            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), [
-                'notification' => $notification::class,
-            ]);
+            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), $mailMeta);
             $this->logGuestEvent($draft, 'email', $action, $message, status: 'failed', severity: 'error', meta: [
-                'notification' => $notification::class,
+                ...$mailMeta,
                 'error' => $e->getMessage(),
             ]);
 

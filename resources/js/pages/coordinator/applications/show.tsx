@@ -3,6 +3,7 @@ import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import coordinatorRoutes from '@/routes/coordinator';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
@@ -61,6 +62,7 @@ interface Application {
             permanent_address: string;
             contact_number: string;
             photo_path?: string | null;
+            photo_url?: string | null;
             highest_education_level: string | null;
             grade_1_school?: string | null;
             grade_1_year?: number | null;
@@ -357,10 +359,10 @@ export default function CoordinatorShowApplication({
                                         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                             Photo
                                         </p>
-                                        {profile.photo_path ? (
+                                        {profilePhotoUrl(profile) ? (
                                             <div className="space-y-3">
                                                 <img
-                                                    src={`/storage/${profile.photo_path}`}
+                                                    src={profilePhotoUrl(profile) ?? ''}
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-40 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />

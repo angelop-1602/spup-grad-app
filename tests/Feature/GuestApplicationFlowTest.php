@@ -7,10 +7,14 @@ use App\Models\Course;
 use App\Models\Department;
 use App\Models\GuestApplicationDraft;
 use App\Models\User;
+use App\Exports\WindowApplicationsExport;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
+use App\Support\GraduateExportData;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -195,7 +199,7 @@ test('guest application docx keeps short college degree and school on one line',
         ->not->toMatch('/BSIT.*<w:br\/>.*SPUP/s');
 });
 
-test('guest application docx splits long college degree and school across two lines', function () {
+test('guest application docx keeps long college degree and school together for natural wrapping', function () {
     $degree = 'Bachelor of Science in Hospitality Management';
     $school = 'International College of Hospitality and Tourism';
     $application = guestApplicationForDocx([
@@ -205,9 +209,8 @@ test('guest application docx splits long college degree and school across two li
 
     $xml = guestApplicationDocxXml($application);
 
-    expect($xml)->toContain($degree)
-        ->toContain($school)
-        ->toMatch('/Bachelor of Science in Hospitality Management.*<w:br\/>.*International College of Hospitality and Tourism/s');
+    expect($xml)->toContain("{$degree} - {$school}")
+        ->not->toMatch('/Bachelor of Science in Hospitality Management.*<w:br\/>.*International College of Hospitality and Tourism/s');
 });
 
 test('guest application docx omits school name for spup college graduates', function () {
@@ -221,6 +224,33 @@ test('guest application docx omits school name for spup college graduates', func
 
     expect($xml)->toContain('Bachelor of Science in Nursing')
         ->not->toContain('Main Campus Should Not Print');
+});
+
+test('window graduate export groups records and normalizes text for reuse', function () {
+    $application = guestApplicationForDocx([
+        'last_name' => 'SANTOS',
+        'first_name' => 'ANDREA',
+        'middle_name' => 'LOPEZ',
+        'thesis_dissertation_title' => 'THE IMPACT OF TESTING ON LEARNING',
+        'thesis_dissertation_adviser' => 'DR. JANE DOE',
+    ]);
+
+    $data = GraduateExportData::build(
+        $application->window,
+        GraduateExportData::applicationsForWindow($application->window),
+    );
+
+    $graduate = $data['departments'][0]['programs'][0]['majors'][0]['thesis_groups'][0]['graduates'][0];
+
+    expect($data['total'])->toBe(1);
+    expect($graduate['name'])->toBe('Santos, Andrea Lopez Jr.');
+    expect($graduate['thesis_type'])->toBe('With Thesis/Dissertation');
+    expect($graduate['thesis_title'])->toBe('The Impact of Testing on Learning');
+    expect($graduate['thesis_adviser'])->toBe('Dr. Jane Doe');
+
+    $xlsx = Excel::raw(new WindowApplicationsExport($application->window_id), ExcelFormat::XLSX);
+
+    expect(strlen($xlsx))->toBeGreaterThan(1000);
 });
 
 test('guest submit rejects college export fields beyond the fixed space limit', function () {
@@ -281,6 +311,100 @@ test('guest can change email before verification and the old verification link s
 
     $this->get($oldVerificationUrl)->assertForbidden();
     Notification::assertSentTo($draft->fresh(), GuestApplicationVerificationNotification::class);
+});
+
+test('guest can change email to the same student email from a previous window', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $pastWindow = ApplicationWindow::create([
+        'title' => 'January 2026 Graduation',
+        'description' => 'Past graduation window.',
+        'start_date' => now()->subMonths(2),
+        'end_date' => now()->subMonth(),
+    ]);
+
+    $user = User::factory()->create([
+        'email' => 'same.student.previous@example.com',
+        'student_id' => '2020-0099',
+    ]);
+
+    $user->applications()->create([
+        'window_id' => $pastWindow->id,
+        'department_id' => $department->id,
+        'course_id' => $course->id,
+        'major' => null,
+        'degree_title' => $course->name,
+        'presence' => 'attending',
+        'status' => 'approved',
+    ]);
+
+    $this->post(route('apply.store'), guestApplicationPayload($window, $department, $course, [
+        'email' => 'temporary.wrong@example.com',
+        'student_id' => '2020-0099',
+    ]));
+
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $this->post(route('apply.pending.change-email', $draft), [
+        'email' => 'same.student.previous@example.com',
+    ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('apply.pending.show', $draft, absolute: false));
+
+    expect($draft->fresh()->email)->toBe('same.student.previous@example.com');
+});
+
+test('guest change email still rejects current window email duplicates', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+
+    $existingUser = User::factory()->create([
+        'email' => 'current.window@example.com',
+        'student_id' => '2020-0088',
+    ]);
+
+    $existingUser->applications()->create([
+        'window_id' => $window->id,
+        'department_id' => $department->id,
+        'course_id' => $course->id,
+        'major' => null,
+        'degree_title' => $course->name,
+        'presence' => 'attending',
+        'status' => 'approved',
+    ]);
+
+    $this->post(route('apply.store'), guestApplicationPayload($window, $department, $course, [
+        'email' => 'needs.correction@example.com',
+        'student_id' => '2020-0077',
+    ]));
+
+    $draft = GuestApplicationDraft::where('email', 'needs.correction@example.com')->firstOrFail();
+
+    $this->post(route('apply.pending.change-email', $draft), [
+        'email' => 'current.window@example.com',
+    ])->assertSessionHasErrors(['email']);
+
+    expect($draft->fresh()->email)->toBe('needs.correction@example.com');
+});
+
+test('profile photo download resolves legacy storage-prefixed paths', function () {
+    Storage::fake('public');
+
+    $application = guestApplicationForDocx();
+    Storage::disk('public')->put('profile-photos/legacy.JPG', 'legacy photo body');
+
+    $application->user->profile->update([
+        'photo_path' => 'storage/profile-photos/legacy.JPG',
+    ]);
+
+    $response = \App\Http\Controllers\ApplicationController::generateProfilePhotoDownload($application);
+
+    expect($response->getFile()->getPathname())->toBe(Storage::disk('public')->path('profile-photos/legacy.JPG'));
+    expect($response->headers->get('content-disposition'))->toContain('Andrea Lopez Santos Jr.jpg');
+    expect($application->user->profile->fresh()->photo_url)->toContain('/storage/profile-photos/legacy.JPG');
 });
 
 test('verifying a guest draft creates the real records and exposes the guest handoff flow until the access link is opened', function () {
@@ -466,6 +590,34 @@ test('guest portal downloads the generated application as a pdf', function () {
     expect($response->headers->get('content-type'))->toContain('application/pdf');
 });
 
+test('application export can convert docx to pdf through gotenberg', function () {
+    config([
+        'services.freeconvert.api_key' => '',
+        'services.gotenberg.url' => 'https://gotenberg.test',
+        'services.gotenberg.timeout' => 30,
+        'services.libreoffice.enabled' => false,
+    ]);
+    Http::fake([
+        'https://gotenberg.test/forms/libreoffice/convert' => Http::response('%PDF-1.4 gotenberg pdf body', 200, [
+            'Content-Type' => 'application/pdf',
+        ]),
+    ]);
+
+    $application = guestApplicationForDocx();
+    $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
+    $pdfPath = $response->getFile()->getPathname();
+
+    try {
+        expect($response->headers->get('content-type'))->toContain('application/pdf');
+        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 gotenberg pdf body'))->toBeTrue();
+    } finally {
+        @unlink($pdfPath);
+    }
+
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && (string) $request->url() === 'https://gotenberg.test/forms/libreoffice/convert');
+});
+
 test('guest portal falls back to docx when pdf conversion fails', function () {
     Notification::fake();
     config([
@@ -473,6 +625,7 @@ test('guest portal falls back to docx when pdf conversion fails', function () {
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
+        'services.gotenberg.url' => null,
         'services.libreoffice.enabled' => false,
     ]);
     Http::fake([

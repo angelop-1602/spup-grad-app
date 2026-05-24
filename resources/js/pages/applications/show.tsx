@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
 import ApplyLayout from '@/layouts/apply-layout';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 import applicationRoutes from '@/routes/applications/index';
 import applyRoutes from '@/routes/apply';
 import { type BreadcrumbItem } from '@/types';
@@ -104,6 +105,7 @@ interface ShowApplicationProps {
         permanent_address: string;
         contact_number: string;
         photo_path?: string | null;
+        photo_url?: string | null;
         highest_education_level: string | null;
         grade_1_school?: string | null;
         grade_1_year?: number | null;
@@ -486,10 +488,10 @@ export default function ShowApplication({
                                         <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                             Photo
                                         </dt>
-                                        {profile.photo_path ? (
+                                        {profilePhotoUrl(profile) ? (
                                             <div className="space-y-3">
                                                 <img
-                                                    src={`/storage/${profile.photo_path}`}
+                                                    src={profilePhotoUrl(profile) ?? ''}
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-44 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />

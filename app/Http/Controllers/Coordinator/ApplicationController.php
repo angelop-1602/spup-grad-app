@@ -8,9 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Coordinator\UpdateApplicationStatusRequest;
 use App\Models\Application;
 use App\Models\ApplicationWindow;
-use App\Support\SystemEventLogger;
+use App\Support\GraduateExportData;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
+use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,19 +70,22 @@ class ApplicationController extends Controller
         $window = ApplicationWindow::findOrFail($windowId);
 
         $search = $request->get('search');
+        $departmentName = $request->string('department')->toString() ?: null;
 
-        $export = new CoordinatorWindowApplicationsExport($window->id, $departmentIds, $search);
+        $export = new CoordinatorWindowApplicationsExport($window->id, $departmentIds, $search, $departmentName);
 
-        $safeTitle = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $window->title);
-        $fileName = $safeTitle.'_coordinator.xlsx';
+        $safeTitle = GraduateExportData::safeFileName($window->title);
+        $suffix = $departmentName ? '_department_'.str_replace(' ', '_', $departmentName) : '_assigned_departments';
+        $fileName = $safeTitle.'_Graduate_List'.$suffix.'.xlsx';
         $logger->log(
             module: 'graduation_application',
             action: 'coordinator.applications.exported',
-            message: 'Coordinator exported applications.',
+            message: 'Coordinator exported a graduate list.',
             subject: $window,
             meta: [
                 'window_id' => $window->id,
                 'search' => $search,
+                'department' => $departmentName,
                 'file_name' => $fileName,
             ],
         );

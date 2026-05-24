@@ -25,6 +25,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { profilePhotoUrl } from '@/lib/profile-photo';
 
 interface StudentProfile {
     id: number;
@@ -40,6 +41,7 @@ interface StudentProfile {
     permanent_address: string | null;
     contact_number: string | null;
     photo_path: string | null;
+    photo_url?: string | null;
     highest_education_level: string | null;
     // Grade School
     grade_school_name: string | null;
@@ -291,9 +293,9 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                     <div className="space-y-4">
                         <Card>
                             <CardHeader className="flex flex-row items-center gap-3">
-                                {student.profile?.photo_path ? (
+                                {profilePhotoUrl(student.profile) ? (
                                     <img
-                                        src={`/storage/${student.profile.photo_path}`}
+                                        src={profilePhotoUrl(student.profile) ?? ''}
                                         alt={displayName}
                                         className="h-14 w-14 rounded-full object-cover border border-border"
                                     />
@@ -358,10 +360,10 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                             <CardContent className="space-y-4 text-sm">
                                 {student.profile ? (
                                     <>
-                                        {student.profile.photo_path && (
+                                        {profilePhotoUrl(student.profile) && (
                                             <div className="flex justify-center pb-4">
                                                 <img
-                                                    src={`/storage/${student.profile.photo_path}`}
+                                                    src={profilePhotoUrl(student.profile) ?? ''}
                                                     alt={displayName}
                                                     className="h-32 w-32 rounded-lg border-2 border-border object-cover"
                                                 />

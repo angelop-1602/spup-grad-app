@@ -108,8 +108,10 @@ class ApplicationWorkflowService
         string $studentId,
         ?string $currentPhotoPath = null,
     ): string {
-        if ($currentPhotoPath && Storage::disk('public')->exists($currentPhotoPath)) {
-            Storage::disk('public')->delete($currentPhotoPath);
+        $normalizedCurrentPhotoPath = ProfilePhoto::storagePath($currentPhotoPath);
+
+        if ($normalizedCurrentPhotoPath && Storage::disk('public')->exists($normalizedCurrentPhotoPath)) {
+            Storage::disk('public')->delete($normalizedCurrentPhotoPath);
         }
 
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');

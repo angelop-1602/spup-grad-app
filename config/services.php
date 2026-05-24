@@ -48,4 +48,9 @@ return [
         'poll_interval' => (int) env('FREECONVERT_POLL_INTERVAL', 2),
     ],
 
+    'gotenberg' => [
+        'url' => env('GOTENBERG_URL'),
+        'timeout' => (int) env('GOTENBERG_TIMEOUT', 180),
+    ],
+
 ];

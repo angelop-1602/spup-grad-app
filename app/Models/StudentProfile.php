@@ -61,6 +61,10 @@ class StudentProfile extends Model
         'grad_doctoral_school', 'grad_doctoral_year',
     ];
 
+    protected $appends = [
+        'photo_url',
+    ];
+
     protected function casts(): array
     {
         $casts = [
@@ -100,5 +104,10 @@ class StudentProfile extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        return \App\Support\ProfilePhoto::url($this->photo_path);
     }
 }

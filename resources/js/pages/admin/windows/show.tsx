@@ -584,7 +584,10 @@ export default function ShowWindow({
                 dept.code,
                 {
                     id: dept.code,
-                    name: `${dept.code} - ${dept.name}`,
+                    name:
+                        dept.code === dept.name
+                            ? dept.name
+                            : `${dept.code} - ${dept.name}`,
                 },
             ]),
         ).values(),
@@ -630,21 +633,7 @@ export default function ShowWindow({
                         </div>
                     </div>
                     {!isHistorical ? (
-                        <div className="flex gap-2">
-                            <Button variant="outline" asChild>
-                                <a
-                                    href={
-                                        adminRoutes.windows.exportStatisticsPdf(
-                                            { window: window.id },
-                                        ).url
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    PDF
-                                </a>
-                            </Button>
+                        <div className="flex flex-wrap gap-2">
                             <Button
                                 variant="outline"
                                 onClick={() => setExportDialogOpen(true)}
@@ -652,67 +641,6 @@ export default function ShowWindow({
                                 <Download className="mr-2 h-4 w-4" />
                                 Excel
                             </Button>
-                            <Dialog
-                                open={exportDialogOpen}
-                                onOpenChange={setExportDialogOpen}
-                            >
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>
-                                            Export applications
-                                        </DialogTitle>
-                                        <DialogDescription>
-                                            Choose which applications to include
-                                            in the Excel file.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="department-filter">
-                                                Department
-                                            </Label>
-                                            <select
-                                                id="department-filter"
-                                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
-                                                value={selectedDepartmentId}
-                                                onChange={(e) =>
-                                                    setSelectedDepartmentId(
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                aria-label="Department filter"
-                                            >
-                                                <option value="all">
-                                                    All departments
-                                                </option>
-                                                {uniqueDepartments.map(
-                                                    (dept) => (
-                                                        <option
-                                                            key={dept.id}
-                                                            value={dept.id}
-                                                        >
-                                                            {dept.name}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() =>
-                                                setExportDialogOpen(false)
-                                            }
-                                        >
-                                            Cancel
-                                        </Button>
-                                        <Button onClick={handleExport}>
-                                            Export
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
                             <Button asChild>
                                 <Link
                                     href={
@@ -728,6 +656,55 @@ export default function ShowWindow({
                         </div>
                     ) : null}
                 </div>
+                <Dialog
+                    open={exportDialogOpen}
+                    onOpenChange={setExportDialogOpen}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Export graduate list</DialogTitle>
+                            <DialogDescription>
+                                Choose which department to include in the
+                                normalized Excel file.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="department-filter">
+                                    Department
+                                </Label>
+                                <select
+                                    id="department-filter"
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
+                                    value={selectedDepartmentId}
+                                    onChange={(e) =>
+                                        setSelectedDepartmentId(e.target.value)
+                                    }
+                                    aria-label="Department filter"
+                                >
+                                    <option value="all">All departments</option>
+                                    {uniqueDepartments.map((dept) => (
+                                        <option
+                                            key={dept.id}
+                                            value={dept.id}
+                                        >
+                                            {dept.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setExportDialogOpen(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button onClick={handleExport}>Export</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <Card>
                     <CardHeader>
@@ -795,14 +772,36 @@ export default function ShowWindow({
                 {/* Total by Department, Program & Major */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>
-                            Total by Department, Program & Major
-                        </CardTitle>
-                        <CardDescription>
-                            Hierarchical breakdown of applications by
-                            department, program/course, and major with
-                            attendance and nationality statistics
-                        </CardDescription>
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <CardTitle>
+                                    Total by Department, Program & Major
+                                </CardTitle>
+                                <CardDescription>
+                                    Hierarchical breakdown of applications by
+                                    department, program/course, and major with
+                                    attendance and nationality statistics
+                                </CardDescription>
+                            </div>
+                            {!isHistorical ? (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button variant="outline" size="sm" asChild>
+                                        <a
+                                            href={
+                                                adminRoutes.windows.exportStatisticsPdf(
+                                                    { window: window.id },
+                                                ).url
+                                            }
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Summary PDF
+                                        </a>
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {(safeStats.hierarchical || []).length > 0 ? (

@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\StoreApplicationWindowRequest;
 use App\Http\Requests\Admin\UpdateApplicationWindowRequest;
 use App\Models\ApplicationWindow;
 use App\Support\HistoricalWindowDataBuilder;
+use App\Support\GraduateExportData;
 use App\Support\NationalityNormalizer;
 use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -385,13 +386,13 @@ class ApplicationWindowController extends Controller
 
         $export = new WindowApplicationsExport($window->id, $departmentName);
 
-        $safeTitle = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $window->title);
+        $safeTitle = GraduateExportData::safeFileName($window->title);
         $suffix = $departmentName ? '_department_'.str_replace(' ', '_', $departmentName) : '_all_departments';
-        $fileName = $safeTitle.$suffix.'.xlsx';
+        $fileName = $safeTitle.'_Graduate_List'.$suffix.'.xlsx';
         $logger->log(
             module: 'graduation_application',
             action: 'admin.window.exported',
-            message: 'Admin exported an application window.',
+            message: 'Admin exported a graduate list.',
             subject: $window,
             meta: [
                 'window_id' => $window->id,
