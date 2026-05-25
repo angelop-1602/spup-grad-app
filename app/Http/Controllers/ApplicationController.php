@@ -15,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,6 +26,12 @@ use Symfony\Component\Process\Process;
 
 class ApplicationController extends Controller
 {
+    private const APPLICATION_PDF_CACHE_DISK = 'local';
+
+    private const APPLICATION_PDF_CACHE_DIR = 'application-pdf-cache';
+
+    private const APPLICATION_PDF_CACHE_VERSION = 'v1';
+
     private const COLLEGE_EXPORT_MEDIUM_FONT_LIMIT = 55;
 
     private const COLLEGE_EXPORT_SMALL_FONT_LIMIT = 70;
@@ -190,15 +197,24 @@ class ApplicationController extends Controller
     /**
      * Generate an application form download from the latest application data.
      *
-     * This method always uses the latest application data, including any recent updates.
-     * The form is generated dynamically each time it's downloaded, ensuring it reflects
-     * the current state of the application, requirements, and user profile.
+     * This method reuses a cached PDF when the application, requirements, subjects,
+     * user profile, and template have not changed. Data changes produce a new cache
+     * key, so the next download regenerates the document.
      *
-     * Note: Any changes made to the application will be automatically reflected in
-     * the downloadable file the next time it is generated.
+     * Note: DOCX fallback downloads are not cached because they represent a failed
+     * conversion attempt and should be retried later.
      */
     public static function generatePdf(Application $application): BinaryFileResponse
     {
+        self::loadApplicationExportData($application);
+
+        $fileName = self::applicationExportFileName($application, 'pdf');
+        $pdfCachePath = self::applicationPdfCachePath($application);
+
+        if (Storage::disk(self::APPLICATION_PDF_CACHE_DISK)->exists($pdfCachePath)) {
+            return self::downloadStoredApplicationPdf($pdfCachePath, $fileName);
+        }
+
         $docx = self::buildApplicationDocx($application);
 
         try {
@@ -222,15 +238,21 @@ class ApplicationController extends Controller
         }
 
         @unlink($docx['path']);
+        $storedPdfPath = self::storeApplicationPdfCache($application, $pdfPath, $pdfCachePath);
         SystemHealthCheck::record('pdf_conversion', 'ok', 'Application DOCX converted to PDF successfully.');
         app(SystemEventLogger::class)->log(
             module: 'document',
             action: 'pdf_conversion.success',
             message: 'Application DOCX converted to PDF successfully.',
             subject: $application,
+            meta: ['cached' => (bool) $storedPdfPath],
         );
 
-        $fileName = preg_replace('/\.docx$/i', '.pdf', $docx['file_name']) ?: 'GraduationApplication.pdf';
+        if ($storedPdfPath) {
+            @unlink($pdfPath);
+
+            return self::downloadStoredApplicationPdf($storedPdfPath, $fileName);
+        }
 
         return response()->download($pdfPath, $fileName, [
             'Content-Type' => 'application/pdf',
@@ -247,6 +269,123 @@ class ApplicationController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
+    private static function downloadStoredApplicationPdf(string $storagePath, string $fileName): BinaryFileResponse
+    {
+        return response()->download(Storage::disk(self::APPLICATION_PDF_CACHE_DISK)->path($storagePath), $fileName, [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    private static function storeApplicationPdfCache(Application $application, string $pdfPath, string $cachePath): ?string
+    {
+        $contents = file_get_contents($pdfPath);
+
+        if ($contents === false || ! str_starts_with($contents, '%PDF')) {
+            return null;
+        }
+
+        $disk = Storage::disk(self::APPLICATION_PDF_CACHE_DISK);
+
+        if (! $disk->put($cachePath, $contents)) {
+            return null;
+        }
+
+        self::pruneApplicationPdfCache($application, $cachePath);
+
+        return $cachePath;
+    }
+
+    private static function pruneApplicationPdfCache(Application $application, string $keepPath): void
+    {
+        $disk = Storage::disk(self::APPLICATION_PDF_CACHE_DISK);
+        $directory = self::APPLICATION_PDF_CACHE_DIR.'/'.$application->getKey();
+
+        foreach ($disk->files($directory) as $path) {
+            if ($path !== $keepPath && str_ends_with($path, '.pdf')) {
+                $disk->delete($path);
+            }
+        }
+    }
+
+    private static function applicationPdfCachePath(Application $application): string
+    {
+        return self::APPLICATION_PDF_CACHE_DIR.'/'.$application->getKey().'/'.self::applicationPdfCacheKey($application).'.pdf';
+    }
+
+    private static function applicationPdfCacheKey(Application $application): string
+    {
+        $application = Application::query()
+            ->with([
+                'window',
+                'department',
+                'course',
+                'subjectEnrollments',
+                'requirements.approvedByCoordinator.departments',
+                'user.profile',
+                'approvedByCoordinator.departments',
+            ])
+            ->find($application->getKey()) ?? self::loadApplicationExportData($application);
+
+        $templatePath = public_path('GraduationApplicationFormTemplate.docx');
+        $profile = $application->user?->profile;
+
+        $payload = [
+            'version' => self::APPLICATION_PDF_CACHE_VERSION,
+            'template_mtime' => file_exists($templatePath) ? filemtime($templatePath) : null,
+            'application' => self::modelExportAttributes($application),
+            'user' => self::modelExportAttributes($application->user, ['id', 'name', 'email', 'student_id', 'updated_at']),
+            'profile' => self::modelExportAttributes($profile),
+            'window' => self::modelExportAttributes($application->window),
+            'department' => self::modelExportAttributes($application->department),
+            'course' => self::modelExportAttributes($application->course),
+            'approved_by_coordinator' => self::modelExportAttributes($application->approvedByCoordinator, ['id', 'name', 'updated_at']),
+            'approved_by_coordinator_departments' => $application->approvedByCoordinator?->departments
+                ?->map(fn ($department) => self::modelExportAttributes($department, ['id', 'name', 'updated_at']))
+                ->values()
+                ->all(),
+            'subject_enrollments' => $application->subjectEnrollments
+                ->map(fn ($subject) => self::modelExportAttributes($subject))
+                ->values()
+                ->all(),
+            'requirements' => $application->requirements
+                ->map(fn ($requirement) => [
+                    'requirement' => self::modelExportAttributes($requirement),
+                    'approved_by_coordinator' => self::modelExportAttributes($requirement->approvedByCoordinator, ['id', 'name', 'updated_at']),
+                    'approved_by_coordinator_departments' => $requirement->approvedByCoordinator?->departments
+                        ?->map(fn ($department) => self::modelExportAttributes($department, ['id', 'name', 'updated_at']))
+                        ->values()
+                        ->all(),
+                ])
+                ->values()
+                ->all(),
+        ];
+
+        return sha1((string) json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * @param  array<int, string>|null  $keys
+     * @return array<string, mixed>|null
+     */
+    private static function modelExportAttributes(?object $model, ?array $keys = null): ?array
+    {
+        if (! $model || ! method_exists($model, 'getAttributes')) {
+            return null;
+        }
+
+        $attributes = method_exists($model, 'attributesToArray')
+            ? $model->attributesToArray()
+            : $model->getAttributes();
+
+        if ($keys !== null) {
+            $attributes = array_intersect_key($attributes, array_flip($keys));
+        }
+
+        ksort($attributes);
+
+        return $attributes;
+    }
+
     /**
      * Build the filled DOCX source file used for downloads and PDF conversion.
      *
@@ -254,17 +393,8 @@ class ApplicationController extends Controller
      */
     private static function buildApplicationDocx(Application $application): array
     {
-        // Always load fresh data to ensure the form reflects the latest application state
-        $application->loadMissing([
-            'window',
-            'department',
-            'course',
-            'subjectEnrollments',
-            'requirements.approvedByCoordinator',
-            'user.profile',
-            'approvedByCoordinator',
-            'approvedByCoordinator.departments',
-        ]);
+        // Always load fresh data to ensure the form reflects the latest application state.
+        self::loadApplicationExportData($application);
 
         $profile = $application->user->profile;
 
@@ -312,14 +442,14 @@ class ApplicationController extends Controller
         $replacements['graduation_appearance'] = $application->presence === 'attending' ? 'Attending' : 'Not Attending';
         // Format application created date with timezone conversion and AM/PM
         $createdAt = $application->created_at instanceof \Carbon\Carbon 
-            ? $application->created_at 
+            ? $application->created_at->copy()
             : \Carbon\Carbon::parse($application->created_at);
         $createdAt->setTimezone('Asia/Manila');
         $replacements['application_created_at'] = $createdAt->format('m/d/Y h:i A');
         
         // Format application updated date with timezone conversion and AM/PM
         $updatedAt = $application->updated_at instanceof \Carbon\Carbon 
-            ? $application->updated_at 
+            ? $application->updated_at->copy()
             : \Carbon\Carbon::parse($application->updated_at);
         $updatedAt->setTimezone('Asia/Manila');
         $replacements['application_updated_at'] = $updatedAt->format('m/d/Y h:i A');
@@ -478,7 +608,7 @@ class ApplicationController extends Controller
             $replacements['coordinator_department'] = optional($coordinator->departments()->first())->name ?? '';
             // Use the actual approval timestamp from the requirement - ensure it's a Carbon instance
             $approvalDateTime = $approvalDate instanceof \Carbon\Carbon 
-                ? $approvalDate 
+                ? $approvalDate->copy()
                 : \Carbon\Carbon::parse($approvalDate);
             
             // Convert from UTC to Asia/Manila timezone (Philippines timezone)
@@ -578,7 +708,29 @@ class ApplicationController extends Controller
             // If cleanup fails, continue with the document as is
         }
 
-        // Build a friendly file name using the student's full name.
+        $fileName = self::applicationExportFileName($application, 'docx');
+
+        return [
+            'path' => $tempDocx,
+            'file_name' => $fileName,
+        ];
+    }
+
+    private static function loadApplicationExportData(Application $application): Application
+    {
+        return $application->load([
+            'window',
+            'department',
+            'course',
+            'subjectEnrollments',
+            'requirements.approvedByCoordinator.departments',
+            'user.profile',
+            'approvedByCoordinator.departments',
+        ]);
+    }
+
+    private static function applicationExportFileName(Application $application, string $extension): string
+    {
         $profileName = '';
         if ($application->user && $application->user->profile) {
             $p = $application->user->profile;
@@ -593,12 +745,7 @@ class ApplicationController extends Controller
         $safeName = preg_replace('/[^A-Za-z0-9_\- ]/', '', $profileName) ?: 'Student';
         $safeName = str_replace(' ', '_', $safeName);
 
-        $fileName = 'GraduationApplication_'.$safeName.'.docx';
-
-        return [
-            'path' => $tempDocx,
-            'file_name' => $fileName,
-        ];
+        return 'GraduationApplication_'.$safeName.'.'.$extension;
     }
 
     /**
@@ -696,6 +843,25 @@ class ApplicationController extends Controller
                 module: 'document',
                 action: 'gotenberg.failed',
                 message: 'Gotenberg DOCX to PDF conversion failed.',
+                status: 'failed',
+                severity: 'warning',
+                meta: ['error' => $e->getMessage()],
+            );
+        }
+
+        try {
+            if ($pdfPath = self::convertDocxToPdfWithPdfCo($docxPath)) {
+                return $pdfPath;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('PDF.co DOCX to PDF conversion failed.', [
+                'message' => $e->getMessage(),
+            ]);
+            SystemHealthCheck::record('pdfco', 'warning', $e->getMessage());
+            app(SystemEventLogger::class)->log(
+                module: 'document',
+                action: 'pdfco.failed',
+                message: 'PDF.co DOCX to PDF conversion failed.',
                 status: 'failed',
                 severity: 'warning',
                 meta: ['error' => $e->getMessage()],
@@ -896,6 +1062,110 @@ class ApplicationController extends Controller
             ?? data_get($task, 'result.file.url');
 
         return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    private static function convertDocxToPdfWithPdfCo(string $docxPath): ?string
+    {
+        $apiKey = (string) config('services.pdfco.api_key', '');
+
+        if ($apiKey === '') {
+            return null;
+        }
+
+        $baseUrl = rtrim((string) config('services.pdfco.base_url', 'https://api.pdf.co/v1'), '/');
+        $timeout = max(10, (int) config('services.pdfco.timeout', 120));
+        $expiration = max(1, (int) config('services.pdfco.expiration', 60));
+        $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
+        $outputFileName = basename($pdfPath);
+        $docxFileName = basename($docxPath);
+
+        @unlink($pdfPath);
+
+        $presignedResponse = Http::baseUrl($baseUrl)
+            ->acceptJson()
+            ->withHeaders(['x-api-key' => $apiKey])
+            ->timeout($timeout)
+            ->get('/file/upload/get-presigned-url', [
+                'name' => $docxFileName,
+                'contenttype' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ]);
+
+        if (! $presignedResponse->successful()) {
+            throw new \RuntimeException('PDF.co upload URL creation failed with status '.$presignedResponse->status().'.');
+        }
+
+        $upload = $presignedResponse->json();
+
+        if (data_get($upload, 'error') === true) {
+            throw new \RuntimeException('PDF.co upload URL creation failed: '.((string) data_get($upload, 'message', 'unknown error')));
+        }
+
+        $presignedUrl = data_get($upload, 'presignedUrl');
+        $uploadedFileUrl = data_get($upload, 'url');
+
+        if (! is_string($presignedUrl) || $presignedUrl === '' || ! is_string($uploadedFileUrl) || $uploadedFileUrl === '') {
+            throw new \RuntimeException('PDF.co upload URL response did not include upload details.');
+        }
+
+        $docxContents = file_get_contents($docxPath);
+
+        if ($docxContents === false) {
+            throw new \RuntimeException('Unable to open generated DOCX for PDF.co upload.');
+        }
+
+        $uploadResponse = Http::timeout($timeout)
+            ->withBody($docxContents, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+            ->put($presignedUrl);
+
+        if (! $uploadResponse->successful()) {
+            throw new \RuntimeException('PDF.co file upload failed with status '.$uploadResponse->status().'.');
+        }
+
+        $convertResponse = Http::baseUrl($baseUrl)
+            ->acceptJson()
+            ->asJson()
+            ->withHeaders(['x-api-key' => $apiKey])
+            ->timeout($timeout)
+            ->post('/pdf/convert/from/doc', [
+                'url' => $uploadedFileUrl,
+                'name' => $outputFileName,
+                'async' => false,
+                'expiration' => $expiration,
+            ]);
+
+        if (! $convertResponse->successful()) {
+            throw new \RuntimeException('PDF.co conversion failed with status '.$convertResponse->status().'.');
+        }
+
+        $conversion = $convertResponse->json();
+
+        if (data_get($conversion, 'error') === true) {
+            throw new \RuntimeException('PDF.co conversion failed: '.((string) data_get($conversion, 'message', 'unknown error')));
+        }
+
+        $downloadUrl = data_get($conversion, 'url');
+
+        if (! is_string($downloadUrl) || $downloadUrl === '') {
+            throw new \RuntimeException('PDF.co conversion did not return a download URL.');
+        }
+
+        $downloadResponse = Http::timeout($timeout)->get($downloadUrl);
+
+        if (! $downloadResponse->successful()) {
+            throw new \RuntimeException('PDF.co PDF download failed with status '.$downloadResponse->status().'.');
+        }
+
+        $body = $downloadResponse->body();
+
+        if (! str_starts_with($body, '%PDF')) {
+            throw new \RuntimeException('PDF.co download response was not a PDF.');
+        }
+
+        if (file_put_contents($pdfPath, $body) === false || ! file_exists($pdfPath)) {
+            throw new \RuntimeException('Unable to save converted PDF from PDF.co.');
+        }
+
+        return $pdfPath;
     }
 
     private static function convertDocxToPdfWithGotenberg(string $docxPath): ?string

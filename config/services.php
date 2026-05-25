@@ -48,6 +48,13 @@ return [
         'poll_interval' => (int) env('FREECONVERT_POLL_INTERVAL', 2),
     ],
 
+    'pdfco' => [
+        'api_key' => env('PDFCO_API_KEY'),
+        'base_url' => env('PDFCO_BASE_URL', 'https://api.pdf.co/v1'),
+        'timeout' => (int) env('PDFCO_TIMEOUT', 120),
+        'expiration' => (int) env('PDFCO_EXPIRATION', 60),
+    ],
+
     'gotenberg' => [
         'url' => env('GOTENBERG_URL'),
         'timeout' => (int) env('GOTENBERG_TIMEOUT', 180),

@@ -21,6 +21,10 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 
+beforeEach(function () {
+    Storage::disk('local')->deleteDirectory('application-pdf-cache');
+});
+
 function guestApplicationCatalog(): array
 {
     $window = ApplicationWindow::create([
@@ -224,6 +228,23 @@ test('guest application docx omits school name for spup college graduates', func
 
     expect($xml)->toContain('Bachelor of Science in Nursing')
         ->not->toContain('Main Campus Should Not Print');
+});
+
+test('student application edit accepts method spoofed multipart payload', function () {
+    $application = guestApplicationForDocx();
+
+    $payload = guestApplicationPayload($application->window, $application->department, $application->course, [
+        '_method' => 'put',
+        'first_name' => 'Andrea Updated',
+        'presence' => 'not attending',
+    ]);
+
+    $this->actingAs($application->user)
+        ->post(route('applications.update', $application), $payload)
+        ->assertRedirect(route('applications.index', absolute: false));
+
+    expect($application->fresh()->presence)->toBe('not attending');
+    expect($application->user->profile->fresh()->first_name)->toBe('Andrea Updated');
 });
 
 test('window graduate export groups records and normalizes text for reuse', function () {
@@ -593,6 +614,7 @@ test('guest portal downloads the generated application as a pdf', function () {
 test('application export can convert docx to pdf through gotenberg', function () {
     config([
         'services.freeconvert.api_key' => '',
+        'services.pdfco.api_key' => '',
         'services.gotenberg.url' => 'https://gotenberg.test',
         'services.gotenberg.timeout' => 30,
         'services.libreoffice.enabled' => false,
@@ -618,6 +640,105 @@ test('application export can convert docx to pdf through gotenberg', function ()
         && (string) $request->url() === 'https://gotenberg.test/forms/libreoffice/convert');
 });
 
+test('application export can convert docx to pdf through pdfco', function () {
+    config([
+        'services.freeconvert.api_key' => '',
+        'services.gotenberg.url' => null,
+        'services.pdfco.api_key' => 'test-pdfco-key',
+        'services.pdfco.base_url' => 'https://api.pdfco.test/v1',
+        'services.pdfco.timeout' => 30,
+        'services.pdfco.expiration' => 60,
+        'services.libreoffice.enabled' => false,
+    ]);
+    Http::fake(function ($request) {
+        $url = (string) $request->url();
+
+        if ($request->method() === 'GET' && str_starts_with($url, 'https://api.pdfco.test/v1/file/upload/get-presigned-url')) {
+            return Http::response([
+                'error' => false,
+                'presignedUrl' => 'https://upload.pdfco.test/graduation-application.docx',
+                'url' => 'https://files.pdfco.test/graduation-application.docx',
+            ]);
+        }
+
+        if ($request->method() === 'PUT' && $url === 'https://upload.pdfco.test/graduation-application.docx') {
+            return Http::response([], 200);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://api.pdfco.test/v1/pdf/convert/from/doc') {
+            return Http::response([
+                'error' => false,
+                'status' => 200,
+                'url' => 'https://download.pdfco.test/result.pdf',
+                'name' => 'result.pdf',
+            ]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://download.pdfco.test/result.pdf') {
+            return Http::response('%PDF-1.4 pdfco pdf body', 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $application = guestApplicationForDocx();
+    $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
+    $pdfPath = $response->getFile()->getPathname();
+
+    try {
+        expect($response->headers->get('content-type'))->toContain('application/pdf');
+        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 pdfco pdf body'))->toBeTrue();
+    } finally {
+        @unlink($pdfPath);
+    }
+
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && (string) $request->url() === 'https://api.pdfco.test/v1/pdf/convert/from/doc'
+        && $request->data()['url'] === 'https://files.pdfco.test/graduation-application.docx'
+        && $request->data()['async'] === false);
+});
+
+test('application pdf export reuses cached conversion until application data changes', function () {
+    config([
+        'services.freeconvert.api_key' => '',
+        'services.gotenberg.url' => 'https://gotenberg.test',
+        'services.gotenberg.timeout' => 30,
+        'services.pdfco.api_key' => '',
+        'services.libreoffice.enabled' => false,
+    ]);
+
+    $conversionRequests = 0;
+
+    Http::fake(function ($request) use (&$conversionRequests) {
+        if ($request->method() === 'POST' && (string) $request->url() === 'https://gotenberg.test/forms/libreoffice/convert') {
+            $conversionRequests++;
+
+            return Http::response('%PDF-1.4 cached pdf body '.$conversionRequests, 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $application = guestApplicationForDocx();
+
+    $first = \App\Http\Controllers\ApplicationController::generatePdf($application);
+    expect((string) file_get_contents($first->getFile()->getPathname()))->toContain('cached pdf body 1');
+
+    $second = \App\Http\Controllers\ApplicationController::generatePdf($application->fresh());
+    expect($conversionRequests)->toBe(1);
+    expect((string) file_get_contents($second->getFile()->getPathname()))->toContain('cached pdf body 1');
+
+    $application->update(['presence' => 'not attending']);
+
+    $third = \App\Http\Controllers\ApplicationController::generatePdf($application->fresh());
+    expect($conversionRequests)->toBe(2);
+    expect((string) file_get_contents($third->getFile()->getPathname()))->toContain('cached pdf body 2');
+});
+
 test('guest portal falls back to docx when pdf conversion fails', function () {
     Notification::fake();
     config([
@@ -626,6 +747,7 @@ test('guest portal falls back to docx when pdf conversion fails', function () {
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
         'services.gotenberg.url' => null,
+        'services.pdfco.api_key' => '',
         'services.libreoffice.enabled' => false,
     ]);
     Http::fake([

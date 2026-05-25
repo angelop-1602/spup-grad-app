@@ -43,9 +43,9 @@ class DeveloperDashboardController extends Controller
         ]);
     }
 
-    public function exportMetrics(DeveloperDiagnosticsService $diagnostics): StreamedResponse
+    public function exportMetrics(Request $request, DeveloperDiagnosticsService $diagnostics): StreamedResponse
     {
-        $metrics = $diagnostics->applicationMetrics();
+        $metrics = $diagnostics->applicationMetrics($diagnostics->metricsWindowId($this->filters($request)));
         $healthCards = $diagnostics->healthCards();
 
         return response()->streamDownload(function () use ($metrics, $healthCards): void {
@@ -82,6 +82,7 @@ class DeveloperDashboardController extends Controller
             'search',
             'from',
             'to',
+            'window_id',
         ]);
     }
 }

@@ -48,9 +48,22 @@ type Paginated<T> = {
     total: number;
 };
 
+type ApplicationWindowOption = {
+    id: number;
+    title: string;
+    status: string;
+    start_date: string | null;
+    end_date: string | null;
+    applications_count: number;
+};
+
 type DashboardProps = {
     healthCards: HealthCard[];
     applicationMetrics: Record<string, string | number>;
+    applicationMetricsScope: string;
+    applicationWindows: ApplicationWindowOption[];
+    currentWindow: ApplicationWindowOption | null;
+    selectedWindowId: number | null;
     eventFilters: {
         modules: string[];
         actions: string[];
@@ -81,7 +94,9 @@ const statusClass: Record<string, string> = {
 
 function cleanFilters(filters: Record<string, string | null>): Record<string, string> {
     return Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => value && value !== 'all'),
+        Object.entries(filters).filter(
+            ([key, value]) => value && (value !== 'all' || key === 'window_id'),
+        ),
     ) as Record<string, string>;
 }
 
@@ -100,6 +115,10 @@ function shortClassName(value: string | null) {
 export default function DeveloperDashboard({
     healthCards,
     applicationMetrics,
+    applicationMetricsScope,
+    applicationWindows,
+    currentWindow,
+    selectedWindowId,
     eventFilters,
     events,
     recentLogLines,
@@ -120,6 +139,9 @@ export default function DeveloperDashboard({
             search: filters.search ?? '',
             from: filters.from ?? '',
             to: filters.to ?? '',
+            window_id:
+                filters.window_id ??
+                (selectedWindowId ? String(selectedWindowId) : 'all'),
         },
     );
 
@@ -127,6 +149,13 @@ export default function DeveloperDashboard({
         () => new URLSearchParams(cleanFilters(filterData)).toString(),
         [filterData],
     );
+    const metricsQueryString = useMemo(() => {
+        const windowFilter = cleanFilters({
+            window_id: filterData.window_id ?? 'all',
+        });
+
+        return new URLSearchParams(windowFilter).toString();
+    }, [filterData.window_id]);
 
     const applyFilters = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -204,21 +233,75 @@ export default function DeveloperDashboard({
                 </section>
 
                 <section>
-                    <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold">
                                 Graduation Application Monitoring
                             </h2>
                             <p className="text-sm text-muted-foreground">
-                                Current application volume and processing health.
+                                Showing application volume and processing health
+                                for {applicationMetricsScope}.
                             </p>
+                            {currentWindow ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Current active window: {currentWindow.title}
+                                </p>
+                            ) : null}
                         </div>
-                        <Button asChild variant="outline" size="sm">
-                            <a href="/developer/metrics/export">
-                                <Download className="size-4" />
-                                Export metrics
-                            </a>
-                        </Button>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                            <div className="grid min-w-72 gap-1.5">
+                                <Label>Application Window</Label>
+                                <Select
+                                    value={filterData.window_id ?? 'all'}
+                                    onValueChange={(value) => {
+                                        const nextFilters = {
+                                            ...filterData,
+                                            window_id: value,
+                                        };
+
+                                        setFilterData(nextFilters);
+                                        router.get(
+                                            '/developer/dashboard',
+                                            cleanFilters(nextFilters),
+                                            {
+                                                preserveScroll: true,
+                                                preserveState: true,
+                                            },
+                                        );
+                                    }}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            All application windows
+                                        </SelectItem>
+                                        {applicationWindows.map((window) => (
+                                            <SelectItem
+                                                key={window.id}
+                                                value={String(window.id)}
+                                            >
+                                                {window.title} (
+                                                {headline(window.status)})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button asChild variant="outline" size="sm">
+                                <a
+                                    href={`/developer/metrics/export${
+                                        metricsQueryString
+                                            ? `?${metricsQueryString}`
+                                            : ''
+                                    }`}
+                                >
+                                    <Download className="size-4" />
+                                    Export metrics
+                                </a>
+                            </Button>
+                        </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         {Object.entries(applicationMetrics).map(

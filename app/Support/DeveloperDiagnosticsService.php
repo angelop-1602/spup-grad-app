@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Application;
 use App\Models\ApplicationRequirement;
+use App\Models\ApplicationWindow;
 use App\Models\SystemEvent;
 use App\Models\SystemHealthCheck;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -20,13 +21,23 @@ class DeveloperDiagnosticsService
      */
     public function dashboardData(array $filters): array
     {
+        $selectedWindowId = $this->metricsWindowId($filters);
+        $resolvedFilters = [
+            ...$filters,
+            'window_id' => $selectedWindowId ? (string) $selectedWindowId : 'all',
+        ];
+
         return [
             'healthCards' => $this->healthCards(),
-            'applicationMetrics' => $this->applicationMetrics(),
+            'applicationMetrics' => $this->applicationMetrics($selectedWindowId),
+            'applicationMetricsScope' => $this->applicationMetricsScope($selectedWindowId),
+            'applicationWindows' => $this->applicationWindowOptions(),
+            'currentWindow' => $this->windowPayload(ApplicationWindow::current()),
+            'selectedWindowId' => $selectedWindowId,
             'eventFilters' => $this->filterOptions(),
-            'events' => $this->eventsQuery($filters)->paginate(25)->withQueryString(),
+            'events' => $this->eventsQuery($resolvedFilters)->paginate(25)->withQueryString(),
             'recentLogLines' => $this->recentLogLines(),
-            'filters' => $filters,
+            'filters' => $resolvedFilters,
         ];
     }
 
@@ -72,6 +83,7 @@ class DeveloperDiagnosticsService
             $this->healthCheckCard('pdf_conversion', 'PDF Conversion'),
             $this->healthCheckCard('freeconvert', 'FreeConvert API'),
             $this->healthCheckCard('gotenberg', 'Gotenberg API'),
+            $this->healthCheckCard('pdfco', 'PDF.co API'),
             [
                 'label' => 'Recent Errors',
                 'status' => SystemEvent::query()->whereIn('severity', ['error', 'critical'])->where('created_at', '>=', now()->startOfDay())->exists() ? 'warning' : 'ok',
@@ -86,15 +98,40 @@ class DeveloperDiagnosticsService
     /**
      * @return array<string, mixed>
      */
-    public function applicationMetrics(): array
+    public function metricsWindowId(array $filters): ?int
+    {
+        if (array_key_exists('window_id', $filters)) {
+            $value = $filters['window_id'];
+
+            if ($value === 'all' || $value === '' || $value === null) {
+                return null;
+            }
+
+            $windowId = (int) $value;
+
+            return ApplicationWindow::query()->whereKey($windowId)->exists()
+                ? $windowId
+                : ApplicationWindow::current()?->id;
+        }
+
+        return ApplicationWindow::current()?->id;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function applicationMetrics(?int $windowId = null): array
     {
         $today = now()->startOfDay();
-        $approved = Application::query()
+        $applications = $this->applicationsQuery($windowId);
+        $requirements = $this->requirementsQuery($windowId);
+
+        $approved = (clone $applications)
             ->whereNotNull('approved_at')
             ->get(['created_at', 'approved_at']);
 
         $averageSeconds = $approved->avg(fn (Application $application) => $application->approved_at->diffInSeconds($application->created_at));
-        $missing = ApplicationRequirement::query()
+        $missing = (clone $requirements)
             ->select('requirement_label', DB::raw('count(*) as total'))
             ->where('status', 'required')
             ->groupBy('requirement_label')
@@ -102,17 +139,83 @@ class DeveloperDiagnosticsService
             ->first();
 
         return [
-            'totalApplications' => Application::count(),
-            'submittedApplications' => Application::where('status', 'submitted')->count(),
-            'pendingApplications' => Application::where('status', 'pending')->count(),
-            'incompleteApplications' => Application::where('status', 'incomplete')->count(),
-            'approvedApplications' => Application::where('status', 'approved')->count(),
-            'rejectedApplications' => Application::where('status', 'rejected')->count(),
-            'applicationsToday' => Application::where('created_at', '>=', $today)->count(),
-            'documentsUploadedToday' => ApplicationRequirement::whereNotNull('file_path')->where('updated_at', '>=', $today)->count(),
+            'totalApplications' => (clone $applications)->count(),
+            'submittedApplications' => (clone $applications)->where('status', 'submitted')->count(),
+            'pendingApplications' => (clone $applications)->where('status', 'pending')->count(),
+            'incompleteApplications' => (clone $applications)->where('status', 'incomplete')->count(),
+            'approvedApplications' => (clone $applications)->where('status', 'approved')->count(),
+            'rejectedApplications' => (clone $applications)->where('status', 'rejected')->count(),
+            'applicationsToday' => (clone $applications)->where('created_at', '>=', $today)->count(),
+            'documentsUploadedToday' => (clone $requirements)->whereNotNull('file_path')->where('updated_at', '>=', $today)->count(),
             'mostCommonMissingRequirement' => $missing?->requirement_label ?? 'None',
             'averageProcessingTime' => $averageSeconds ? $this->formatDuration((int) $averageSeconds) : 'Not enough data',
         ];
+    }
+
+    private function applicationMetricsScope(?int $windowId): string
+    {
+        if (! $windowId) {
+            return 'All Application Windows';
+        }
+
+        return ApplicationWindow::query()->whereKey($windowId)->value('title') ?? 'Selected Application Window';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function applicationWindowOptions(): array
+    {
+        $now = now()->toDateTimeString();
+
+        return ApplicationWindow::query()
+            ->withCount('applications')
+            ->orderByRaw(
+                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
+                [$now, $now, $now]
+            )
+            ->orderBy('start_date', 'desc')
+            ->get()
+            ->map(fn (ApplicationWindow $window) => [
+                'id' => $window->id,
+                'title' => $window->title,
+                'status' => $window->status,
+                'start_date' => $window->start_date?->toDateString(),
+                'end_date' => $window->end_date?->toDateString(),
+                'applications_count' => $window->applications_count,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function windowPayload(?ApplicationWindow $window): ?array
+    {
+        if (! $window) {
+            return null;
+        }
+
+        return [
+            'id' => $window->id,
+            'title' => $window->title,
+            'status' => $window->status,
+            'start_date' => $window->start_date?->toDateString(),
+            'end_date' => $window->end_date?->toDateString(),
+        ];
+    }
+
+    private function applicationsQuery(?int $windowId): Builder
+    {
+        return Application::query()
+            ->when($windowId, fn (Builder $query) => $query->where('window_id', $windowId));
+    }
+
+    private function requirementsQuery(?int $windowId): Builder
+    {
+        return ApplicationRequirement::query()
+            ->when($windowId, fn (Builder $query) => $query->whereHas(
+                'application',
+                fn (Builder $applicationQuery) => $applicationQuery->where('window_id', $windowId),
+            ));
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\Developer;
 use App\Models\GuestApplicationDraft;
 use App\Models\SystemEvent;
+use App\Models\User;
 use App\Support\SystemEventLogger;
 use Database\Seeders\DeveloperSeeder;
 use Illuminate\Support\Facades\Hash;
@@ -223,6 +224,57 @@ test('developer seeder creates account from environment', function () {
 
     expect($developer)->not->toBeNull()
         ->and(Hash::check('secret-password', $developer->password))->toBeTrue();
+});
+
+test('developer application metrics default to active window and can switch windows', function () {
+    [$developer] = diagnosticsConfirmedDeveloper();
+    [$activeWindow, $department, $course] = diagnosticsGuestCatalog();
+
+    $endedWindow = ApplicationWindow::create([
+        'title' => 'January 2026 Graduation',
+        'description' => 'Ended graduation window for diagnostics tests.',
+        'start_date' => now()->subMonths(3),
+        'end_date' => now()->subMonths(2),
+    ]);
+
+    $workflow = app(\App\Support\ApplicationWorkflowService::class);
+
+    $activeUser = User::factory()->create([
+        'email' => 'active.window@example.com',
+        'student_id' => '2020-0002',
+    ]);
+    $workflow->createApplicationForUser($activeUser, diagnosticsGuestPayload($activeWindow, $department, $course));
+
+    $endedUser = User::factory()->create([
+        'email' => 'ended.window@example.com',
+        'student_id' => '2020-0003',
+    ]);
+    $workflow->createApplicationForUser($endedUser, [
+        ...diagnosticsGuestPayload($endedWindow, $department, $course),
+        'email' => 'ended.window@example.com',
+        'student_id' => '2020-0003',
+    ]);
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedWindowId', $activeWindow->id)
+            ->where('applicationMetrics.totalApplications', 1)
+            ->where('applicationMetricsScope', $activeWindow->title)
+            ->has('applicationWindows', 2)
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.dashboard', ['window_id' => $endedWindow->id]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedWindowId', $endedWindow->id)
+            ->where('applicationMetrics.totalApplications', 1)
+            ->where('applicationMetricsScope', $endedWindow->title)
+        );
 });
 
 test('system event logger redacts sensitive metadata', function () {

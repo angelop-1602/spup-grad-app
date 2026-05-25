@@ -159,6 +159,7 @@ type YearField =
     | 'grad_doctoral_year';
 
 interface ApplicationWizardData {
+    _method?: 'put';
     window_id: number;
     email: string;
     student_id: string;
@@ -352,8 +353,9 @@ export function ApplicationWizard({
             : [];
 
     // Initialize form data from profile
-    const { data, setData, post, put, processing, errors } =
+    const { data, setData, post, processing, errors } =
         useForm<ApplicationWizardData>({
+            _method: isEditMode ? 'put' : undefined,
             window_id: window.id,
             email: '',
             student_id: user?.student_id
@@ -800,7 +802,7 @@ export function ApplicationWizard({
                           activeApplication.application_number,
                       ).url;
 
-            put(updateRoute, { forceFormData: true, onError });
+            post(updateRoute, { forceFormData: true, onError });
 
             return;
         }
