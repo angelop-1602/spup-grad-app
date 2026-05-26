@@ -17,7 +17,6 @@ use App\Support\ApplicationWorkflowService;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -331,7 +330,7 @@ class GuestApplicationController extends Controller
             abort(403, 'Invalid verification link.');
         }
 
-        [$draft, $newlyFinalized] = $this->finalizeDraft($draft, $workflow);
+        [$draft, $newlyFinalized] = $workflow->finalizeGuestDraft($draft);
 
         $this->rememberDraft($request, $draft);
 
@@ -345,6 +344,8 @@ class GuestApplicationController extends Controller
         return Inertia::render('apply/verified', [
             'draft' => [
                 'id' => $draft->id,
+                'tracking_code' => $draft->ensureTrackingCode(),
+                'tracking_pin' => $draft->ensureTrackingPin(),
                 'access_url' => $this->guestAccessUrl($draft),
             ],
             'alreadyVerified' => ! $newlyFinalized,
@@ -474,114 +475,6 @@ class GuestApplicationController extends Controller
             ->with('success', 'File uploaded successfully.');
     }
 
-    /**
-     * @return array{0: GuestApplicationDraft, 1: bool}
-     */
-    private function finalizeDraft(GuestApplicationDraft $draft, ApplicationWorkflowService $workflow): array
-    {
-        return DB::transaction(function () use ($draft, $workflow) {
-            $lockedDraft = GuestApplicationDraft::query()
-                ->whereKey($draft->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ($lockedDraft->hasBeenVerified()) {
-                $lockedDraft->load('application');
-
-                return [$lockedDraft, false];
-            }
-
-            $payload = $lockedDraft->payload ?? [];
-            $payload['window_id'] = $lockedDraft->window_id;
-
-            $emailUser = User::query()
-                ->whereRaw('lower(email) = ?', [$lockedDraft->email])
-                ->lockForUpdate()
-                ->first();
-
-            $studentUser = User::query()
-                ->where('student_id', $lockedDraft->student_id)
-                ->lockForUpdate()
-                ->first();
-
-            if ($emailUser && $emailUser->student_id && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
-                abort(409, 'This email is already associated with a different student ID.');
-            }
-
-            $applicationForEmail = $emailUser
-                ? $emailUser->applications()->where('window_id', $lockedDraft->window_id)->first()
-                : null;
-
-            if ($applicationForEmail && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
-                abort(409, 'This email already has an application for the current graduation window.');
-            }
-
-            $applicationForStudentId = $studentUser
-                ? $studentUser->applications()->where('window_id', $lockedDraft->window_id)->first()
-                : null;
-
-            if ($applicationForStudentId && strcasecmp((string) $studentUser->email, $lockedDraft->email) !== 0) {
-                abort(409, 'This student ID already has an application for the current graduation window.');
-            }
-
-            if ($emailUser && $studentUser && $emailUser->id !== $studentUser->id) {
-                abort(409, 'This email is already associated with a different student ID.');
-            }
-
-            $user = $studentUser ?: $emailUser;
-
-            if (! $user) {
-                $user = User::create([
-                    'student_id' => $lockedDraft->student_id,
-                    'name' => $workflow->buildUserName($payload, $lockedDraft->student_id),
-                    'email' => $lockedDraft->email,
-                    'password' => bin2hex(random_bytes(16)),
-                    'email_verified_at' => now(),
-                ]);
-            } else {
-                $updates = [
-                    'name' => $workflow->buildUserName($payload, $user->name ?: $lockedDraft->student_id),
-                ];
-
-                if (! $user->student_id) {
-                    $updates['student_id'] = $lockedDraft->student_id;
-                }
-
-                if (strcasecmp($user->email, $lockedDraft->email) !== 0) {
-                    $updates['email'] = $lockedDraft->email;
-                }
-
-                if (! $user->email_verified_at) {
-                    $updates['email_verified_at'] = now();
-                }
-
-                $user->forceFill($updates)->save();
-            }
-
-            $workflow->syncProfileForUser($user, $payload);
-
-            $application = $lockedDraft->application_id
-                ? Application::find($lockedDraft->application_id)
-                : $user->applications()->where('window_id', $lockedDraft->window_id)->first();
-
-            if (! $application) {
-                $application = $workflow->createApplicationForUser($user, $payload);
-            } else {
-                $workflow->updateApplicationForUser($application, $payload);
-            }
-
-            $lockedDraft->forceFill([
-                'verified_at' => $lockedDraft->verified_at ?? now(),
-                'user_id' => $user->id,
-                'application_id' => $application->id,
-            ])->save();
-
-            $lockedDraft->load('application');
-
-            return [$lockedDraft, true];
-        });
-    }
-
     private function ensureDraftAccess(Request $request, GuestApplicationDraft $draft): ?RedirectResponse
     {
         $currentDraftId = $request->session()->get(self::DRAFT_SESSION_KEY);
@@ -632,6 +525,8 @@ class GuestApplicationController extends Controller
         return [
             'id' => $draft->id,
             'email' => $draft->email,
+            'tracking_code' => $draft->ensureTrackingCode(),
+            'tracking_pin' => $draft->ensureTrackingPin(),
             'verified_at' => $draft->verified_at?->toIso8601String(),
             'access_url' => $application ? $this->guestAccessUrl($draft) : null,
         ];

@@ -10,10 +10,18 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useClipboard } from '@/hooks/use-clipboard';
 import ApplyLayout from '@/layouts/apply-layout';
 import applyRoutes from '@/routes/apply';
 import { Head, router, useForm } from '@inertiajs/react';
-import { CheckCircle2, Clock3, Mail, RefreshCcw } from 'lucide-react';
+import {
+    CheckCircle2,
+    Clock3,
+    Copy,
+    KeyRound,
+    Mail,
+    RefreshCcw,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 const GUEST_VERIFICATION_EVENT_KEY = 'guest_application_verified';
@@ -30,6 +38,8 @@ interface PendingDraftProps {
     draft: {
         id: number;
         email: string;
+        tracking_code: string;
+        tracking_pin: string;
         verified_at: string | null;
         access_url: string | null;
     };
@@ -43,10 +53,15 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
     const [isRedirecting, setIsRedirecting] = useState(false);
     const [showEmailForm, setShowEmailForm] = useState(false);
     const [resendCooldown, setResendCooldown] = useState(0);
+    const [copiedText, copy] = useClipboard();
     const wasVerifiedRef = useRef(!!draft.verified_at);
 
     const isVerified = !!draft.verified_at;
     const resendCooldownStorageKey = `guest-application-resend:${draft.id}`;
+    const trackingDetails = [
+        { label: 'Tracking code', value: draft.tracking_code },
+        { label: 'Tracking PIN', value: draft.tracking_pin },
+    ];
 
     const continueToPortal = (accessUrl?: string | null) => {
         if (!accessUrl || isRedirecting) {
@@ -194,6 +209,54 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
                                 </p>
                             </div>
                         )}
+
+                        <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+                            <div className="flex items-start gap-3">
+                                <KeyRound className="mt-0.5 h-5 w-5 text-emerald-600 dark:text-emerald-300" />
+                                <div>
+                                    <h3 className="text-base font-semibold">
+                                        Tracking details
+                                    </h3>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Use these details to track this draft
+                                        even before email verification.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                {trackingDetails.map((detail) => (
+                                    <div
+                                        key={detail.label}
+                                        className="rounded-lg border bg-background/80 p-3"
+                                    >
+                                        <p className="text-xs font-medium text-muted-foreground">
+                                            {detail.label}
+                                        </p>
+                                        <div className="mt-2 flex items-center justify-between gap-3">
+                                            <code className="text-sm font-semibold break-all">
+                                                {detail.value}
+                                            </code>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8 shrink-0"
+                                                aria-label={`Copy ${detail.label}`}
+                                                onClick={() =>
+                                                    void copy(detail.value)
+                                                }
+                                            >
+                                                {copiedText === detail.value ? (
+                                                    <CheckCircle2 className="h-4 w-4" />
+                                                ) : (
+                                                    <Copy className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
 
                         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-50">
                             <Clock3 className="h-4 w-4" />

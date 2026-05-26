@@ -4,10 +4,12 @@ namespace App\Support;
 
 use App\Models\Application;
 use App\Models\ApplicationRequirement;
+use App\Models\GuestApplicationDraft;
 use App\Models\User;
 use App\Notifications\RequirementFileUploaded;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -52,6 +54,114 @@ class ApplicationWorkflowService
         'grad_masteral_school', 'grad_masteral_year',
         'grad_doctoral_school', 'grad_doctoral_year',
     ];
+
+    /**
+     * @return array{0: GuestApplicationDraft, 1: bool}
+     */
+    public function finalizeGuestDraft(GuestApplicationDraft $draft): array
+    {
+        return DB::transaction(function () use ($draft) {
+            $lockedDraft = GuestApplicationDraft::query()
+                ->whereKey($draft->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedDraft->hasBeenVerified()) {
+                $lockedDraft->load('application');
+
+                return [$lockedDraft, false];
+            }
+
+            $payload = $lockedDraft->payload ?? [];
+            $payload['window_id'] = $lockedDraft->window_id;
+
+            $emailUser = User::query()
+                ->whereRaw('lower(email) = ?', [$lockedDraft->email])
+                ->lockForUpdate()
+                ->first();
+
+            $studentUser = User::query()
+                ->where('student_id', $lockedDraft->student_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($emailUser && $emailUser->student_id && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
+                abort(409, 'This email is already associated with a different student ID.');
+            }
+
+            $applicationForEmail = $emailUser
+                ? $emailUser->applications()->where('window_id', $lockedDraft->window_id)->first()
+                : null;
+
+            if ($applicationForEmail && strcasecmp((string) $emailUser->student_id, $lockedDraft->student_id) !== 0) {
+                abort(409, 'This email already has an application for the current graduation window.');
+            }
+
+            $applicationForStudentId = $studentUser
+                ? $studentUser->applications()->where('window_id', $lockedDraft->window_id)->first()
+                : null;
+
+            if ($applicationForStudentId && strcasecmp((string) $studentUser->email, $lockedDraft->email) !== 0) {
+                abort(409, 'This student ID already has an application for the current graduation window.');
+            }
+
+            if ($emailUser && $studentUser && $emailUser->id !== $studentUser->id) {
+                abort(409, 'This email is already associated with a different student ID.');
+            }
+
+            $user = $studentUser ?: $emailUser;
+
+            if (! $user) {
+                $user = User::create([
+                    'student_id' => $lockedDraft->student_id,
+                    'name' => $this->buildUserName($payload, $lockedDraft->student_id),
+                    'email' => $lockedDraft->email,
+                    'password' => bin2hex(random_bytes(16)),
+                    'email_verified_at' => now(),
+                ]);
+            } else {
+                $updates = [
+                    'name' => $this->buildUserName($payload, $user->name ?: $lockedDraft->student_id),
+                ];
+
+                if (! $user->student_id) {
+                    $updates['student_id'] = $lockedDraft->student_id;
+                }
+
+                if (strcasecmp($user->email, $lockedDraft->email) !== 0) {
+                    $updates['email'] = $lockedDraft->email;
+                }
+
+                if (! $user->email_verified_at) {
+                    $updates['email_verified_at'] = now();
+                }
+
+                $user->forceFill($updates)->save();
+            }
+
+            $this->syncProfileForUser($user, $payload);
+
+            $application = $lockedDraft->application_id
+                ? Application::find($lockedDraft->application_id)
+                : $user->applications()->where('window_id', $lockedDraft->window_id)->first();
+
+            if (! $application) {
+                $application = $this->createApplicationForUser($user, $payload);
+            } else {
+                $this->updateApplicationForUser($application, $payload);
+            }
+
+            $lockedDraft->forceFill([
+                'verified_at' => $lockedDraft->verified_at ?? now(),
+                'user_id' => $user->id,
+                'application_id' => $application->id,
+            ])->save();
+
+            $lockedDraft->load('application');
+
+            return [$lockedDraft, true];
+        });
+    }
 
     public function createApplicationForUser(User $user, array $applicationData, ?UploadedFile $photo = null): Application
     {

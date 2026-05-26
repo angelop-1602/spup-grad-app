@@ -30,6 +30,7 @@ Route::prefix('developer')->name('developer.')->group(function () {
 
         Route::middleware(EnsureDeveloperDiagnosticsAccess::class)->group(function () {
             Route::get('dashboard', [DeveloperDashboardController::class, 'index'])->name('dashboard');
+            Route::post('drafts/{draft}/verify', [DeveloperDashboardController::class, 'verifyDraft'])->name('drafts.verify');
             Route::get('events/export', [DeveloperDashboardController::class, 'exportEvents'])->name('events.export');
             Route::get('metrics/export', [DeveloperDashboardController::class, 'exportMetrics'])->name('metrics.export');
         });

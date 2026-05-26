@@ -1,5 +1,6 @@
 <?php
 
+use App\Exports\WindowApplicationsExport;
 use App\Models\Application;
 use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
@@ -7,19 +8,18 @@ use App\Models\Course;
 use App\Models\Department;
 use App\Models\GuestApplicationDraft;
 use App\Models\User;
-use App\Exports\WindowApplicationsExport;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use App\Support\GraduateExportData;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
-use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\Excel as ExcelFormat;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
+use Maatwebsite\Excel\Excel as ExcelFormat;
+use Maatwebsite\Excel\Facades\Excel;
 
 beforeEach(function () {
     Storage::disk('local')->deleteDirectory('application-pdf-cache');
@@ -129,7 +129,7 @@ function guestApplicationDocxXml(Application $application): string
     $method->setAccessible(true);
 
     $docx = $method->invoke(null, $application);
-    $zip = new ZipArchive();
+    $zip = new ZipArchive;
 
     try {
         $zip->open($docx['path']);
@@ -481,6 +481,8 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/verified')
             ->where('draft.id', $draft->id)
+            ->where('draft.tracking_code', $draft->tracking_code)
+            ->where('draft.tracking_pin', $draft->tracking_pin)
             ->where('alreadyVerified', false)
             ->where('draft.access_url', fn (string $url) => str_contains($url, "/apply/access/{$draft->id}"))
         );
@@ -494,6 +496,8 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/pending')
+            ->where('draft.tracking_code', $draft->tracking_code)
+            ->where('draft.tracking_pin', $draft->tracking_pin)
             ->where('draft.verified_at', fn (?string $verifiedAt) => $verifiedAt !== null)
             ->where('draft.access_url', fn (string $url) => str_contains($url, "/apply/access/{$draft->id}"))
         );
@@ -803,6 +807,8 @@ test('public tracking lookup redirects to the guest status page when tracking co
         ->assertInertia(fn (Assert $page) => $page
             ->component('apply/pending')
             ->where('draft.email', $draft->email)
+            ->where('draft.tracking_code', $draft->tracking_code)
+            ->where('draft.tracking_pin', $draft->tracking_pin)
             ->where('draft.verified_at', null)
         );
 });

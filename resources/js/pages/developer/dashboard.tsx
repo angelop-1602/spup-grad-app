@@ -13,6 +13,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     AlertTriangle,
+    CheckCircle2,
     Download,
     LogOut,
     RefreshCw,
@@ -57,6 +58,19 @@ type ApplicationWindowOption = {
     applications_count: number;
 };
 
+type ManualVerificationDraft = {
+    id: number;
+    applicant_name: string;
+    email: string;
+    student_id: string;
+    tracking_code: string;
+    tracking_pin: string;
+    window_title: string;
+    application_number: string | null;
+    created_at: string | null;
+    verified_at: string | null;
+};
+
 type DashboardProps = {
     healthCards: HealthCard[];
     applicationMetrics: Record<string, string | number>;
@@ -64,6 +78,7 @@ type DashboardProps = {
     applicationWindows: ApplicationWindowOption[];
     currentWindow: ApplicationWindowOption | null;
     selectedWindowId: number | null;
+    manualVerificationDrafts: ManualVerificationDraft[];
     eventFilters: {
         modules: string[];
         actions: string[];
@@ -81,10 +96,8 @@ const statusClass: Record<string, string> = {
     ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     warning:
         'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-    critical:
-        'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
-    unknown:
-        'border-muted-foreground/30 bg-muted text-muted-foreground',
+    critical: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+    unknown: 'border-muted-foreground/30 bg-muted text-muted-foreground',
     success:
         'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     failed: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
@@ -92,7 +105,9 @@ const statusClass: Record<string, string> = {
     error: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
 };
 
-function cleanFilters(filters: Record<string, string | null>): Record<string, string> {
+function cleanFilters(
+    filters: Record<string, string | null>,
+): Record<string, string> {
     return Object.fromEntries(
         Object.entries(filters).filter(
             ([key, value]) => value && (value !== 'all' || key === 'window_id'),
@@ -119,6 +134,7 @@ export default function DeveloperDashboard({
     applicationWindows,
     currentWindow,
     selectedWindowId,
+    manualVerificationDrafts,
     eventFilters,
     events,
     recentLogLines,
@@ -144,6 +160,12 @@ export default function DeveloperDashboard({
                 (selectedWindowId ? String(selectedWindowId) : 'all'),
         },
     );
+    const [manualVerifyingId, setManualVerifyingId] = useState<number | null>(
+        null,
+    );
+    const [manualVerificationMessage, setManualVerificationMessage] = useState<
+        string | null
+    >(null);
 
     const queryString = useMemo(
         () => new URLSearchParams(cleanFilters(filterData)).toString(),
@@ -163,6 +185,30 @@ export default function DeveloperDashboard({
             preserveScroll: true,
             preserveState: true,
         });
+    };
+
+    const manuallyVerifyDraft = (draft: ManualVerificationDraft) => {
+        setManualVerifyingId(draft.id);
+        setManualVerificationMessage(null);
+
+        router.post(
+            `/developer/drafts/${draft.id}/verify`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setManualVerificationMessage(
+                        `${draft.applicant_name} has been manually verified.`,
+                    );
+                },
+                onError: () => {
+                    setManualVerificationMessage(
+                        'Manual verification did not complete.',
+                    );
+                },
+                onFinish: () => setManualVerifyingId(null),
+            },
+        );
     };
 
     return (
@@ -319,6 +365,122 @@ export default function DeveloperDashboard({
                                 </div>
                             ),
                         )}
+                    </div>
+                </section>
+
+                <section className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">
+                                Manual Verification
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                {manualVerificationDrafts.length} drafts waiting
+                                for email verification
+                            </p>
+                        </div>
+                    </div>
+
+                    {manualVerificationMessage && (
+                        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                            {manualVerificationMessage}
+                        </div>
+                    )}
+
+                    <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full min-w-[980px] text-sm">
+                            <thead className="bg-muted/60 text-left">
+                                <tr>
+                                    <th className="px-3 py-2 font-medium">
+                                        Applicant
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Window
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Tracking Code
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        PIN
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Created
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Action
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {manualVerificationDrafts.map((draft) => (
+                                    <tr
+                                        key={draft.id}
+                                        className="border-t align-top"
+                                    >
+                                        <td className="px-3 py-3">
+                                            <p className="font-medium">
+                                                {draft.applicant_name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {draft.email}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {draft.student_id}
+                                            </p>
+                                        </td>
+                                        <td className="px-3 py-3 text-muted-foreground">
+                                            {draft.window_title}
+                                        </td>
+                                        <td className="px-3 py-3">
+                                            <code className="rounded bg-muted px-2 py-1 text-xs font-semibold">
+                                                {draft.tracking_code}
+                                            </code>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                            <code className="rounded bg-muted px-2 py-1 text-xs font-semibold">
+                                                {draft.tracking_pin}
+                                            </code>
+                                        </td>
+                                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                                            {draft.created_at
+                                                ? new Date(
+                                                      draft.created_at,
+                                                  ).toLocaleString()
+                                                : '-'}
+                                        </td>
+                                        <td className="px-3 py-3">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={() =>
+                                                    manuallyVerifyDraft(draft)
+                                                }
+                                                disabled={
+                                                    manualVerifyingId ===
+                                                    draft.id
+                                                }
+                                            >
+                                                <CheckCircle2 className="size-4" />
+                                                {manualVerifyingId === draft.id
+                                                    ? 'Verifying...'
+                                                    : 'Verify manually'}
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {manualVerificationDrafts.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={6}
+                                            className="px-3 py-8 text-center text-muted-foreground"
+                                        >
+                                            No drafts are waiting for manual
+                                            verification.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
@@ -573,7 +735,9 @@ export default function DeveloperDashboard({
                                             </p>
                                         </td>
                                         <td className="px-3 py-3">
-                                            <p>{event.actor_label ?? 'System'}</p>
+                                            <p>
+                                                {event.actor_label ?? 'System'}
+                                            </p>
                                             <p className="text-xs text-muted-foreground">
                                                 {event.actor_guard ?? 'system'}
                                             </p>
@@ -673,7 +837,8 @@ export default function DeveloperDashboard({
                     ) : (
                         <div className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                             <Activity className="size-4" />
-                            No recent warning, error, or critical log lines were found.
+                            No recent warning, error, or critical log lines were
+                            found.
                         </div>
                     )}
                 </section>

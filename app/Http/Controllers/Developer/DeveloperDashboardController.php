@@ -3,7 +3,13 @@
 namespace App\Http\Controllers\Developer;
 
 use App\Http\Controllers\Controller;
+use App\Models\GuestApplicationDraft;
+use App\Models\SystemHealthCheck;
+use App\Notifications\GuestApplicationAccessNotification;
+use App\Support\ApplicationWorkflowService;
 use App\Support\DeveloperDiagnosticsService;
+use App\Support\SystemEventLogger;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -66,6 +72,47 @@ class DeveloperDashboardController extends Controller
         ]);
     }
 
+    public function verifyDraft(GuestApplicationDraft $draft, ApplicationWorkflowService $workflow): RedirectResponse
+    {
+        [$draft, $newlyFinalized] = $workflow->finalizeGuestDraft($draft);
+
+        $draft->loadMissing('application');
+
+        if (! $newlyFinalized) {
+            app(SystemEventLogger::class)->log(
+                module: 'graduation_application',
+                action: 'developer.draft.manual_verify.skipped',
+                message: 'Developer manual verification skipped because the draft was already verified.',
+                subject: $draft->application ?? $draft,
+                meta: [
+                    'draft_id' => $draft->id,
+                    'tracking_code' => $draft->ensureTrackingCode(),
+                ],
+            );
+
+            return back()->with('info', 'This draft was already verified.');
+        }
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'developer.draft.manually_verified',
+            message: 'Developer manually verified a guest application draft.',
+            subject: $draft->application ?? $draft,
+            meta: [
+                'draft_id' => $draft->id,
+                'tracking_code' => $draft->ensureTrackingCode(),
+            ],
+        );
+
+        $emailSent = $this->sendManualVerificationAccessEmail($draft);
+
+        if (! $emailSent) {
+            return back()->with('warning', 'Draft manually verified, but the access email could not be sent.');
+        }
+
+        return back()->with('success', 'Draft manually verified and an access email was sent.');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -84,5 +131,47 @@ class DeveloperDashboardController extends Controller
             'to',
             'window_id',
         ]);
+    }
+
+    private function sendManualVerificationAccessEmail(GuestApplicationDraft $draft): bool
+    {
+        $notification = new GuestApplicationAccessNotification($draft);
+        $mailMeta = [
+            'notification' => $notification::class,
+            'mailer' => config('mail.default'),
+            'delivery_mode' => is_subclass_of($notification::class, \Illuminate\Contracts\Queue\ShouldQueue::class)
+                ? 'queued'
+                : 'sync',
+        ];
+
+        try {
+            $draft->notify($notification);
+            SystemHealthCheck::record('mail', 'ok', 'Developer manual verification access email sent.', $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'developer.manual_verification.access_sent',
+                message: 'Developer manual verification access email sent.',
+                subject: $draft,
+                meta: $mailMeta,
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'developer.manual_verification.access_sent',
+                message: 'Developer manual verification access email failed.',
+                status: 'failed',
+                severity: 'error',
+                subject: $draft,
+                meta: [
+                    ...$mailMeta,
+                    'error' => $e->getMessage(),
+                ],
+            );
+
+            return false;
+        }
     }
 }

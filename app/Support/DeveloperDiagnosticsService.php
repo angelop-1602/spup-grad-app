@@ -5,9 +5,9 @@ namespace App\Support;
 use App\Models\Application;
 use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
+use App\Models\GuestApplicationDraft;
 use App\Models\SystemEvent;
 use App\Models\SystemHealthCheck;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -34,6 +34,7 @@ class DeveloperDiagnosticsService
             'applicationWindows' => $this->applicationWindowOptions(),
             'currentWindow' => $this->windowPayload(ApplicationWindow::current()),
             'selectedWindowId' => $selectedWindowId,
+            'manualVerificationDrafts' => $this->manualVerificationDrafts($selectedWindowId),
             'eventFilters' => $this->filterOptions(),
             'events' => $this->eventsQuery($resolvedFilters)->paginate(25)->withQueryString(),
             'recentLogLines' => $this->recentLogLines(),
@@ -159,6 +160,52 @@ class DeveloperDiagnosticsService
         }
 
         return ApplicationWindow::query()->whereKey($windowId)->value('title') ?? 'Selected Application Window';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function manualVerificationDrafts(?int $windowId): array
+    {
+        return GuestApplicationDraft::query()
+            ->with(['window:id,title', 'application:id,application_number'])
+            ->when($windowId, fn (Builder $query) => $query->where('window_id', $windowId))
+            ->where(function (Builder $query) {
+                $query->whereNull('verified_at')
+                    ->orWhereNull('application_id');
+            })
+            ->latest('created_at')
+            ->limit(25)
+            ->get()
+            ->map(fn (GuestApplicationDraft $draft) => [
+                'id' => $draft->id,
+                'applicant_name' => $this->draftApplicantName($draft->payload ?? []),
+                'email' => $draft->email,
+                'student_id' => $draft->student_id,
+                'tracking_code' => $draft->ensureTrackingCode(),
+                'tracking_pin' => $draft->ensureTrackingPin(),
+                'window_title' => $draft->window?->title ?? 'Unavailable',
+                'application_number' => $draft->application?->application_number,
+                'created_at' => $draft->created_at?->toIso8601String(),
+                'verified_at' => $draft->verified_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function draftApplicantName(array $payload): string
+    {
+        $name = trim(implode(' ', array_filter([
+            $payload['first_name'] ?? null,
+            $payload['middle_name'] ?? null,
+            $payload['last_name'] ?? null,
+            $payload['suffix'] ?? null,
+        ])));
+
+        return $name !== '' ? $name : 'Guest Applicant';
     }
 
     /**

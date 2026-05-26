@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Admin;
+use App\Models\Application;
 use App\Models\ApplicationWindow;
 use App\Models\Coordinator;
 use App\Models\Course;
@@ -9,6 +10,7 @@ use App\Models\Developer;
 use App\Models\GuestApplicationDraft;
 use App\Models\SystemEvent;
 use App\Models\User;
+use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\SystemEventLogger;
 use Database\Seeders\DeveloperSeeder;
 use Illuminate\Support\Facades\Hash;
@@ -30,7 +32,7 @@ function diagnosticsConfirmedDeveloper(array $overrides = []): array
         'two_factor_confirmed_at' => now(),
     ], $overrides));
 
-    return [$developer, (new Google2FA())->getCurrentOtp($secret)];
+    return [$developer, (new Google2FA)->getCurrentOtp($secret)];
 }
 
 function diagnosticsGuestCatalog(): array
@@ -181,7 +183,7 @@ test('developer can confirm first time two factor setup', function () {
         );
 
     $developer->refresh();
-    $code = (new Google2FA())->getCurrentOtp(Fortify::currentEncrypter()->decrypt($developer->two_factor_secret));
+    $code = (new Google2FA)->getCurrentOtp(Fortify::currentEncrypter()->decrypt($developer->two_factor_secret));
 
     $this->post(route('developer.two-factor.confirm'), ['code' => $code])
         ->assertRedirect(route('developer.dashboard', absolute: false));
@@ -274,6 +276,55 @@ test('developer application metrics default to active window and can switch wind
             ->where('selectedWindowId', $endedWindow->id)
             ->where('applicationMetrics.totalApplications', 1)
             ->where('applicationMetricsScope', $endedWindow->title)
+        );
+});
+
+test('developer can see tracking details and manually verify a guest draft', function () {
+    Notification::fake();
+
+    [$developer] = diagnosticsConfirmedDeveloper();
+    [$window, $department, $course] = diagnosticsGuestCatalog();
+
+    $this->post(route('apply.store'), diagnosticsGuestPayload($window, $department, $course));
+
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('manualVerificationDrafts', 1)
+            ->where('manualVerificationDrafts.0.id', $draft->id)
+            ->where('manualVerificationDrafts.0.tracking_code', $draft->tracking_code)
+            ->where('manualVerificationDrafts.0.tracking_pin', $draft->tracking_pin)
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->post(route('developer.drafts.verify', $draft))
+        ->assertRedirect();
+
+    $draft->refresh();
+
+    expect($draft->verified_at)->not->toBeNull()
+        ->and($draft->application_id)->not->toBeNull()
+        ->and(Application::count())->toBe(1);
+
+    Notification::assertSentTo($draft->fresh(), GuestApplicationAccessNotification::class);
+
+    $this->assertDatabaseHas('system_events', [
+        'module' => 'graduation_application',
+        'action' => 'developer.draft.manually_verified',
+        'actor_guard' => 'developer',
+    ]);
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('manualVerificationDrafts', 0)
         );
 });
 
