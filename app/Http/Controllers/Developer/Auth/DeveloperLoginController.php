@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Developer\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Developer;
+use App\Support\RoleSessionManager;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,7 @@ class DeveloperLoginController extends Controller
 
         Auth::guard('developer')->login($developer, (bool) ($credentials['remember'] ?? false));
         $request->session()->regenerate();
+        app(RoleSessionManager::class)->keepOnlyGuard('developer', $request);
         $request->session()->forget('developer.two_factor_passed');
 
         if (! $developer->hasEnabledTwoFactorAuthentication()) {

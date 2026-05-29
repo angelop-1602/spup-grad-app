@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\NotificationCenter;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -49,66 +50,13 @@ class HandleInertiaRequests extends Middleware
             $user->load('profile');
         }
 
-        // Get notifications for admin or coordinator
-        $notifications = collect();
-        $unreadNotificationCount = 0;
+        $notificationPayload = [
+            'notifications' => collect(),
+            'unreadNotificationCount' => 0,
+        ];
 
-        if ($admin) {
-            // Get all unread notifications to count per application
-            $allUnreadNotifications = $admin->unreadNotifications()
-                ->where('type', 'App\Notifications\RequirementFileUploaded')
-                ->get();
-
-            // Count notifications per application
-            $countsByApplication = $allUnreadNotifications->groupBy(function ($notification) {
-                return $notification->data['application_number'] ?? '';
-            })->map->count();
-
-            $notifications = $allUnreadNotifications
-                ->sortByDesc('created_at')
-                ->map(function ($notification) use ($countsByApplication) {
-                    $data = $notification->data;
-                    $applicationNumber = $data['application_number'] ?? '';
-
-                    return [
-                        'id' => $notification->id,
-                        'student_name' => $data['student_name'] ?? 'Unknown',
-                        'student_avatar' => $data['student_avatar'] ?? null,
-                        'requirement_label' => $data['requirement_label'] ?? 'Requirement',
-                        'application_number' => $applicationNumber,
-                        'upload_count' => $countsByApplication[$applicationNumber] ?? 1,
-                        'created_at' => $notification->created_at->toIso8601String(),
-                    ];
-                });
-            $unreadNotificationCount = $allUnreadNotifications->count();
-        } elseif ($coordinator) {
-            // Get all unread notifications to count per application
-            $allUnreadNotifications = $coordinator->unreadNotifications()
-                ->where('type', 'App\Notifications\RequirementFileUploaded')
-                ->get();
-
-            // Count notifications per application
-            $countsByApplication = $allUnreadNotifications->groupBy(function ($notification) {
-                return $notification->data['application_number'] ?? '';
-            })->map->count();
-
-            $notifications = $allUnreadNotifications
-                ->sortByDesc('created_at')
-                ->map(function ($notification) use ($countsByApplication) {
-                    $data = $notification->data;
-                    $applicationNumber = $data['application_number'] ?? '';
-
-                    return [
-                        'id' => $notification->id,
-                        'student_name' => $data['student_name'] ?? 'Unknown',
-                        'student_avatar' => $data['student_avatar'] ?? null,
-                        'requirement_label' => $data['requirement_label'] ?? 'Requirement',
-                        'application_number' => $applicationNumber,
-                        'upload_count' => $countsByApplication[$applicationNumber] ?? 1,
-                        'created_at' => $notification->created_at->toIso8601String(),
-                    ];
-                });
-            $unreadNotificationCount = $allUnreadNotifications->count();
+        if ($admin || $coordinator) {
+            $notificationPayload = app(NotificationCenter::class)->payloadFor($admin ?? $coordinator);
         }
 
         return [
@@ -122,8 +70,8 @@ class HandleInertiaRequests extends Middleware
                 'coordinator' => $coordinator,
                 'developer' => $developer,
             ],
-            'notifications' => $notifications,
-            'unreadNotificationCount' => $unreadNotificationCount,
+            'notifications' => $notificationPayload['notifications'],
+            'unreadNotificationCount' => $notificationPayload['unreadNotificationCount'],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

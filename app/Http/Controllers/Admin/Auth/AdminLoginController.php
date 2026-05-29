@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Support\RoleSessionManager;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,7 @@ class AdminLoginController extends Controller
         }
 
         $request->session()->regenerate();
+        app(RoleSessionManager::class)->keepOnlyGuard('admin', $request);
         $logger->log(
             module: 'security',
             action: 'admin.login.success',

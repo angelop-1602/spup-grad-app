@@ -6,6 +6,7 @@ import { AlertCircle, ArrowRight, Clock, Info } from 'lucide-react';
 
 import AppLogoIcon from '@/components/app-logo-icon';
 import InputError from '@/components/input-error';
+import ReportIssueButton from '@/components/report-issue-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1029,9 +1030,9 @@ export default function Welcome({
                     </div>
                 </div>
 
-                <div className="group fixed right-3 bottom-3 z-30 sm:right-5 sm:bottom-5">
+                <div className="group fixed bottom-3 left-3 z-30 sm:bottom-5 sm:left-5">
                     <div
-                        className={`absolute right-0 bottom-8 w-56 rounded-lg bg-black/25 p-3 text-xs text-white shadow-[0_12px_32px_rgba(0,0,0,0.22)] ring-1 ring-white/10 backdrop-blur-xl transition duration-200 ${
+                        className={`absolute bottom-8 left-0 w-56 rounded-lg bg-black/25 p-3 text-xs text-white shadow-[0_12px_32px_rgba(0,0,0,0.22)] ring-1 ring-white/10 backdrop-blur-xl transition duration-200 ${
                             isDeveloperInfoOpen
                                 ? 'pointer-events-auto translate-y-0 opacity-100'
                                 : 'pointer-events-none translate-y-1 opacity-0 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'
@@ -1063,6 +1064,7 @@ export default function Welcome({
                     </button>
                 </div>
             </div>
+            <ReportIssueButton />
         </>
     );
 }

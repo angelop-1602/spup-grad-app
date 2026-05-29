@@ -3,11 +3,9 @@
 namespace App\Notifications;
 
 use App\Models\GuestApplicationDraft;
+use App\Support\VerificationLinks;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\URL;
 
 class GuestApplicationVerificationNotification extends Notification
 {
@@ -33,9 +31,8 @@ class GuestApplicationVerificationNotification extends Notification
         $trackingPin = $this->draft->ensureTrackingPin();
         $windowTitle = $this->draft->window?->title ?? 'Unavailable';
         $applicationNumber = $this->draft->application?->application_number ?? 'Will be assigned after verification';
-        $url = URL::temporarySignedRoute(
+        $url = VerificationLinks::temporarySignedRoute(
             'apply.verify',
-            Carbon::now()->addMinutes(Config::get('auth.verification.expire', 60)),
             [
                 'draft' => $this->draft->getKey(),
                 'hash' => sha1($this->draft->email),
@@ -54,6 +51,7 @@ class GuestApplicationVerificationNotification extends Notification
             ->line("Application number: {$applicationNumber}")
             ->line('Verify your email to finalize the application and make it visible to the graduation office.')
             ->action('Verify email and submit application', $url)
+            ->line('For security, this verification link expires in '.VerificationLinks::expirationLabel().'. If it expires, use the tracking details above to request a fresh link.')
             ->line('Keep both the tracking code and PIN for future status checks and portal access recovery.')
             ->line('If you entered the wrong email, return to the application status page to correct it before verifying.');
     }

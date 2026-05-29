@@ -1,4 +1,4 @@
-import coordinatorRoutes from '@/routes/coordinator';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -8,25 +8,29 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/react';
-import { type SharedData } from '@/types';
-import { Calendar, FileText, Search, Eye, MoreVertical } from 'lucide-react';
-import { useState } from 'react';
-import { formatName } from '@/utils/format-name';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AppLayout from '@/layouts/app-layout';
+import coordinatorRoutes from '@/routes/coordinator';
+import { type BreadcrumbItem } from '@/types';
+import { formatName } from '@/utils/format-name';
+import { Head, Link, router } from '@inertiajs/react';
+import {
+    AlertCircle,
+    Bell,
+    CheckCircle2,
+    Clock,
+    Eye,
+    FileText,
+    MoreVertical,
+    Search,
+} from 'lucide-react';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -41,6 +45,7 @@ interface Application {
     user: {
         id: number;
         student_id: string;
+        email?: string | null;
         profile: {
             first_name: string;
             last_name: string;
@@ -55,8 +60,34 @@ interface Application {
         id: number;
         name: string;
     };
-    major: string;
+    major: string | null;
     status: string;
+    created_at: string;
+}
+
+interface Applicant {
+    id: number;
+    application_number: string;
+    student_name: string;
+    student_id: string | null;
+    email: string | null;
+    department_name: string | null;
+    course_name: string | null;
+    major: string | null;
+    status: string;
+    window_title: string | null;
+    submitted_at: string | null;
+    show_url: string;
+}
+
+interface Notification {
+    id: string;
+    student_name: string;
+    student_id: string;
+    requirement_label: string;
+    application_number: string;
+    upload_count?: number;
+    course_name: string;
     created_at: string;
 }
 
@@ -84,8 +115,19 @@ interface CoordinatorDashboardProps {
         pending: Application[];
         approved: Application[];
         revision: Application[];
-        rejected: Application[]; // Kept for backward compatibility but will always be empty
+        rejected: Application[];
     };
+    dashboardStats: {
+        total: number;
+        pending: number;
+        approved: number;
+        incomplete: number;
+        new_today: number;
+        new_this_week: number;
+        assigned_departments: number;
+    };
+    newApplicants: Applicant[];
+    notifications: Notification[];
     search: string;
     coordinator: Coordinator;
 }
@@ -93,6 +135,9 @@ interface CoordinatorDashboardProps {
 export default function CoordinatorDashboard({
     currentWindow,
     applications,
+    dashboardStats,
+    newApplicants,
+    notifications,
     search: initialSearch,
     coordinator,
 }: CoordinatorDashboardProps) {
@@ -105,15 +150,57 @@ export default function CoordinatorDashboard({
         });
     };
 
+    const formatTimeAgo = (date: string | null) => {
+        if (!date) {
+            return 'Unknown';
+        }
+
+        const now = new Date();
+        const then = new Date(date);
+        const diffInSeconds = Math.floor(
+            (now.getTime() - then.getTime()) / 1000,
+        );
+
+        if (diffInSeconds < 60) {
+            return 'Just now';
+        }
+
+        const diffInMinutes = Math.floor(diffInSeconds / 60);
+        if (diffInMinutes < 60) {
+            return `${diffInMinutes}m ago`;
+        }
+
+        const diffInHours = Math.floor(diffInMinutes / 60);
+        if (diffInHours < 24) {
+            return `${diffInHours}h ago`;
+        }
+
+        const diffInDays = Math.floor(diffInHours / 24);
+        if (diffInDays < 7) {
+            return `${diffInDays}d ago`;
+        }
+
+        return then.toLocaleDateString();
+    };
+
+    const statusBadge = (status: string) => {
+        if (status === 'approved') {
+            return <Badge variant="secondary">Approved</Badge>;
+        }
+
+        if (status === 'incomplete') {
+            return <Badge variant="outline">Incomplete</Badge>;
+        }
+
+        return (
+            <Badge>{status === 'submitted' ? 'Submitted' : 'Pending'}</Badge>
+        );
+    };
+
     const renderApplicationsTable = (apps: Application[]) => {
         if (apps.length === 0) {
             return (
-                <div className="py-8 text-center">
-                    <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        No applications found
-                    </p>
-                </div>
+                <EmptyState icon={FileText} message="No applications found" />
             );
         }
 
@@ -127,6 +214,9 @@ export default function CoordinatorDashboard({
                             </th>
                             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                 Course / Major
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                Status
                             </th>
                             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                 Submitted
@@ -146,13 +236,17 @@ export default function CoordinatorDashboard({
                                     <div className="flex flex-col">
                                         <span className="font-medium">
                                             {formatName(
-                                                application.user.profile?.first_name,
-                                                application.user.profile?.last_name,
-                                                application.user.profile?.middle_name,
+                                                application.user.profile
+                                                    ?.first_name,
+                                                application.user.profile
+                                                    ?.last_name,
+                                                application.user.profile
+                                                    ?.middle_name,
                                             )}
                                         </span>
                                         <span className="text-sm text-muted-foreground">
-                                            {application.user.student_id}
+                                            {application.user.student_id} -{' '}
+                                            {application.application_number}
                                         </span>
                                     </div>
                                 </td>
@@ -167,22 +261,33 @@ export default function CoordinatorDashboard({
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">
-                                    {new Date(application.created_at).toLocaleDateString()}
+                                    {statusBadge(application.status)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted-foreground">
+                                    {formatTimeAgo(application.created_at)}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                            >
                                                 <MoreVertical className="h-4 w-4" />
-                                                <span className="sr-only">Open menu</span>
+                                                <span className="sr-only">
+                                                    Open menu
+                                                </span>
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem asChild>
                                                 <Link
-                                                    href={coordinatorRoutes.applications.show(
-                                                        application.application_number,
-                                                    ).url}
+                                                    href={
+                                                        coordinatorRoutes.applications.show(
+                                                            application.application_number,
+                                                        ).url
+                                                    }
                                                 >
                                                     <Eye className="mr-2 h-4 w-4" />
                                                     View Details
@@ -203,17 +308,24 @@ export default function CoordinatorDashboard({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Coordinator Dashboard" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
-                {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Coordinator Dashboard</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Coordinator Dashboard
+                        </h1>
                         <p className="text-muted-foreground">
                             Welcome back, {coordinator.name}
                         </p>
                     </div>
+                    <div className="flex flex-wrap gap-2">
+                        {coordinator.departments.map((department) => (
+                            <Badge key={department.id} variant="outline">
+                                {department.name}
+                            </Badge>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Current Window Banner */}
                 {!currentWindow && (
                     <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
                         <CardHeader>
@@ -225,27 +337,170 @@ export default function CoordinatorDashboard({
                     </Card>
                 )}
 
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <MetricCard
+                        icon={FileText}
+                        label="Assigned Applications"
+                        value={dashboardStats.total}
+                        description={currentWindow?.title ?? 'All windows'}
+                    />
+                    <MetricCard
+                        icon={Clock}
+                        label="Needs Review"
+                        value={dashboardStats.pending}
+                        description="Submitted or pending"
+                    />
+                    <MetricCard
+                        icon={AlertCircle}
+                        label="Incomplete"
+                        value={dashboardStats.incomplete}
+                        description="Returned for corrections"
+                    />
+                    <MetricCard
+                        icon={CheckCircle2}
+                        label="Approved"
+                        value={dashboardStats.approved}
+                        description="Ready for final listing"
+                    />
+                </div>
 
-                {/* Applications with Tabs */}
+                <div className="grid gap-6 xl:grid-cols-2">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Newest Assigned Applicants</CardTitle>
+                            <CardDescription>
+                                Latest applicants from your departments
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {newApplicants.length > 0 ? (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b">
+                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                    Applicant
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                    Program
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                    Status
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                    Submitted
+                                                </th>
+                                                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
+                                                    Action
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {newApplicants.map((applicant) => (
+                                                <tr
+                                                    key={applicant.id}
+                                                    className="border-b transition-colors hover:bg-muted/50"
+                                                >
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-medium">
+                                                            {
+                                                                applicant.student_name
+                                                            }
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {
+                                                                applicant.student_id
+                                                            }{' '}
+                                                            -{' '}
+                                                            {
+                                                                applicant.application_number
+                                                            }
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <p className="text-sm">
+                                                            {applicant.course_name ??
+                                                                'No course'}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {applicant.department_name ??
+                                                                'No department'}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {statusBadge(
+                                                            applicant.status,
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                                                        {formatTimeAgo(
+                                                            applicant.submitted_at,
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <Button
+                                                            asChild
+                                                            variant="outline"
+                                                            size="sm"
+                                                        >
+                                                            <Link
+                                                                href={
+                                                                    applicant.show_url
+                                                                }
+                                                            >
+                                                                Open
+                                                            </Link>
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <EmptyState
+                                    icon={FileText}
+                                    message="No assigned applicants for the current scope."
+                                />
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <RecentRequirementUploads
+                        notifications={notifications}
+                        formatTimeAgo={formatTimeAgo}
+                    />
+                </div>
+
                 {currentWindow && (
                     <Card>
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div>
-                                    <CardTitle>Applications</CardTitle>
+                                    <CardTitle>Review Queue</CardTitle>
                                     <CardDescription>
-                                        Review applications from your assigned departments
+                                        Applications from your assigned
+                                        departments
                                     </CardDescription>
                                 </div>
-                                <form onSubmit={handleSearch} className="flex gap-2">
+                                <form
+                                    onSubmit={handleSearch}
+                                    className="flex w-full gap-2 lg:w-auto"
+                                >
                                     <Input
                                         type="text"
                                         placeholder="Search by name or student ID..."
                                         value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        className="w-64"
+                                        onChange={(e) =>
+                                            setSearch(e.target.value)
+                                        }
+                                        className="lg:w-72"
                                     />
-                                    <Button type="submit" variant="outline" size="sm">
+                                    <Button
+                                        type="submit"
+                                        variant="outline"
+                                        size="sm"
+                                    >
                                         <Search className="h-4 w-4" />
                                     </Button>
                                 </form>
@@ -258,23 +513,31 @@ export default function CoordinatorDashboard({
                                         Pending ({applications.pending.length})
                                     </TabsTrigger>
                                     <TabsTrigger value="approved">
-                                        Approved ({applications.approved.length})
+                                        Approved ({applications.approved.length}
+                                        )
                                     </TabsTrigger>
                                     <TabsTrigger value="revision">
-                                        Incomplete ({applications.revision.length})
+                                        Incomplete (
+                                        {applications.revision.length})
                                     </TabsTrigger>
                                 </TabsList>
 
                                 <TabsContent value="pending" className="mt-4">
-                                    {renderApplicationsTable(applications.pending)}
+                                    {renderApplicationsTable(
+                                        applications.pending,
+                                    )}
                                 </TabsContent>
 
                                 <TabsContent value="approved" className="mt-4">
-                                    {renderApplicationsTable(applications.approved)}
+                                    {renderApplicationsTable(
+                                        applications.approved,
+                                    )}
                                 </TabsContent>
 
                                 <TabsContent value="revision" className="mt-4">
-                                    {renderApplicationsTable(applications.revision)}
+                                    {renderApplicationsTable(
+                                        applications.revision,
+                                    )}
                                 </TabsContent>
                             </Tabs>
                         </CardContent>
@@ -282,5 +545,138 @@ export default function CoordinatorDashboard({
                 )}
             </div>
         </AppLayout>
+    );
+}
+
+function MetricCard({
+    icon: Icon,
+    label,
+    value,
+    description,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    value: number;
+    description: string;
+}) {
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{label}</CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-semibold">{value}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    {description}
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
+function RecentRequirementUploads({
+    notifications,
+    formatTimeAgo,
+}: {
+    notifications: Notification[];
+    formatTimeAgo: (date: string | null) => string;
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Recent Requirement Uploads</CardTitle>
+                <CardDescription>
+                    Unread document uploads from assigned applicants
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {notifications.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b">
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                        Student
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                        Requirement
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                        Uploaded
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {notifications
+                                    .slice(0, 8)
+                                    .map((notification) => (
+                                        <tr
+                                            key={notification.id}
+                                            className="border-b transition-colors hover:bg-muted/50"
+                                        >
+                                            <td className="px-4 py-3">
+                                                <p className="font-medium">
+                                                    {notification.student_name}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {notification.student_id} -{' '}
+                                                    {
+                                                        notification.application_number
+                                                    }
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="text-sm">
+                                                    {
+                                                        notification.requirement_label
+                                                    }
+                                                    {(notification.upload_count ??
+                                                        1) > 1 && (
+                                                        <span className="ml-2 text-xs text-muted-foreground">
+                                                            x
+                                                            {
+                                                                notification.upload_count
+                                                            }
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {notification.course_name}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                                                {formatTimeAgo(
+                                                    notification.created_at,
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <EmptyState
+                        icon={Bell}
+                        message="No unread requirement uploads."
+                    />
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function EmptyState({
+    icon: Icon,
+    message,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    message: string;
+}) {
+    return (
+        <div className="py-8 text-center">
+            <Icon className="mx-auto h-10 w-10 text-muted-foreground" />
+            <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        </div>
     );
 }

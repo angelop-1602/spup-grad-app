@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => env('APP_NAME', 'SPUP Graduation Application'),
 
     'version' => env('APP_VERSION', '2.2.3'),
 

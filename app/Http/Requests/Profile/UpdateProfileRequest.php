@@ -50,7 +50,7 @@ class UpdateProfileRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'suffix' => ['nullable', 'string', 'max:255'],
-            'date_of_birth' => ['required', 'date', 'before:today'],
+            'date_of_birth' => ['required', 'date_format:Y-m-d', 'before:today'],
             'place_of_birth' => ['required', 'string', 'max:255'],
             'sex' => ['required', 'string', Rule::in(['Male', 'Female', 'Prefer not to say'])],
             'civil_status' => ['required', 'string', 'max:255'],
@@ -190,6 +190,7 @@ class UpdateProfileRequest extends FormRequest
     {
         return [
             'contact_number.regex' => 'Contact number must be in international format (+[country code][number]) or local format (7-15 digits)',
+            'date_of_birth.date_format' => 'Date of birth must use YYYY-MM-DD format',
             'date_of_birth.before' => 'Date of birth must be before today',
         ];
     }

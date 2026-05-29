@@ -1,5 +1,6 @@
 import AuthLayoutTemplate from '@/layouts/auth/auth-simple-layout';
 import FlashToastHandler from '@/components/flash-toast-handler';
+import ReportIssueButton from '@/components/report-issue-button';
 
 export default function AuthLayout({
     children,
@@ -15,6 +16,7 @@ export default function AuthLayout({
         <AuthLayoutTemplate title={title} description={description} {...props}>
             <FlashToastHandler />
             {children}
+            <ReportIssueButton />
         </AuthLayoutTemplate>
     );
 }

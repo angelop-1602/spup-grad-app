@@ -33,9 +33,8 @@
         <title inertia>{{ config('app.name', 'Graduation Application') }}</title>
 
         {{-- Favicon & app icons --}}
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        {{-- Prefer PNG favicon to avoid the default Laravel SVG --}}
-        <link rel="icon" href="/favicon.png" type="image/png">
+        <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32">
+        <link rel="shortcut icon" href="/favicon.ico" sizes="any">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         <link rel="preconnect" href="https://fonts.bunny.net">

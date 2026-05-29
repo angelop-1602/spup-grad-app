@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureRoleAccess;
+use App\Http\Middleware\RedirectIfStaffAuthenticated;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -101,58 +103,51 @@ Route::get('storage/{path}', function (string $path) {
 // Public application window status (for welcome page countdown)
 Route::get('windows/current', [App\Http\Controllers\ApplicationWindowController::class, 'current'])->name('windows.current');
 
-// Email verification routes (public, no auth required)
-Route::get('/email/verify/{id}/{hash}', [App\Http\Controllers\Auth\EmailVerificationController::class, 'verify'])
-    ->middleware(['signed'])
-    ->name('email.verified');
-Route::post('/email/verification/continue', [App\Http\Controllers\Auth\EmailVerificationController::class, 'continue'])
-    ->name('email.verification.continue');
-Route::post('/email/verification/resend', [App\Http\Controllers\Auth\ResendVerificationEmailController::class, 'resend'])
-    ->middleware(['throttle:verification-resend'])
-    ->name('email.verification.resend');
-Route::post('/email/verification/change', [App\Http\Controllers\Auth\ChangeEmailController::class, 'change'])
-    ->name('email.verification.change');
+Route::post('/support/issues', [App\Http\Controllers\SupportIssueController::class, 'store'])
+    ->middleware([RedirectIfStaffAuthenticated::class, 'throttle:support-issues'])
+    ->name('support.issues.store');
 
 // Guest-first graduation application flow
-Route::get('/apply', [App\Http\Controllers\GuestApplicationController::class, 'index'])
-    ->name('apply.index');
-Route::post('/apply', [App\Http\Controllers\GuestApplicationController::class, 'store'])
-    ->name('apply.store');
-Route::post('/apply/track', [App\Http\Controllers\GuestApplicationController::class, 'track'])
-    ->middleware(['throttle:guest-application-track'])
-    ->name('apply.track');
-Route::post('/apply/track/recover', [App\Http\Controllers\GuestApplicationController::class, 'recoverTracking'])
-    ->middleware(['throttle:guest-application-track-recovery'])
-    ->name('apply.track.recover');
-Route::get('/apply/drafts/{draft}', [App\Http\Controllers\GuestApplicationController::class, 'pending'])
-    ->name('apply.pending.show');
-Route::post('/apply/drafts/{draft}/resend', [App\Http\Controllers\GuestApplicationController::class, 'resend'])
-    ->middleware(['throttle:guest-application-resend'])
-    ->name('apply.pending.resend');
-Route::post('/apply/drafts/{draft}/change-email', [App\Http\Controllers\GuestApplicationController::class, 'changeEmail'])
-    ->name('apply.pending.change-email');
-Route::get('/apply/verify/{draft}/{hash}', [App\Http\Controllers\GuestApplicationController::class, 'verify'])
-    ->middleware(['signed'])
-    ->name('apply.verify');
-Route::get('/apply/access/{draft}', [App\Http\Controllers\GuestApplicationController::class, 'access'])
-    ->middleware(['signed'])
-    ->name('apply.access');
-Route::middleware([App\Http\Middleware\EnsureGuestApplicationAccess::class])->group(function () {
-    Route::get('/apply/application/{application:application_number}', [App\Http\Controllers\GuestApplicationController::class, 'show'])
-        ->name('apply.portal.show');
-    Route::get('/apply/application/{application:application_number}/download', [App\Http\Controllers\GuestApplicationController::class, 'download'])
-        ->name('apply.portal.download');
-    Route::get('/apply/application/{application:application_number}/photo/download', [App\Http\Controllers\GuestApplicationController::class, 'downloadPhoto'])
-        ->name('apply.portal.photo.download');
-    Route::get('/apply/application/{application:application_number}/edit', [App\Http\Controllers\GuestApplicationController::class, 'edit'])
-        ->name('apply.portal.edit');
-    Route::put('/apply/application/{application:application_number}', [App\Http\Controllers\GuestApplicationController::class, 'update'])
-        ->name('apply.portal.update');
-    Route::post('/apply/application/{application:application_number}/requirements/{requirement}/upload', [App\Http\Controllers\GuestApplicationController::class, 'uploadRequirement'])
-        ->name('apply.portal.upload');
+Route::middleware(RedirectIfStaffAuthenticated::class)->group(function () {
+    Route::get('/apply', [App\Http\Controllers\GuestApplicationController::class, 'index'])
+        ->name('apply.index');
+    Route::post('/apply', [App\Http\Controllers\GuestApplicationController::class, 'store'])
+        ->name('apply.store');
+    Route::post('/apply/track', [App\Http\Controllers\GuestApplicationController::class, 'track'])
+        ->middleware(['throttle:guest-application-track'])
+        ->name('apply.track');
+    Route::post('/apply/track/recover', [App\Http\Controllers\GuestApplicationController::class, 'recoverTracking'])
+        ->middleware(['throttle:guest-application-track-recovery'])
+        ->name('apply.track.recover');
+    Route::get('/apply/drafts/{draft}', [App\Http\Controllers\GuestApplicationController::class, 'pending'])
+        ->name('apply.pending.show');
+    Route::post('/apply/drafts/{draft}/resend', [App\Http\Controllers\GuestApplicationController::class, 'resend'])
+        ->middleware(['throttle:guest-application-resend'])
+        ->name('apply.pending.resend');
+    Route::post('/apply/drafts/{draft}/change-email', [App\Http\Controllers\GuestApplicationController::class, 'changeEmail'])
+        ->name('apply.pending.change-email');
+    Route::get('/apply/verify/{draft}/{hash}', [App\Http\Controllers\GuestApplicationController::class, 'verify'])
+        ->name('apply.verify');
+    Route::get('/apply/access/{draft}', [App\Http\Controllers\GuestApplicationController::class, 'access'])
+        ->middleware(['signed'])
+        ->name('apply.access');
+    Route::middleware([App\Http\Middleware\EnsureGuestApplicationAccess::class])->group(function () {
+        Route::get('/apply/application/{application:application_number}', [App\Http\Controllers\GuestApplicationController::class, 'show'])
+            ->name('apply.portal.show');
+        Route::get('/apply/application/{application:application_number}/download', [App\Http\Controllers\GuestApplicationController::class, 'download'])
+            ->name('apply.portal.download');
+        Route::get('/apply/application/{application:application_number}/photo/download', [App\Http\Controllers\GuestApplicationController::class, 'downloadPhoto'])
+            ->name('apply.portal.photo.download');
+        Route::get('/apply/application/{application:application_number}/edit', [App\Http\Controllers\GuestApplicationController::class, 'edit'])
+            ->name('apply.portal.edit');
+        Route::put('/apply/application/{application:application_number}', [App\Http\Controllers\GuestApplicationController::class, 'update'])
+            ->name('apply.portal.update');
+        Route::post('/apply/application/{application:application_number}/requirements/{requirement}/upload', [App\Http\Controllers\GuestApplicationController::class, 'uploadRequirement'])
+            ->name('apply.portal.upload');
+    });
 });
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware([EnsureRoleAccess::class.':web', 'auth'])->group(function () {
     // Student Profile (accessible without profile check)
     Route::get('profile', [App\Http\Controllers\StudentProfileController::class, 'show'])->name('profile.show');
     Route::get('profile/edit', [App\Http\Controllers\StudentProfileController::class, 'edit'])->name('profile.edit');

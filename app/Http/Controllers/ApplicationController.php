@@ -22,7 +22,6 @@ use Inertia\Response;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\TemplateProcessor;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use Symfony\Component\Process\Process;
 
 class ApplicationController extends Controller
 {
@@ -30,7 +29,7 @@ class ApplicationController extends Controller
 
     private const APPLICATION_PDF_CACHE_DIR = 'application-pdf-cache';
 
-    private const APPLICATION_PDF_CACHE_VERSION = 'v1';
+    private const APPLICATION_PDF_CACHE_VERSION = 'v2';
 
     private const COLLEGE_EXPORT_MEDIUM_FONT_LIMIT = 55;
 
@@ -41,6 +40,17 @@ class ApplicationController extends Controller
     private const COLLEGE_EXPORT_MEDIUM_FONT_SIZE = 8;
 
     private const COLLEGE_EXPORT_SMALL_FONT_SIZE = 7;
+
+    /**
+     * The application template is a fixed one-page form. Long user-provided
+     * values must stay visually compact so table rows do not push the PDF onto
+     * a blank second page during DOCX conversion.
+     */
+    private const COMPACT_EXPORT_NORMAL_LIMIT = 32;
+
+    private const COMPACT_EXPORT_MEDIUM_LIMIT = 50;
+
+    private const COMPACT_EXPORT_SMALL_LIMIT = 70;
 
     /**
      * Display the dashboard.
@@ -640,9 +650,28 @@ class ApplicationController extends Controller
                 continue;
             }
 
+            $value = (string) $value;
+            $singleLineValue = self::singleLineExportText($value);
+            $isFixedLineValue = self::isFixedLineExportField($key);
+
+            if ($singleLineValue !== '' && $isFixedLineValue && ($fontStyle = self::compactExportFontStyle($key, $singleLineValue))) {
+                $templateProcessor->setComplexValue(
+                    $key,
+                    self::singleLineExportTextRun($singleLineValue, $fontStyle)
+                );
+
+                continue;
+            }
+
+            if ($isFixedLineValue && $singleLineValue !== $value) {
+                $templateProcessor->setValue($key, $singleLineValue);
+
+                continue;
+            }
+
             // TemplateProcessor expects keys without ${}
             // Set empty values to empty string to remove placeholders
-            $templateProcessor->setValue($key, (string) $value);
+            $templateProcessor->setValue($key, $value);
         }
 
         if ($collegeExportLines !== []) {
@@ -773,7 +802,7 @@ class ApplicationController extends Controller
 
     private static function collegeExportTextRun(array $lines): TextRun
     {
-        $fontStyle = ['size' => self::collegeExportFontSize($lines)];
+        $fontStyle = self::collegeExportFontStyle($lines);
         $textRun = new TextRun(['spaceBefore' => 0, 'spaceAfter' => 0]);
 
         foreach ($lines as $index => $line) {
@@ -787,11 +816,116 @@ class ApplicationController extends Controller
         return $textRun;
     }
 
+    private static function singleLineExportTextRun(string $text, array $fontStyle): TextRun
+    {
+        $textRun = new TextRun(['spaceBefore' => 0, 'spaceAfter' => 0]);
+        $textRun->addText($text, $fontStyle);
+
+        return $textRun;
+    }
+
+    private static function compactExportFontStyle(string $key, string $value): ?array
+    {
+        $length = mb_strlen($value);
+
+        if (preg_match('/^subject_\d+_title$/', $key) === 1) {
+            return self::compactExportStyleForLength($length, 8, 28, 42, 58);
+        }
+
+        $normalSize = match ($key) {
+            'student_full_name' => 12,
+            'course_name',
+            'major_name',
+            'permanent_address',
+            'place_of_birth',
+            'student_email',
+            'masters_school',
+            'doctoral_school' => 9,
+            'thesis_title',
+            'thesis_adviser' => 8,
+            default => null,
+        };
+
+        if ($normalSize === null) {
+            return null;
+        }
+
+        return self::compactExportStyleForLength($length, $normalSize);
+    }
+
+    private static function isFixedLineExportField(string $key): bool
+    {
+        if (preg_match('/^subject_\d+_title$/', $key) === 1) {
+            return true;
+        }
+
+        return in_array($key, [
+            'student_full_name',
+            'course_name',
+            'major_name',
+            'permanent_address',
+            'place_of_birth',
+            'student_email',
+            'masters_school',
+            'doctoral_school',
+            'thesis_title',
+            'thesis_adviser',
+        ], true);
+    }
+
+    private static function compactExportStyleForLength(
+        int $length,
+        int $normalSize,
+        int $normalLimit = self::COMPACT_EXPORT_NORMAL_LIMIT,
+        int $mediumLimit = self::COMPACT_EXPORT_MEDIUM_LIMIT,
+        int $smallLimit = self::COMPACT_EXPORT_SMALL_LIMIT,
+    ): ?array {
+        if ($length <= $normalLimit) {
+            return null;
+        }
+
+        $fontStyle = [
+            'name' => 'Times New Roman',
+            'size' => max(6, $normalSize - 1),
+            'scale' => 94,
+            'spacing' => -1,
+        ];
+
+        if ($length > $smallLimit) {
+            $fontStyle['size'] = max(6, $normalSize - 3);
+            $fontStyle['scale'] = 76;
+            $fontStyle['spacing'] = -3;
+        } elseif ($length > $mediumLimit) {
+            $fontStyle['size'] = max(6, $normalSize - 2);
+            $fontStyle['scale'] = 84;
+            $fontStyle['spacing'] = -2;
+        }
+
+        return $fontStyle;
+    }
+
+    private static function collegeExportFontStyle(array $lines): array
+    {
+        $longestLine = self::longestExportLineLength($lines);
+        $fontStyle = [
+            'name' => 'Times New Roman',
+            'size' => self::collegeExportFontSize($lines),
+        ];
+
+        if ($longestLine > self::COLLEGE_EXPORT_SMALL_FONT_LIMIT) {
+            $fontStyle['scale'] = 80;
+            $fontStyle['spacing'] = -2;
+        } elseif ($longestLine > self::COLLEGE_EXPORT_MEDIUM_FONT_LIMIT) {
+            $fontStyle['scale'] = 90;
+            $fontStyle['spacing'] = -1;
+        }
+
+        return $fontStyle;
+    }
+
     private static function collegeExportFontSize(array $lines): int
     {
-        $longestLine = collect($lines)
-            ->map(fn (string $line) => mb_strlen($line))
-            ->max() ?? 0;
+        $longestLine = self::longestExportLineLength($lines);
 
         if ($longestLine > self::COLLEGE_EXPORT_SMALL_FONT_LIMIT) {
             return self::COLLEGE_EXPORT_SMALL_FONT_SIZE;
@@ -802,6 +936,18 @@ class ApplicationController extends Controller
         }
 
         return self::COLLEGE_EXPORT_NORMAL_FONT_SIZE;
+    }
+
+    private static function longestExportLineLength(array $lines): int
+    {
+        return collect($lines)
+            ->map(fn (string $line) => mb_strlen($line))
+            ->max() ?? 0;
+    }
+
+    private static function singleLineExportText(string $text): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 
     private static function cleanCollegeExportText(?string $text): string
@@ -830,56 +976,14 @@ class ApplicationController extends Controller
             );
         }
 
-        try {
-            if ($pdfPath = self::convertDocxToPdfWithGotenberg($docxPath)) {
-                return $pdfPath;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Gotenberg DOCX to PDF conversion failed.', [
-                'message' => $e->getMessage(),
-            ]);
-            SystemHealthCheck::record('gotenberg', 'warning', $e->getMessage());
-            app(SystemEventLogger::class)->log(
-                module: 'document',
-                action: 'gotenberg.failed',
-                message: 'Gotenberg DOCX to PDF conversion failed.',
-                status: 'failed',
-                severity: 'warning',
-                meta: ['error' => $e->getMessage()],
-            );
-        }
-
-        try {
-            if ($pdfPath = self::convertDocxToPdfWithPdfCo($docxPath)) {
-                return $pdfPath;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('PDF.co DOCX to PDF conversion failed.', [
-                'message' => $e->getMessage(),
-            ]);
-            SystemHealthCheck::record('pdfco', 'warning', $e->getMessage());
-            app(SystemEventLogger::class)->log(
-                module: 'document',
-                action: 'pdfco.failed',
-                message: 'PDF.co DOCX to PDF conversion failed.',
-                status: 'failed',
-                severity: 'warning',
-                meta: ['error' => $e->getMessage()],
-            );
-        }
-
-        if ($pdfPath = self::convertDocxToPdfWithLibreOffice($docxPath)) {
-            return $pdfPath;
-        }
-
-        throw new \RuntimeException('No DOCX to PDF converter is configured or available.');
+        throw new \RuntimeException('No configured FreeConvert API key could convert the DOCX to PDF.');
     }
 
     private static function convertDocxToPdfWithFreeConvert(string $docxPath): ?string
     {
-        $apiKey = (string) config('services.freeconvert.api_key', '');
+        $apiKeys = self::freeConvertApiKeys();
 
-        if ($apiKey === '') {
+        if ($apiKeys === []) {
             return null;
         }
 
@@ -888,9 +992,67 @@ class ApplicationController extends Controller
         $pollInterval = max(1, (int) config('services.freeconvert.poll_interval', 2));
         $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
         $outputFileName = basename($pdfPath);
-        $jobId = null;
+        $errors = [];
 
-        @unlink($pdfPath);
+        foreach ($apiKeys as $index => $apiKey) {
+            @unlink($pdfPath);
+
+            try {
+                return self::convertDocxToPdfWithFreeConvertKey(
+                    $docxPath,
+                    $apiKey,
+                    $baseUrl,
+                    $timeout,
+                    $pollInterval,
+                    $pdfPath,
+                    $outputFileName
+                );
+            } catch (\Throwable $e) {
+                $keyIndex = $index + 1;
+                $errors[] = "key {$keyIndex}: ".$e->getMessage();
+
+                Log::warning('FreeConvert API key conversion attempt failed.', [
+                    'key_index' => $keyIndex,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        throw new \RuntimeException('All configured FreeConvert API keys failed. '.implode(' | ', $errors));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function freeConvertApiKeys(): array
+    {
+        $configuredKeys = config('services.freeconvert.api_keys', []);
+        $keys = is_array($configuredKeys)
+            ? $configuredKeys
+            : preg_split('/[\s,]+/', (string) $configuredKeys);
+
+        $legacyKey = trim((string) config('services.freeconvert.api_key', ''));
+
+        if ($legacyKey !== '') {
+            $keys[] = $legacyKey;
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(fn ($key) => trim((string) $key), $keys ?: []),
+            fn (string $key) => $key !== ''
+        )));
+    }
+
+    private static function convertDocxToPdfWithFreeConvertKey(
+        string $docxPath,
+        string $apiKey,
+        string $baseUrl,
+        int $timeout,
+        int $pollInterval,
+        string $pdfPath,
+        string $outputFileName,
+    ): string {
+        $jobId = null;
 
         try {
             $jobResponse = Http::baseUrl($baseUrl)
@@ -1062,271 +1224,6 @@ class ApplicationController extends Controller
             ?? data_get($task, 'result.file.url');
 
         return is_string($url) && $url !== '' ? $url : null;
-    }
-
-    private static function convertDocxToPdfWithPdfCo(string $docxPath): ?string
-    {
-        $apiKey = (string) config('services.pdfco.api_key', '');
-
-        if ($apiKey === '') {
-            return null;
-        }
-
-        $baseUrl = rtrim((string) config('services.pdfco.base_url', 'https://api.pdf.co/v1'), '/');
-        $timeout = max(10, (int) config('services.pdfco.timeout', 120));
-        $expiration = max(1, (int) config('services.pdfco.expiration', 60));
-        $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
-        $outputFileName = basename($pdfPath);
-        $docxFileName = basename($docxPath);
-
-        @unlink($pdfPath);
-
-        $presignedResponse = Http::baseUrl($baseUrl)
-            ->acceptJson()
-            ->withHeaders(['x-api-key' => $apiKey])
-            ->timeout($timeout)
-            ->get('/file/upload/get-presigned-url', [
-                'name' => $docxFileName,
-                'contenttype' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            ]);
-
-        if (! $presignedResponse->successful()) {
-            throw new \RuntimeException('PDF.co upload URL creation failed with status '.$presignedResponse->status().'.');
-        }
-
-        $upload = $presignedResponse->json();
-
-        if (data_get($upload, 'error') === true) {
-            throw new \RuntimeException('PDF.co upload URL creation failed: '.((string) data_get($upload, 'message', 'unknown error')));
-        }
-
-        $presignedUrl = data_get($upload, 'presignedUrl');
-        $uploadedFileUrl = data_get($upload, 'url');
-
-        if (! is_string($presignedUrl) || $presignedUrl === '' || ! is_string($uploadedFileUrl) || $uploadedFileUrl === '') {
-            throw new \RuntimeException('PDF.co upload URL response did not include upload details.');
-        }
-
-        $docxContents = file_get_contents($docxPath);
-
-        if ($docxContents === false) {
-            throw new \RuntimeException('Unable to open generated DOCX for PDF.co upload.');
-        }
-
-        $uploadResponse = Http::timeout($timeout)
-            ->withBody($docxContents, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-            ->put($presignedUrl);
-
-        if (! $uploadResponse->successful()) {
-            throw new \RuntimeException('PDF.co file upload failed with status '.$uploadResponse->status().'.');
-        }
-
-        $convertResponse = Http::baseUrl($baseUrl)
-            ->acceptJson()
-            ->asJson()
-            ->withHeaders(['x-api-key' => $apiKey])
-            ->timeout($timeout)
-            ->post('/pdf/convert/from/doc', [
-                'url' => $uploadedFileUrl,
-                'name' => $outputFileName,
-                'async' => false,
-                'expiration' => $expiration,
-            ]);
-
-        if (! $convertResponse->successful()) {
-            throw new \RuntimeException('PDF.co conversion failed with status '.$convertResponse->status().'.');
-        }
-
-        $conversion = $convertResponse->json();
-
-        if (data_get($conversion, 'error') === true) {
-            throw new \RuntimeException('PDF.co conversion failed: '.((string) data_get($conversion, 'message', 'unknown error')));
-        }
-
-        $downloadUrl = data_get($conversion, 'url');
-
-        if (! is_string($downloadUrl) || $downloadUrl === '') {
-            throw new \RuntimeException('PDF.co conversion did not return a download URL.');
-        }
-
-        $downloadResponse = Http::timeout($timeout)->get($downloadUrl);
-
-        if (! $downloadResponse->successful()) {
-            throw new \RuntimeException('PDF.co PDF download failed with status '.$downloadResponse->status().'.');
-        }
-
-        $body = $downloadResponse->body();
-
-        if (! str_starts_with($body, '%PDF')) {
-            throw new \RuntimeException('PDF.co download response was not a PDF.');
-        }
-
-        if (file_put_contents($pdfPath, $body) === false || ! file_exists($pdfPath)) {
-            throw new \RuntimeException('Unable to save converted PDF from PDF.co.');
-        }
-
-        return $pdfPath;
-    }
-
-    private static function convertDocxToPdfWithGotenberg(string $docxPath): ?string
-    {
-        $baseUrl = rtrim((string) config('services.gotenberg.url', ''), '/');
-
-        if ($baseUrl === '') {
-            return null;
-        }
-
-        $timeout = max(10, (int) config('services.gotenberg.timeout', 180));
-        $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
-
-        @unlink($pdfPath);
-
-        $fileHandle = fopen($docxPath, 'r');
-
-        if ($fileHandle === false) {
-            throw new \RuntimeException('Unable to open generated DOCX for Gotenberg upload.');
-        }
-
-        try {
-            $response = Http::timeout($timeout)
-                ->connectTimeout(min(10, $timeout))
-                ->accept('application/pdf')
-                ->attach(
-                    'files',
-                    $fileHandle,
-                    basename($docxPath),
-                    ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-                )
-                ->post($baseUrl.'/forms/libreoffice/convert');
-        } finally {
-            fclose($fileHandle);
-        }
-
-        if (! $response->successful()) {
-            $details = trim((string) preg_replace('/\s+/', ' ', $response->body()));
-            $details = $details !== '' ? ': '.Str::limit($details, 240) : '';
-
-            throw new \RuntimeException('Gotenberg conversion failed with status '.$response->status().$details);
-        }
-
-        $body = $response->body();
-
-        if (! str_starts_with($body, '%PDF')) {
-            throw new \RuntimeException('Gotenberg conversion response was not a PDF.');
-        }
-
-        if (file_put_contents($pdfPath, $body) === false || ! file_exists($pdfPath)) {
-            throw new \RuntimeException('Unable to save converted PDF from Gotenberg.');
-        }
-
-        return $pdfPath;
-    }
-
-    private static function convertDocxToPdfWithLibreOffice(string $docxPath): ?string
-    {
-        $binary = self::locateLibreOfficeBinary();
-
-        if (! $binary) {
-            return null;
-        }
-
-        $outputDir = dirname($docxPath);
-        $pdfPath = $outputDir.'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
-        $profileDir = $outputDir.'/libreoffice-profile-'.Str::random(12);
-
-        if (! is_dir($profileDir)) {
-            mkdir($profileDir, 0755, true);
-        }
-
-        @unlink($pdfPath);
-
-        try {
-            $process = new Process([
-                $binary,
-                '--headless',
-                '--nologo',
-                '--nofirststartwizard',
-                '--norestore',
-                '--nodefault',
-                '-env:UserInstallation='.self::pathToFileUri($profileDir),
-                '--convert-to',
-                'pdf:writer_pdf_Export',
-                '--outdir',
-                $outputDir,
-                $docxPath,
-            ]);
-            $process->setTimeout(max(10, (int) config('services.libreoffice.timeout', 60)));
-            $process->run();
-        } catch (\Throwable) {
-            self::deleteDirectory($profileDir);
-
-            return null;
-        }
-
-        self::deleteDirectory($profileDir);
-
-        return $process->isSuccessful() && file_exists($pdfPath) ? $pdfPath : null;
-    }
-
-    private static function locateLibreOfficeBinary(): ?string
-    {
-        if (! config('services.libreoffice.enabled', true)) {
-            return null;
-        }
-
-        $candidates = array_values(array_filter(array_unique([
-            config('services.libreoffice.binary'),
-            'soffice',
-            'libreoffice',
-            'C:\Program Files\LibreOffice\program\soffice.exe',
-            'C:\Program Files (x86)\LibreOffice\program\soffice.exe',
-        ])));
-
-        foreach ($candidates as $candidate) {
-            try {
-                $process = new Process([$candidate, '--version']);
-                $process->setTimeout(10);
-                $process->run();
-
-                if ($process->isSuccessful()) {
-                    return $candidate;
-                }
-            } catch (\Throwable) {
-                continue;
-            }
-        }
-
-        return null;
-    }
-
-    private static function pathToFileUri(string $path): string
-    {
-        $normalized = str_replace('\\', '/', realpath($path) ?: $path);
-        $encoded = str_replace('%2F', '/', rawurlencode($normalized));
-        $encoded = str_replace('%3A', ':', $encoded);
-
-        return str_starts_with($normalized, '/')
-            ? 'file://'.$encoded
-            : 'file:///'.$encoded;
-    }
-
-    private static function deleteDirectory(string $path): void
-    {
-        if (! is_dir($path)) {
-            return;
-        }
-
-        $items = array_diff(scandir($path) ?: [], ['.', '..']);
-
-        foreach ($items as $item) {
-            $itemPath = $path.DIRECTORY_SEPARATOR.$item;
-
-            is_dir($itemPath)
-                ? self::deleteDirectory($itemPath)
-                : @unlink($itemPath);
-        }
-
-        @rmdir($path);
     }
 
     public static function generateProfilePhotoDownload(Application $application): BinaryFileResponse

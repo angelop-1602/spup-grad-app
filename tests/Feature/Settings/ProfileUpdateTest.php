@@ -28,10 +28,10 @@ test('profile information can be updated', function () {
     $user->refresh();
 
     expect($user->email)->toBe('test@example.com')
-        ->and($user->email_verified_at)->toBeNull();
+        ->and($user->email_verified_at)->not->toBeNull();
 });
 
-test('email verification status is unchanged when the email address is unchanged', function () {
+test('stored email verification timestamp is unchanged when the email address is unchanged', function () {
     $user = User::factory()->create();
 
     $response = $this

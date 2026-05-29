@@ -33,12 +33,17 @@ export interface SharedData {
     sidebarOpen: boolean;
     notifications?: Array<{
         id: string;
+        type?: string;
         student_name: string;
         student_avatar: string | null;
+        student_id?: string;
         requirement_label: string;
         application_number: string;
         upload_count?: number;
+        course_name?: string;
+        department_name?: string;
         created_at: string;
+        read_at?: string | null;
     }>;
     unreadNotificationCount?: number;
     [key: string]: unknown;

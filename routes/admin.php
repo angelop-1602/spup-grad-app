@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ApplicationController;
 use App\Http\Controllers\Admin\ApplicationWindowController;
+use App\Http\Controllers\Admin\AuditTrailController;
 use App\Http\Controllers\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\Admin\Auth\AdminPasswordResetController;
 use App\Http\Controllers\Admin\Auth\AdminPasswordResetLinkController;
@@ -12,12 +13,14 @@ use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\HistoricalApplicationController;
 use App\Http\Controllers\Admin\MajorController;
 use App\Http\Controllers\Admin\StudentController;
-use App\Http\Middleware\RedirectIfAdminAuthenticated;
+use App\Http\Controllers\NotificationController;
+use App\Http\Middleware\EnsureRoleAccess;
+use App\Http\Middleware\RedirectIfAnyGuardAuthenticated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::middleware([RedirectIfAdminAuthenticated::class])->group(function () {
+Route::middleware([RedirectIfAnyGuardAuthenticated::class])->group(function () {
     Route::get('admin/login', [AdminLoginController::class, 'create'])->name('admin.login');
     Route::post('admin/login', [AdminLoginController::class, 'store']);
 
@@ -28,16 +31,27 @@ Route::middleware([RedirectIfAdminAuthenticated::class])->group(function () {
     Route::post('admin/reset-password', [AdminPasswordResetController::class, 'store'])->name('admin.password.update');
 });
 
-Route::middleware(['auth:admin'])->group(function () {
+Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(function () {
     Route::post('admin/logout', [AdminLoginController::class, 'destroy'])->name('admin.logout');
 
-    Route::get('admin/dashboard', function (Request $request) {
+    Route::get('admin/dashboard', function (
+        Request $request,
+        \App\Support\DashboardOverview $overview,
+        \App\Support\NotificationCenter $notificationCenter
+    ) {
         $currentWindow = \App\Models\ApplicationWindow::current();
+        $applicationsScope = \App\Models\Application::query()
+            ->when($currentWindow, fn ($query) => $query->where('window_id', $currentWindow->id));
+
         $stats = [
             'total_applications' => \App\Models\Application::count(),
-            'pending_applications' => \App\Models\Application::where('status', 'submitted')->count(),
+            'pending_applications' => \App\Models\Application::whereIn('status', ['submitted', 'pending'])->count(),
             'approved_applications' => \App\Models\Application::where('status', 'approved')->count(),
+            'incomplete_applications' => \App\Models\Application::where('status', 'incomplete')->count(),
             'rejected_applications' => \App\Models\Application::where('status', 'rejected')->count(),
+            'applications_today' => (clone $applicationsScope)->where('created_at', '>=', now()->startOfDay())->count(),
+            'applications_this_week' => (clone $applicationsScope)->where('created_at', '>=', now()->startOfWeek())->count(),
+            'current_window_applications' => (clone $applicationsScope)->count(),
             'current_window' => $currentWindow ? [
                 'id' => $currentWindow->id,
                 'title' => $currentWindow->title,
@@ -47,7 +61,21 @@ Route::middleware(['auth:admin'])->group(function () {
             'total_students' => \App\Models\User::count(),
             'total_coordinators' => \App\Models\Coordinator::count(),
             'total_departments' => \App\Models\Department::count(),
+            'manual_verification_drafts' => \App\Models\GuestApplicationDraft::query()
+                ->where(function ($query) {
+                    $query->whereNull('verified_at')
+                        ->orWhereNull('application_id');
+                })
+                ->count(),
         ];
+
+        $newApplicants = (clone $applicationsScope)
+            ->with(['user.profile', 'window', 'department', 'course'])
+            ->latest('created_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (\App\Models\Application $application) => $overview->applicantPayload($application, 'admin.applications.show'))
+            ->values();
 
         // Recent activities
         $recentApplications = \App\Models\Application::with(['user', 'window', 'department', 'course'])
@@ -102,48 +130,18 @@ Route::middleware(['auth:admin'])->group(function () {
 
         $admin = $request->user('admin');
 
-        // Get recent unread notifications (file uploads)
-        $allUnreadNotifications = $admin->unreadNotifications()
-            ->where('type', 'App\Notifications\RequirementFileUploaded')
-            ->get();
-
-        // Count notifications per application
-        $countsByApplication = $allUnreadNotifications->groupBy(function ($notification) {
-            return $notification->data['application_number'] ?? '';
-        })->map->count();
-
-        $notifications = $allUnreadNotifications
-            ->sortByDesc('created_at')
-            ->map(function ($notification) use ($countsByApplication) {
-                $data = $notification->data;
-                $applicationNumber = $data['application_number'] ?? '';
-
-                return [
-                    'id' => $notification->id,
-                    'type' => $data['type'] ?? 'requirement_file_uploaded',
-                    'student_name' => $data['student_name'] ?? 'Unknown',
-                    'student_avatar' => $data['student_avatar'] ?? null,
-                    'student_id' => $data['student_id'] ?? '',
-                    'requirement_label' => $data['requirement_label'] ?? 'Requirement',
-                    'application_number' => $applicationNumber,
-                    'upload_count' => $countsByApplication[$applicationNumber] ?? 1,
-                    'course_name' => $data['course_name'] ?? '',
-                    'created_at' => $notification->created_at->toIso8601String(),
-                    'read_at' => $notification->read_at?->toIso8601String(),
-                ];
-            });
-
-        $unreadCount = $admin->unreadNotifications()
-            ->where('type', 'App\Notifications\RequirementFileUploaded')
-            ->count();
+        $notificationPayload = $notificationCenter->payloadFor($admin);
 
         return Inertia::render('admin/dashboard', [
             'stats' => $stats,
+            'newApplicants' => $newApplicants,
             'recentActivities' => $activities,
-            'notifications' => $notifications,
-            'unreadNotificationCount' => $unreadCount,
+            'notifications' => $notificationPayload['notifications'],
+            'unreadNotificationCount' => $notificationPayload['unreadNotificationCount'],
         ]);
     })->name('admin.dashboard');
+
+    Route::get('admin/audit-trail', [AuditTrailController::class, 'index'])->name('admin.audit-trail.index');
 
     // Application Windows
     Route::get('admin/windows/all', [ApplicationWindowController::class, 'all'])->name('admin.windows.all');
@@ -165,7 +163,9 @@ Route::middleware(['auth:admin'])->group(function () {
     Route::put('admin/applications/{application:application_number}/requirements', [ApplicationController::class, 'updateRequirements'])->name('admin.applications.update-requirements');
     Route::get('admin/applications/{application:application_number}/download', [ApplicationController::class, 'download'])->name('admin.applications.download');
     Route::get('admin/applications/{application:application_number}/photo/download', [ApplicationController::class, 'downloadPhoto'])->name('admin.applications.photo.download');
-    Route::post('admin/notifications/{notification}/mark-as-read', [ApplicationController::class, 'markNotificationAsRead'])->name('admin.notifications.mark-as-read');
+    Route::get('admin/notifications', [NotificationController::class, 'index'])->name('admin.notifications.index');
+    Route::post('admin/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('admin.notifications.mark-all-as-read');
+    Route::post('admin/notifications/{notification}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('admin.notifications.mark-as-read');
 
     // Historical applications (details only)
     Route::get('admin/historical-applications/{historicalApplication}', [HistoricalApplicationController::class, 'show'])->name('admin.historical-applications.show');
@@ -220,7 +220,12 @@ Route::middleware(['auth:admin'])->group(function () {
 
     // Students
     Route::get('admin/students', [StudentController::class, 'index'])->name('admin.students.index');
+    Route::get('admin/students/create', [StudentController::class, 'create'])->name('admin.students.create');
+    Route::post('admin/students', [StudentController::class, 'store'])->name('admin.students.store');
+    Route::post('admin/students/guest-drafts/{draft}/verify', [StudentController::class, 'verifyDraft'])->name('admin.students.drafts.verify');
     Route::get('admin/students/{student}', [StudentController::class, 'show'])->name('admin.students.show');
+    Route::get('admin/students/{student}/edit', [StudentController::class, 'edit'])->name('admin.students.edit');
+    Route::put('admin/students/{student}', [StudentController::class, 'update'])->name('admin.students.update');
     Route::get('admin/students/{student}/applications', [StudentController::class, 'applications'])->name('admin.students.applications');
     Route::post('admin/students/{student}/reset-password', [StudentController::class, 'resetPassword'])->name('admin.students.reset-password');
     Route::delete('admin/students/{student}', [StudentController::class, 'destroy'])->name('admin.students.destroy');

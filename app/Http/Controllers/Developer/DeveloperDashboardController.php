@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Developer;
 
 use App\Http\Controllers\Controller;
 use App\Models\GuestApplicationDraft;
+use App\Models\SupportTicket;
 use App\Models\SystemHealthCheck;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\ApplicationWorkflowService;
@@ -19,7 +20,25 @@ class DeveloperDashboardController extends Controller
 {
     public function index(Request $request, DeveloperDiagnosticsService $diagnostics): Response
     {
-        return Inertia::render('developer/dashboard', $diagnostics->dashboardData($this->filters($request)));
+        return Inertia::render('developer/dashboard', [
+            ...$diagnostics->dashboardData($this->filters($request)),
+            ...$this->supportTicketOverview(),
+        ]);
+    }
+
+    public function manualVerification(Request $request, DeveloperDiagnosticsService $diagnostics): Response
+    {
+        return Inertia::render('developer/manual-verification', $diagnostics->dashboardData($this->filters($request)));
+    }
+
+    public function events(Request $request, DeveloperDiagnosticsService $diagnostics): Response
+    {
+        return Inertia::render('developer/events', $diagnostics->dashboardData($this->filters($request)));
+    }
+
+    public function health(Request $request, DeveloperDiagnosticsService $diagnostics): Response
+    {
+        return Inertia::render('developer/health', $diagnostics->dashboardData($this->filters($request)));
     }
 
     public function exportEvents(Request $request, DeveloperDiagnosticsService $diagnostics): StreamedResponse
@@ -173,5 +192,40 @@ class DeveloperDashboardController extends Controller
 
             return false;
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function supportTicketOverview(): array
+    {
+        return [
+            'ticketSummary' => [
+                'open' => SupportTicket::query()->where('status', SupportTicket::STATUS_OPEN)->count(),
+                'resolved' => SupportTicket::query()->where('status', SupportTicket::STATUS_RESOLVED)->count(),
+                'newToday' => SupportTicket::query()->where('created_at', '>=', now()->startOfDay())->count(),
+                'emergency' => SupportTicket::query()
+                    ->where('status', SupportTicket::STATUS_OPEN)
+                    ->where('priority', 'emergency')
+                    ->count(),
+            ],
+            'recentSupportTickets' => SupportTicket::query()
+                ->latest()
+                ->limit(8)
+                ->get()
+                ->map(fn (SupportTicket $ticket) => [
+                    'ticket_number' => $ticket->ticket_number,
+                    'status' => $ticket->status,
+                    'category' => $ticket->category,
+                    'priority' => $ticket->priority,
+                    'subject' => $ticket->subject,
+                    'reporter_name' => $ticket->reporter_name,
+                    'reporter_email' => $ticket->reporter_email,
+                    'created_at' => $ticket->created_at?->toIso8601String(),
+                    'show_url' => route('developer.tickets.show', $ticket, absolute: false),
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 }

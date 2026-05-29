@@ -1,10 +1,10 @@
 <?php
 
-use App\Models\User;
 use App\Models\StudentProfile;
+use App\Models\User;
 
-test('guests are redirected to the login page', function () {
-    $this->get(route('dashboard'))->assertRedirect(route('login'));
+test('guests are redirected to the application portal', function () {
+    $this->get(route('dashboard'))->assertRedirect(route('apply.index', absolute: false));
 });
 
 test('authenticated users can visit the dashboard', function () {

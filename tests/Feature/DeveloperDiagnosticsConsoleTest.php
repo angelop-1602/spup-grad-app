@@ -125,7 +125,9 @@ test('non developer guards cannot access developer diagnostics', function () {
 
     $this->actingAs($admin, 'admin')
         ->get(route('developer.dashboard'))
-        ->assertRedirect(route('developer.login', absolute: false));
+        ->assertRedirect(route('admin.dashboard', absolute: false));
+
+    auth()->guard('admin')->logout();
 
     $coordinator = Coordinator::create([
         'name' => 'Coordinator',
@@ -135,7 +137,9 @@ test('non developer guards cannot access developer diagnostics', function () {
 
     $this->actingAs($coordinator, 'coordinator')
         ->get(route('developer.dashboard'))
-        ->assertRedirect(route('developer.login', absolute: false));
+        ->assertRedirect(route('coordinator.dashboard', absolute: false));
+
+    auth()->guard('coordinator')->logout();
 });
 
 test('disabled developer cannot login', function () {
@@ -212,6 +216,38 @@ test('confirmed developer must pass challenge before dashboard', function () {
             ->has('healthCards')
             ->has('applicationMetrics')
             ->has('events.data')
+        );
+});
+
+test('developer diagnostics console exposes separated pages', function () {
+    [$developer] = diagnosticsConfirmedDeveloper();
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.manual-verification'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('developer/manual-verification')
+            ->has('manualVerificationDrafts')
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.events'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('developer/events')
+            ->has('events.data')
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.health'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('developer/health')
+            ->has('healthCards')
+            ->has('recentLogLines')
         );
 });
 

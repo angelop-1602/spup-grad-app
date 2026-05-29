@@ -1,4 +1,5 @@
-import adminRoutes from '@/routes/admin';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -8,12 +9,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -21,17 +16,34 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
 import { profilePhotoUrl } from '@/lib/profile-photo';
+import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Users, Eye, MoreVertical, Search, Trash2, KeyRound } from 'lucide-react';
 import { formatName } from '@/utils/format-name';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import {
+    AlertCircle,
+    CheckCircle2,
+    Eye,
+    KeyRound,
+    MoreVertical,
+    Pencil,
+    Search,
+    ShieldCheck,
+    Trash2,
+    UserPlus,
+    Users,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useToast } from '@/contexts/toast-context';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -58,6 +70,17 @@ interface Student {
     } | null;
 }
 
+interface ManualVerificationDraft {
+    id: number;
+    applicant_name: string;
+    email: string;
+    student_id: string;
+    tracking_code: string;
+    tracking_pin: string;
+    window_title: string;
+    created_at: string | null;
+}
+
 interface StudentsIndexProps {
     students: {
         data: Student[];
@@ -69,17 +92,27 @@ interface StudentsIndexProps {
     filters?: {
         search?: string;
     };
+    manualVerificationDrafts: ManualVerificationDraft[];
 }
 
-export default function StudentsIndex({ students, filters }: StudentsIndexProps) {
+export default function StudentsIndex({
+    students,
+    filters,
+    manualVerificationDrafts,
+}: StudentsIndexProps) {
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+    const [studentToDelete, setStudentToDelete] = useState<Student | null>(
+        null,
+    );
     const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [studentToReset, setStudentToReset] = useState<Student | null>(null);
     const [isResetting, setIsResetting] = useState(false);
     const [resetError, setResetError] = useState<string | null>(null);
     const [resetSuccess, setResetSuccess] = useState(false);
+    const [verifyingDraftId, setVerifyingDraftId] = useState<number | null>(
+        null,
+    );
 
     const { addToast } = useToast();
     const { delete: deleteStudent, processing: deleting } = useForm({});
@@ -88,18 +121,33 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
         password_confirmation: '',
     });
 
+    const studentName = (student: Student) =>
+        student.profile
+            ? formatName(
+                  student.profile.first_name,
+                  student.profile.last_name,
+                  student.profile.middle_name,
+              )
+            : student.name;
 
-    const handleSearch = (value: string) => {
-        setSearchQuery(value);
+    const updateFilters = (search: string, page = 1) => {
         router.get(
             adminRoutes.students.index().url,
-            { search: value || undefined, page: 1 },
+            {
+                search: search || undefined,
+                page,
+            },
             {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
             },
         );
+    };
+
+    const handleSearch = (value: string) => {
+        setSearchQuery(value);
+        updateFilters(value);
     };
 
     const handleDeleteClick = (student: Student) => {
@@ -109,12 +157,16 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
 
     const handleDeleteConfirm = () => {
         if (studentToDelete) {
-            deleteStudent(adminRoutes.students.destroy({ student: studentToDelete.id }).url, {
-                onSuccess: () => {
-                    setDeleteDialogOpen(false);
-                    setStudentToDelete(null);
+            deleteStudent(
+                adminRoutes.students.destroy({ student: studentToDelete.id })
+                    .url,
+                {
+                    onSuccess: () => {
+                        setDeleteDialogOpen(false);
+                        setStudentToDelete(null);
+                    },
                 },
-            });
+            );
         }
     };
 
@@ -132,14 +184,6 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
             return;
         }
 
-        const studentName = studentToReset.profile
-            ? formatName(
-                  studentToReset.profile.first_name,
-                  studentToReset.profile.last_name,
-                  studentToReset.profile.middle_name,
-              )
-            : studentToReset.name;
-
         const currentYear = new Date().getFullYear();
         const defaultPassword = `GA@${currentYear}!`;
 
@@ -147,9 +191,9 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
         setResetError(null);
         setResetSuccess(false);
 
-        // Use router.post directly with the data
         router.post(
-            adminRoutes.students.resetPassword({ student: studentToReset.id }).url,
+            adminRoutes.students.resetPassword({ student: studentToReset.id })
+                .url,
             {
                 password: defaultPassword,
                 password_confirmation: defaultPassword,
@@ -162,11 +206,10 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                     addToast({
                         variant: 'success',
                         title: 'Password Reset',
-                        description: `Password updated successfully for ${studentName} (${studentToReset.student_id}). New password: ${defaultPassword}`,
-                        duration: 10000, // Show longer so admin can copy it
+                        description: `Password updated successfully for ${studentName(studentToReset)} (${studentToReset.student_id}). New password: ${defaultPassword}`,
+                        duration: 10000,
                     });
-                    
-                    // Close dialog after a short delay to show success message
+
                     setTimeout(() => {
                         setResetDialogOpen(false);
                         setStudentToReset(null);
@@ -197,39 +240,192 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
         );
     };
 
+    const handleVerifyDraft = (draft: ManualVerificationDraft) => {
+        setVerifyingDraftId(draft.id);
+        router.post(
+            `/admin/students/guest-drafts/${draft.id}/verify`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setVerifyingDraftId(null),
+                onSuccess: () =>
+                    addToast({
+                        variant: 'success',
+                        title: 'Draft Verified',
+                        description: `${draft.applicant_name} was manually verified.`,
+                        duration: 5000,
+                    }),
+            },
+        );
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Students" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Students</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Students
+                        </h1>
                         <p className="text-muted-foreground">
-                            View student profiles and applications
+                            Manage student accounts and applications
                         </p>
                     </div>
+                    <Button asChild>
+                        <Link href="/admin/students/create">
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Create Student
+                        </Link>
+                    </Button>
                 </div>
 
-                {/* Students Table */}
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <CardTitle>
+                                    Guest Drafts Pending Manual Verification
+                                </CardTitle>
+                                <CardDescription>
+                                    Guest applications that have not completed
+                                    email verification
+                                </CardDescription>
+                            </div>
+                            <Badge
+                                variant={
+                                    manualVerificationDrafts.length
+                                        ? 'outline'
+                                        : 'secondary'
+                                }
+                            >
+                                {manualVerificationDrafts.length} pending
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {manualVerificationDrafts.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b">
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                Applicant
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                Email
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                Tracking
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                Window
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                Actions
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {manualVerificationDrafts.map(
+                                            (draft) => (
+                                                <tr
+                                                    key={draft.id}
+                                                    className="border-b"
+                                                >
+                                                    <td className="px-4 py-3">
+                                                        <div>
+                                                            <p className="font-medium">
+                                                                {
+                                                                    draft.applicant_name
+                                                                }
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {
+                                                                    draft.student_id
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                                                        {draft.email}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-mono text-xs">
+                                                            <p>
+                                                                {
+                                                                    draft.tracking_code
+                                                                }
+                                                            </p>
+                                                            <p className="text-muted-foreground">
+                                                                {
+                                                                    draft.tracking_pin
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm">
+                                                        {draft.window_title}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                handleVerifyDraft(
+                                                                    draft,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                verifyingDraftId ===
+                                                                draft.id
+                                                            }
+                                                        >
+                                                            <ShieldCheck className="mr-2 h-4 w-4" />
+                                                            {verifyingDraftId ===
+                                                            draft.id
+                                                                ? 'Verifying...'
+                                                                : 'Verify'}
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ),
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                No guest drafts are waiting for manual
+                                verification.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <CardTitle>All Students</CardTitle>
                                 <CardDescription>
-                                    {students.total} student{students.total !== 1 ? 's' : ''} total
+                                    {students.total} student
+                                    {students.total !== 1 ? 's' : ''} shown
                                 </CardDescription>
                             </div>
-                            <div className="w-full max-w-sm">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        type="text"
-                                        placeholder="Search by name, email, or student ID..."
-                                        value={searchQuery}
-                                        onChange={(e) => handleSearch(e.target.value)}
-                                        className="pl-9"
-                                    />
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                <div className="w-full md:w-80">
+                                    <div className="relative">
+                                        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            type="text"
+                                            placeholder="Search by name, email, or student ID..."
+                                            value={searchQuery}
+                                            onChange={(e) =>
+                                                handleSearch(e.target.value)
+                                            }
+                                            className="pl-9"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -265,35 +461,31 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                                     className="border-b transition-colors hover:bg-muted/50"
                                                 >
                                                     <td className="px-4 py-3">
-                                                        {profilePhotoUrl(student.profile) ? (
+                                                        {profilePhotoUrl(
+                                                            student.profile,
+                                                        ) ? (
                                                             <img
-                                                                src={profilePhotoUrl(student.profile) ?? ''}
-                                                                alt={
-                                                                    student.profile
-                                                                        ? formatName(
-                                                                              student.profile.first_name,
-                                                                              student.profile.last_name,
-                                                                              student.profile.middle_name,
-                                                                          )
-                                                                        : student.name
+                                                                src={
+                                                                    profilePhotoUrl(
+                                                                        student.profile,
+                                                                    ) ?? ''
                                                                 }
-                                                                className="h-10 w-10 rounded-full object-cover border border-border"
+                                                                alt={studentName(
+                                                                    student,
+                                                                )}
+                                                                className="h-10 w-10 rounded-full border border-border object-cover"
                                                             />
                                                         ) : (
-                                                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center border border-border">
+                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-muted">
                                                                 <Users className="h-5 w-5 text-muted-foreground" />
                                                             </div>
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className="font-medium">
-                                                            {student.profile
-                                                                ? formatName(
-                                                                      student.profile.first_name,
-                                                                      student.profile.last_name,
-                                                                      student.profile.middle_name,
-                                                                  )
-                                                                : student.name}
+                                                            {studentName(
+                                                                student,
+                                                            )}
                                                         </span>
                                                     </td>
                                                     <td className="px-4 py-3">
@@ -302,41 +494,77 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                                         </span>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <span className="text-sm">{student.student_id}</span>
+                                                        <span className="text-sm">
+                                                            {student.student_id}
+                                                        </span>
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
+                                                            <DropdownMenuTrigger
+                                                                asChild
+                                                            >
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className="h-8 w-8 p-0"
                                                                 >
                                                                     <MoreVertical className="h-4 w-4" />
-                                                                    <span className="sr-only">Open menu</span>
+                                                                    <span className="sr-only">
+                                                                        Open
+                                                                        menu
+                                                                    </span>
                                                                 </Button>
                                                             </DropdownMenuTrigger>
                                                             <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem asChild>
+                                                                <DropdownMenuItem
+                                                                    asChild
+                                                                >
                                                                     <Link
-                                                                        href={adminRoutes.students.show({
-                                                                            student: student.id,
-                                                                        }).url}
+                                                                        href={
+                                                                            adminRoutes.students.show(
+                                                                                {
+                                                                                    student:
+                                                                                        student.id,
+                                                                                },
+                                                                            )
+                                                                                .url
+                                                                        }
                                                                         className="flex items-center"
                                                                     >
                                                                         <Eye className="mr-2 h-4 w-4" />
-                                                                        View Profile
+                                                                        View
+                                                                        Profile
                                                                     </Link>
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleResetClick(student)}
+                                                                    asChild
+                                                                >
+                                                                    <Link
+                                                                        href={`/admin/students/${student.id}/edit`}
+                                                                        className="flex items-center"
+                                                                    >
+                                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                                        Edit
+                                                                    </Link>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    onClick={() =>
+                                                                        handleResetClick(
+                                                                            student,
+                                                                        )
+                                                                    }
                                                                     className="focus:text-primary"
                                                                 >
                                                                     <KeyRound className="mr-2 h-4 w-4" />
-                                                                    Reset password
+                                                                    Reset
+                                                                    Password
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleDeleteClick(student)}
+                                                                    onClick={() =>
+                                                                        handleDeleteClick(
+                                                                            student,
+                                                                        )
+                                                                    }
                                                                     className="text-destructive focus:text-destructive"
                                                                 >
                                                                     <Trash2 className="mr-2 h-4 w-4" />
@@ -355,10 +583,13 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                     <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                                         <div>
                                             Showing{' '}
-                                            {students.per_page * (students.current_page - 1) + 1}
-                                            {' – '}
+                                            {students.per_page *
+                                                (students.current_page - 1) +
+                                                1}{' '}
+                                            -{' '}
                                             {Math.min(
-                                                students.per_page * students.current_page,
+                                                students.per_page *
+                                                    students.current_page,
                                                 students.total,
                                             )}{' '}
                                             of {students.total}
@@ -367,15 +598,14 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={students.current_page === 1}
+                                                disabled={
+                                                    students.current_page === 1
+                                                }
                                                 onClick={() =>
-                                                    router.get(
-                                                        adminRoutes.students.index().url,
-                                                        {
-                                                            page: students.current_page - 1,
-                                                            search: searchQuery || undefined,
-                                                        },
-                                                        { preserveScroll: true, preserveState: true },
+                                                    updateFilters(
+                                                        searchQuery,
+                                                        students.current_page -
+                                                            1,
                                                     )
                                                 }
                                             >
@@ -384,15 +614,15 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={students.current_page === students.last_page}
+                                                disabled={
+                                                    students.current_page ===
+                                                    students.last_page
+                                                }
                                                 onClick={() =>
-                                                    router.get(
-                                                        adminRoutes.students.index().url,
-                                                        {
-                                                            page: students.current_page + 1,
-                                                            search: searchQuery || undefined,
-                                                        },
-                                                        { preserveScroll: true, preserveState: true },
+                                                    updateFilters(
+                                                        searchQuery,
+                                                        students.current_page +
+                                                            1,
                                                     )
                                                 }
                                             >
@@ -405,31 +635,32 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                         ) : (
                             <div className="py-12 text-center">
                                 <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                                <h3 className="mt-4 text-lg font-semibold">No students found</h3>
+                                <h3 className="mt-4 text-lg font-semibold">
+                                    No students found
+                                </h3>
                                 <p className="mt-2 text-sm text-muted-foreground">
-                                    No students have registered yet.
+                                    No students match the current filters.
                                 </p>
                             </div>
                         )}
                     </CardContent>
                 </Card>
 
-                {/* Delete Confirmation Dialog */}
-                <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <Dialog
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                >
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Delete Student</DialogTitle>
                             <DialogDescription>
                                 Are you sure you want to delete{' '}
-                                {studentToDelete?.profile
-                                    ? formatName(
-                                          studentToDelete.profile.first_name,
-                                          studentToDelete.profile.last_name,
-                                          studentToDelete.profile.middle_name,
-                                      )
-                                    : studentToDelete?.name}
-                                ? This action cannot be undone and will permanently delete the student
-                                account, profile, and all associated applications.
+                                {studentToDelete
+                                    ? studentName(studentToDelete)
+                                    : 'this student'}
+                                ? This action cannot be undone and will
+                                permanently delete the student account, profile,
+                                and all associated applications.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
@@ -454,21 +685,20 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                     </DialogContent>
                 </Dialog>
 
-                {/* Reset Password Dialog */}
-                <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                <Dialog
+                    open={resetDialogOpen}
+                    onOpenChange={setResetDialogOpen}
+                >
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Reset Password</DialogTitle>
                             <DialogDescription>
                                 Reset the password for{' '}
-                                {studentToReset?.profile
-                                    ? formatName(
-                                          studentToReset.profile.first_name,
-                                          studentToReset.profile.last_name,
-                                          studentToReset.profile.middle_name,
-                                      )
-                                    : studentToReset?.name}
-                                . The password will be set to the default format.
+                                {studentToReset
+                                    ? studentName(studentToReset)
+                                    : 'this student'}
+                                . The password will be set to the default
+                                format.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -482,8 +712,9 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                             GA@{new Date().getFullYear()}!
                                         </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        The student will use this password on their next login.
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        The student will use this password on
+                                        their next login.
                                     </p>
                                 </div>
                             </div>
@@ -491,14 +722,17 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                 <Alert variant="success">
                                     <CheckCircle2 className="h-4 w-4" />
                                     <AlertDescription>
-                                        Password has been reset successfully! The dialog will close shortly.
+                                        Password has been reset successfully.
+                                        The dialog will close shortly.
                                     </AlertDescription>
                                 </Alert>
                             )}
                             {resetError && (
                                 <Alert variant="destructive">
                                     <AlertCircle className="h-4 w-4" />
-                                    <AlertDescription>{resetError}</AlertDescription>
+                                    <AlertDescription>
+                                        {resetError}
+                                    </AlertDescription>
                                 </Alert>
                             )}
                         </div>
@@ -520,7 +754,11 @@ export default function StudentsIndex({ students, filters }: StudentsIndexProps)
                                 onClick={handleResetConfirm}
                                 disabled={isResetting || resetSuccess}
                             >
-                                {isResetting ? 'Resetting...' : resetSuccess ? 'Success!' : 'Confirm Reset'}
+                                {isResetting
+                                    ? 'Resetting...'
+                                    : resetSuccess
+                                      ? 'Success!'
+                                      : 'Confirm Reset'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

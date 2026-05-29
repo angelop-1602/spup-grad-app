@@ -7,6 +7,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
+import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import * as profileRoutes from '@/routes/profile';
 import { type BreadcrumbItem } from '@/types';
@@ -131,9 +132,7 @@ export default function ProfileShow({ profile: profileData }: ProfileShowProps) 
                                     Date of Birth
                                 </p>
                                 <p className="text-sm md:text-base">
-                                    {new Date(
-                                        profileData.date_of_birth,
-                                    ).toLocaleDateString()}
+                                    {formatDateOnly(profileData.date_of_birth)}
                                 </p>
                             </div>
                             <div>

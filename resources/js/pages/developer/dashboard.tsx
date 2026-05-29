@@ -1,848 +1,380 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
+import { Head, Link } from '@inertiajs/react';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Head, router, usePage } from '@inertiajs/react';
-import {
-    Activity,
     AlertTriangle,
     CheckCircle2,
+    ClipboardList,
     Download,
-    LogOut,
-    RefreshCw,
+    FileText,
+    HeartPulse,
 } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
-
-type HealthCard = {
-    label: string;
-    status: 'ok' | 'warning' | 'critical' | 'unknown' | string;
-    value: string;
-    message: string;
-};
-
-type SystemEvent = {
-    id: number;
-    module: string;
-    action: string;
-    status: string;
-    severity: string;
-    actor_guard: string | null;
-    actor_label: string | null;
-    subject_type: string | null;
-    subject_id: number | null;
-    message: string | null;
-    created_at: string;
-};
-
-type Paginated<T> = {
-    data: T[];
-    links: Array<{ url: string | null; label: string; active: boolean }>;
-    from: number | null;
-    to: number | null;
-    total: number;
-};
-
-type ApplicationWindowOption = {
-    id: number;
-    title: string;
-    status: string;
-    start_date: string | null;
-    end_date: string | null;
-    applications_count: number;
-};
-
-type ManualVerificationDraft = {
-    id: number;
-    applicant_name: string;
-    email: string;
-    student_id: string;
-    tracking_code: string;
-    tracking_pin: string;
-    window_title: string;
-    application_number: string | null;
-    created_at: string | null;
-    verified_at: string | null;
-};
+import {
+    formatDate,
+    headline,
+    statusClass,
+    type ApplicationWindowOption,
+    type HealthCard,
+    type ManualVerificationDraft,
+    type SupportTicketListItem,
+} from './console-utils';
 
 type DashboardProps = {
     healthCards: HealthCard[];
     applicationMetrics: Record<string, string | number>;
     applicationMetricsScope: string;
-    applicationWindows: ApplicationWindowOption[];
     currentWindow: ApplicationWindowOption | null;
     selectedWindowId: number | null;
     manualVerificationDrafts: ManualVerificationDraft[];
-    eventFilters: {
-        modules: string[];
-        actions: string[];
-        severities: string[];
-        statuses: string[];
-        actors: string[];
-        subjects: string[];
+    ticketSummary: {
+        open: number;
+        resolved: number;
+        newToday: number;
+        emergency: number;
     };
-    events: Paginated<SystemEvent>;
-    recentLogLines: string[];
-    filters: Record<string, string | null>;
+    recentSupportTickets: SupportTicketListItem[];
 };
-
-const statusClass: Record<string, string> = {
-    ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    warning:
-        'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
-    critical: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
-    unknown: 'border-muted-foreground/30 bg-muted text-muted-foreground',
-    success:
-        'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    failed: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
-    info: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
-    error: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
-};
-
-function cleanFilters(
-    filters: Record<string, string | null>,
-): Record<string, string> {
-    return Object.fromEntries(
-        Object.entries(filters).filter(
-            ([key, value]) => value && (value !== 'all' || key === 'window_id'),
-        ),
-    ) as Record<string, string>;
-}
-
-function headline(value: string) {
-    return value
-        .replace(/([A-Z])/g, ' $1')
-        .replace(/[_-]/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase())
-        .trim();
-}
-
-function shortClassName(value: string | null) {
-    return value ? (value.split('\\').pop() ?? value) : null;
-}
 
 export default function DeveloperDashboard({
     healthCards,
     applicationMetrics,
     applicationMetricsScope,
-    applicationWindows,
     currentWindow,
     selectedWindowId,
     manualVerificationDrafts,
-    eventFilters,
-    events,
-    recentLogLines,
-    filters,
+    ticketSummary,
+    recentSupportTickets,
 }: DashboardProps) {
-    const { auth } = usePage().props as {
-        auth?: { developer?: { name?: string; email?: string } | null };
-    };
-    const [filterData, setFilterData] = useState<Record<string, string | null>>(
-        {
-            module: filters.module ?? 'all',
-            action: filters.action ?? 'all',
-            severity: filters.severity ?? 'all',
-            status: filters.status ?? 'all',
-            actor_guard: filters.actor_guard ?? 'all',
-            subject_type: filters.subject_type ?? 'all',
-            subject_id: filters.subject_id ?? '',
-            search: filters.search ?? '',
-            from: filters.from ?? '',
-            to: filters.to ?? '',
-            window_id:
-                filters.window_id ??
-                (selectedWindowId ? String(selectedWindowId) : 'all'),
-        },
+    const criticalHealth = healthCards.filter((card) =>
+        ['critical', 'warning', 'unknown'].includes(card.status),
     );
-    const [manualVerifyingId, setManualVerifyingId] = useState<number | null>(
-        null,
-    );
-    const [manualVerificationMessage, setManualVerificationMessage] = useState<
-        string | null
-    >(null);
-
-    const queryString = useMemo(
-        () => new URLSearchParams(cleanFilters(filterData)).toString(),
-        [filterData],
-    );
-    const metricsQueryString = useMemo(() => {
-        const windowFilter = cleanFilters({
-            window_id: filterData.window_id ?? 'all',
-        });
-
-        return new URLSearchParams(windowFilter).toString();
-    }, [filterData.window_id]);
-
-    const applyFilters = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        router.get('/developer/dashboard', cleanFilters(filterData), {
-            preserveScroll: true,
-            preserveState: true,
-        });
-    };
-
-    const manuallyVerifyDraft = (draft: ManualVerificationDraft) => {
-        setManualVerifyingId(draft.id);
-        setManualVerificationMessage(null);
-
-        router.post(
-            `/developer/drafts/${draft.id}/verify`,
-            {},
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    setManualVerificationMessage(
-                        `${draft.applicant_name} has been manually verified.`,
-                    );
-                },
-                onError: () => {
-                    setManualVerificationMessage(
-                        'Manual verification did not complete.',
-                    );
-                },
-                onFinish: () => setManualVerifyingId(null),
-            },
-        );
-    };
+    const metricsQuery = selectedWindowId
+        ? `?window_id=${selectedWindowId}`
+        : '';
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
-            <Head title="Developer Diagnostics" />
+        <DeveloperConsoleLayout
+            title="Help Desk Dashboard"
+            description="Monitor urgent applicant issues, application activity, manual verification, and platform health from one console."
+        >
+            <Head title="Developer Dashboard" />
 
-            <header className="border-b bg-card/80 backdrop-blur">
-                <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-                    <div>
-                        <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                            Developer Console
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-muted-foreground">
+                            Open Tickets
                         </p>
-                        <h1 className="text-xl font-semibold">
-                            System Audit & Diagnostics
-                        </h1>
+                        <ClipboardList className="size-5 text-blue-600" />
                     </div>
-                    <div className="flex items-center gap-3">
-                        <div className="hidden text-right text-sm sm:block">
-                            <p className="font-medium">
-                                {auth?.developer?.name ?? 'Developer'}
-                            </p>
-                            <p className="text-muted-foreground">
-                                {auth?.developer?.email}
+                    <p className="mt-3 text-3xl font-semibold">
+                        {ticketSummary.open}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {ticketSummary.newToday} new today
+                    </p>
+                </div>
+                <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-muted-foreground">
+                            Emergency Tickets
+                        </p>
+                        <AlertTriangle className="size-5 text-red-600" />
+                    </div>
+                    <p className="mt-3 text-3xl font-semibold">
+                        {ticketSummary.emergency}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Open reports marked emergency
+                    </p>
+                </div>
+                <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-muted-foreground">
+                            Manual Verification
+                        </p>
+                        <CheckCircle2 className="size-5 text-emerald-600" />
+                    </div>
+                    <p className="mt-3 text-3xl font-semibold">
+                        {manualVerificationDrafts.length}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Drafts waiting for email verification
+                    </p>
+                </div>
+                <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-muted-foreground">
+                            System Attention
+                        </p>
+                        <HeartPulse className="size-5 text-yellow-600" />
+                    </div>
+                    <p className="mt-3 text-3xl font-semibold">
+                        {criticalHealth.length}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Warning, critical, or unknown checks
+                    </p>
+                </div>
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
+                <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">
+                                Recent Issue Reports
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                Latest applicant reports submitted through the
+                                always-visible help button.
                             </p>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                                router.post('/developer/logout', undefined, {
-                                    preserveScroll: true,
-                                })
-                            }
-                        >
-                            <LogOut className="size-4" />
-                            Logout
+                        <Button asChild size="sm">
+                            <Link href="/developer/tickets">
+                                View all tickets
+                            </Link>
                         </Button>
                     </div>
-                </div>
-            </header>
-
-            <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    {healthCards.map((card) => (
-                        <div
-                            key={`${card.label}-${card.value}`}
-                            className="rounded-lg border bg-card p-4 shadow-sm"
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <p className="text-sm font-medium text-muted-foreground">
-                                    {card.label}
-                                </p>
-                                <Badge
-                                    variant="outline"
-                                    className={statusClass[card.status] ?? ''}
-                                >
-                                    {headline(card.status)}
-                                </Badge>
-                            </div>
-                            <p className="mt-3 text-2xl font-semibold">
-                                {card.value}
-                            </p>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                {card.message}
-                            </p>
-                        </div>
-                    ))}
-                </section>
-
-                <section>
-                    <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold">
-                                Graduation Application Monitoring
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                Showing application volume and processing health
-                                for {applicationMetricsScope}.
-                            </p>
-                            {currentWindow ? (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    Current active window: {currentWindow.title}
-                                </p>
-                            ) : null}
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                            <div className="grid min-w-72 gap-1.5">
-                                <Label>Application Window</Label>
-                                <Select
-                                    value={filterData.window_id ?? 'all'}
-                                    onValueChange={(value) => {
-                                        const nextFilters = {
-                                            ...filterData,
-                                            window_id: value,
-                                        };
-
-                                        setFilterData(nextFilters);
-                                        router.get(
-                                            '/developer/dashboard',
-                                            cleanFilters(nextFilters),
-                                            {
-                                                preserveScroll: true,
-                                                preserveState: true,
-                                            },
-                                        );
-                                    }}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            All application windows
-                                        </SelectItem>
-                                        {applicationWindows.map((window) => (
-                                            <SelectItem
-                                                key={window.id}
-                                                value={String(window.id)}
-                                            >
-                                                {window.title} (
-                                                {headline(window.status)})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <Button asChild variant="outline" size="sm">
-                                <a
-                                    href={`/developer/metrics/export${
-                                        metricsQueryString
-                                            ? `?${metricsQueryString}`
-                                            : ''
-                                    }`}
-                                >
-                                    <Download className="size-4" />
-                                    Export metrics
-                                </a>
-                            </Button>
-                        </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        {Object.entries(applicationMetrics).map(
-                            ([key, value]) => (
-                                <div
-                                    key={key}
-                                    className="rounded-lg border bg-card p-4"
-                                >
-                                    <p className="text-xs font-medium text-muted-foreground">
-                                        {headline(key)}
-                                    </p>
-                                    <p className="mt-2 text-lg font-semibold">
-                                        {String(value)}
-                                    </p>
-                                </div>
-                            ),
-                        )}
-                    </div>
-                </section>
-
-                <section className="rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold">
-                                Manual Verification
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {manualVerificationDrafts.length} drafts waiting
-                                for email verification
-                            </p>
-                        </div>
-                    </div>
-
-                    {manualVerificationMessage && (
-                        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-                            {manualVerificationMessage}
-                        </div>
-                    )}
-
                     <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full min-w-[980px] text-sm">
+                        <table className="w-full min-w-[760px] text-sm">
                             <thead className="bg-muted/60 text-left">
                                 <tr>
                                     <th className="px-3 py-2 font-medium">
-                                        Applicant
+                                        Ticket
                                     </th>
                                     <th className="px-3 py-2 font-medium">
-                                        Window
+                                        Issue
                                     </th>
                                     <th className="px-3 py-2 font-medium">
-                                        Tracking Code
+                                        Priority
                                     </th>
                                     <th className="px-3 py-2 font-medium">
-                                        PIN
+                                        Reporter
                                     </th>
                                     <th className="px-3 py-2 font-medium">
                                         Created
                                     </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Action
-                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {manualVerificationDrafts.map((draft) => (
+                                {recentSupportTickets.map((ticket) => (
                                     <tr
-                                        key={draft.id}
+                                        key={ticket.ticket_number}
                                         className="border-t align-top"
                                     >
                                         <td className="px-3 py-3">
-                                            <p className="font-medium">
-                                                {draft.applicant_name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {draft.email}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {draft.student_id}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-3 text-muted-foreground">
-                                            {draft.window_title}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <code className="rounded bg-muted px-2 py-1 text-xs font-semibold">
-                                                {draft.tracking_code}
-                                            </code>
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <code className="rounded bg-muted px-2 py-1 text-xs font-semibold">
-                                                {draft.tracking_pin}
-                                            </code>
-                                        </td>
-                                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                                            {draft.created_at
-                                                ? new Date(
-                                                      draft.created_at,
-                                                  ).toLocaleString()
-                                                : '-'}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                onClick={() =>
-                                                    manuallyVerifyDraft(draft)
-                                                }
-                                                disabled={
-                                                    manualVerifyingId ===
-                                                    draft.id
-                                                }
+                                            <Link
+                                                href={ticket.show_url}
+                                                className="font-medium underline-offset-4 hover:underline"
                                             >
-                                                <CheckCircle2 className="size-4" />
-                                                {manualVerifyingId === draft.id
-                                                    ? 'Verifying...'
-                                                    : 'Verify manually'}
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {manualVerificationDrafts.length === 0 && (
-                                    <tr>
-                                        <td
-                                            colSpan={6}
-                                            className="px-3 py-8 text-center text-muted-foreground"
-                                        >
-                                            No drafts are waiting for manual
-                                            verification.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <section className="rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold">
-                                Audit Trail
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {events.total} events found
-                            </p>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                    router.get('/developer/dashboard')
-                                }
-                            >
-                                <RefreshCw className="size-4" />
-                                Reset
-                            </Button>
-                            <Button asChild variant="outline" size="sm">
-                                <a
-                                    href={`/developer/events/export${
-                                        queryString ? `?${queryString}` : ''
-                                    }`}
-                                >
-                                    <Download className="size-4" />
-                                    Export CSV
-                                </a>
-                            </Button>
-                        </div>
-                    </div>
-
-                    <form
-                        onSubmit={applyFilters}
-                        className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
-                    >
-                        <div className="grid gap-1.5">
-                            <Label>Module</Label>
-                            <Select
-                                value={filterData.module ?? 'all'}
-                                onValueChange={(value) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        module: value,
-                                    }))
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All</SelectItem>
-                                    {eventFilters.modules.map((module) => (
-                                        <SelectItem key={module} value={module}>
-                                            {module}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label>Severity</Label>
-                            <Select
-                                value={filterData.severity ?? 'all'}
-                                onValueChange={(value) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        severity: value,
-                                    }))
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All</SelectItem>
-                                    {eventFilters.severities.map((severity) => (
-                                        <SelectItem
-                                            key={severity}
-                                            value={severity}
-                                        >
-                                            {headline(severity)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label>Actor</Label>
-                            <Select
-                                value={filterData.actor_guard ?? 'all'}
-                                onValueChange={(value) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        actor_guard: value,
-                                    }))
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All</SelectItem>
-                                    {eventFilters.actors.map((actor) => (
-                                        <SelectItem key={actor} value={actor}>
-                                            {headline(actor)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="search">Search</Label>
-                            <Input
-                                id="search"
-                                value={filterData.search ?? ''}
-                                onChange={(event) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        search: event.target.value,
-                                    }))
-                                }
-                                placeholder="Message, actor, action"
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label>Subject</Label>
-                            <Select
-                                value={filterData.subject_type ?? 'all'}
-                                onValueChange={(value) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        subject_type: value,
-                                    }))
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All</SelectItem>
-                                    {eventFilters.subjects.map((subject) => (
-                                        <SelectItem
-                                            key={subject}
-                                            value={subject}
-                                        >
-                                            {headline(
-                                                shortClassName(subject) ??
-                                                    subject,
-                                            )}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="subject_id">Subject ID</Label>
-                            <Input
-                                id="subject_id"
-                                inputMode="numeric"
-                                value={filterData.subject_id ?? ''}
-                                onChange={(event) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        subject_id: event.target.value,
-                                    }))
-                                }
-                                placeholder="Record ID"
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="from">From</Label>
-                            <Input
-                                id="from"
-                                type="date"
-                                value={filterData.from ?? ''}
-                                onChange={(event) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        from: event.target.value,
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="to">To</Label>
-                            <Input
-                                id="to"
-                                type="date"
-                                value={filterData.to ?? ''}
-                                onChange={(event) =>
-                                    setFilterData((current) => ({
-                                        ...current,
-                                        to: event.target.value,
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="flex items-end xl:col-span-2">
-                            <Button type="submit" className="w-full xl:w-auto">
-                                Apply filters
-                            </Button>
-                        </div>
-                    </form>
-
-                    <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full min-w-[980px] text-sm">
-                            <thead className="bg-muted/60 text-left">
-                                <tr>
-                                    <th className="px-3 py-2 font-medium">
-                                        Date
-                                    </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Event
-                                    </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Actor
-                                    </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Subject
-                                    </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Status
-                                    </th>
-                                    <th className="px-3 py-2 font-medium">
-                                        Message
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {events.data.map((event) => (
-                                    <tr
-                                        key={event.id}
-                                        className="border-t align-top"
-                                    >
-                                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                                            {new Date(
-                                                event.created_at,
-                                            ).toLocaleString()}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <p className="font-medium">
-                                                {event.module}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {event.action}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <p>
-                                                {event.actor_label ?? 'System'}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {event.actor_guard ?? 'system'}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                                            {event.subject_type ? (
-                                                <>
-                                                    <p>
-                                                        {headline(
-                                                            shortClassName(
-                                                                event.subject_type,
-                                                            ) ??
-                                                                event.subject_type,
-                                                        )}
-                                                    </p>
-                                                    <p>#{event.subject_id}</p>
-                                                </>
-                                            ) : (
-                                                'None'
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <div className="flex flex-wrap gap-1">
+                                                {ticket.ticket_number}
+                                            </Link>
+                                            <div className="mt-1">
                                                 <Badge
                                                     variant="outline"
                                                     className={
                                                         statusClass[
-                                                            event.status
+                                                            ticket.status
                                                         ] ?? ''
                                                     }
                                                 >
-                                                    {headline(event.status)}
-                                                </Badge>
-                                                <Badge
-                                                    variant="outline"
-                                                    className={
-                                                        statusClass[
-                                                            event.severity
-                                                        ] ?? ''
-                                                    }
-                                                >
-                                                    {headline(event.severity)}
+                                                    {headline(ticket.status)}
                                                 </Badge>
                                             </div>
                                         </td>
-                                        <td className="max-w-md px-3 py-3 text-muted-foreground">
-                                            {event.message ?? '-'}
+                                        <td className="px-3 py-3">
+                                            <p className="font-medium">
+                                                {ticket.subject}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {headline(ticket.category)}
+                                            </p>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                            <Badge
+                                                variant="outline"
+                                                className={
+                                                    statusClass[
+                                                        ticket.priority
+                                                    ] ?? ''
+                                                }
+                                            >
+                                                {headline(ticket.priority)}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-3 py-3 text-muted-foreground">
+                                            <p>
+                                                {ticket.reporter_name ??
+                                                    'Applicant'}
+                                            </p>
+                                            <p className="text-xs">
+                                                {ticket.reporter_email ?? '-'}
+                                            </p>
+                                        </td>
+                                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                                            {formatDate(ticket.created_at)}
                                         </td>
                                     </tr>
                                 ))}
-                                {events.data.length === 0 && (
+                                {recentSupportTickets.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={6}
+                                            colSpan={5}
                                             className="px-3 py-8 text-center text-muted-foreground"
                                         >
-                                            No events found.
+                                            No issue reports have been
+                                            submitted yet.
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
+                </div>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                        {events.links.map((link, index) => (
-                            <Button
-                                key={`${link.label}-${index}`}
-                                variant={link.active ? 'default' : 'outline'}
-                                size="sm"
-                                disabled={!link.url}
-                                onClick={() =>
-                                    link.url &&
-                                    router.get(link.url, undefined, {
-                                        preserveScroll: true,
-                                    })
-                                }
-                                dangerouslySetInnerHTML={{
-                                    __html: link.label,
-                                }}
-                            />
-                        ))}
+                <div className="space-y-6">
+                    <div className="rounded-lg border bg-card p-4 shadow-sm">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Application Monitoring
+                                </h2>
+                                <p className="text-sm text-muted-foreground">
+                                    {applicationMetricsScope}
+                                </p>
+                                {currentWindow ? (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Active window: {currentWindow.title}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <Button asChild variant="outline" size="sm">
+                                <a
+                                    href={`/developer/metrics/export${metricsQuery}`}
+                                >
+                                    <Download className="size-4" />
+                                    Export
+                                </a>
+                            </Button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {Object.entries(applicationMetrics)
+                                .slice(0, 8)
+                                .map(([key, value]) => (
+                                    <div
+                                        key={key}
+                                        className="rounded-lg border bg-background/80 p-3"
+                                    >
+                                        <p className="text-xs font-medium text-muted-foreground">
+                                            {headline(key)}
+                                        </p>
+                                        <p className="mt-2 text-lg font-semibold">
+                                            {String(value)}
+                                        </p>
+                                    </div>
+                                ))}
+                        </div>
                     </div>
-                </section>
 
-                <section className="rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="mb-3 flex items-center gap-2">
-                        <AlertTriangle className="size-5 text-yellow-600" />
+                    <div className="rounded-lg border bg-card p-4 shadow-sm">
                         <h2 className="text-lg font-semibold">
-                            Recent Laravel Warnings and Errors
+                            Health Attention
                         </h2>
+                        <div className="mt-3 space-y-2">
+                            {(criticalHealth.length
+                                ? criticalHealth.slice(0, 5)
+                                : healthCards.slice(0, 5)
+                            ).map((card) => (
+                                <div
+                                    key={`${card.label}-${card.value}`}
+                                    className="flex items-start justify-between gap-3 rounded-lg border bg-background/80 p-3"
+                                >
+                                    <div>
+                                        <p className="font-medium">
+                                            {card.label}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {card.message}
+                                        </p>
+                                    </div>
+                                    <Badge
+                                        variant="outline"
+                                        className={
+                                            statusClass[card.status] ?? ''
+                                        }
+                                    >
+                                        {headline(card.status)}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+                        <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                        >
+                            <Link href="/developer/health">
+                                Open health page
+                            </Link>
+                        </Button>
                     </div>
-                    {recentLogLines.length > 0 ? (
-                        <pre className="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs leading-relaxed">
-                            {recentLogLines.join('\n')}
-                        </pre>
-                    ) : (
-                        <div className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                            <Activity className="size-4" />
-                            No recent warning, error, or critical log lines were
-                            found.
+                </div>
+            </section>
+
+            <section className="rounded-lg border bg-card p-4 shadow-sm">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold">
+                            Pending Manual Verification
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            Emergency fallback for applicants who cannot
+                            complete email verification.
+                        </p>
+                    </div>
+                    <Button asChild variant="outline" size="sm">
+                        <Link href="/developer/manual-verification">
+                            Review drafts
+                        </Link>
+                    </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {manualVerificationDrafts.slice(0, 4).map((draft) => (
+                        <div
+                            key={draft.id}
+                            className="rounded-lg border bg-background/80 p-3"
+                        >
+                            <div className="flex items-start gap-2">
+                                <FileText className="mt-0.5 size-4 text-muted-foreground" />
+                                <div className="min-w-0">
+                                    <p className="truncate font-medium">
+                                        {draft.applicant_name}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                        {draft.email}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 grid gap-2 text-xs">
+                                <code className="rounded bg-muted px-2 py-1 font-semibold">
+                                    {draft.tracking_code}
+                                </code>
+                                <code className="rounded bg-muted px-2 py-1 font-semibold">
+                                    PIN {draft.tracking_pin}
+                                </code>
+                            </div>
+                        </div>
+                    ))}
+                    {manualVerificationDrafts.length === 0 && (
+                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                            No drafts are waiting for manual verification.
                         </div>
                     )}
-                </section>
-            </main>
-        </div>
+                </div>
+            </section>
+        </DeveloperConsoleLayout>
     );
 }

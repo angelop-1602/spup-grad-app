@@ -146,7 +146,7 @@ return [
     'features' => [
         Features::registration(),
         Features::resetPasswords(),
-        // Features::emailVerification(), // Disabled temporarily
+        // Student account email verification is not used; guest applications use apply.verify.
         Features::twoFactorAuthentication([
             'confirm' => true,
             'confirmPassword' => true,

@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import ValidationSummary from '@/components/validation-summary';
 import { useToast } from '@/contexts/toast-context';
+import { parseDateOnly, toDateOnlyString } from '@/lib/date-only';
 import { MONTHS, NATIONALITIES, RELIGIONS } from '@/lib/profile-form-options';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import applicationRoutes from '@/routes/applications/index';
@@ -287,25 +288,16 @@ export function ApplicationWizard({
     );
 
     // Date of birth state (month/day/year dropdowns)
-    const parsedDob = profile?.date_of_birth
-        ? (() => {
-              try {
-                  const date = new Date(profile.date_of_birth);
-                  return isNaN(date.getTime()) ? null : date;
-              } catch {
-                  return null;
-              }
-          })()
-        : null;
+    const parsedDob = parseDateOnly(profile?.date_of_birth);
     const currentYear = new Date().getFullYear();
     const [dobMonth, setDobMonth] = useState<number | ''>(
-        parsedDob ? parsedDob.getMonth() + 1 : '',
+        parsedDob ? parsedDob.month : '',
     );
     const [dobDay, setDobDay] = useState<number | ''>(
-        parsedDob ? parsedDob.getDate() : '',
+        parsedDob ? parsedDob.day : '',
     );
     const [dobYear, setDobYear] = useState<number | ''>(
-        parsedDob ? parsedDob.getFullYear() : '',
+        parsedDob ? parsedDob.year : '',
     );
     const yearOptions = Array.from(
         { length: currentYear - 1900 + 1 },
@@ -447,7 +439,7 @@ export function ApplicationWizard({
         if (dobYear && dobMonth && dobDay && !data.date_of_birth) {
             setData(
                 'date_of_birth',
-                `${dobYear}-${String(dobMonth).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`,
+                toDateOnlyString(dobYear, dobMonth, dobDay),
             );
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1358,7 +1350,11 @@ export function ApplicationWizard({
                                                             ) {
                                                                 setData(
                                                                     'date_of_birth',
-                                                                    `${dobYear}-${String(month).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`,
+                                                                    toDateOnlyString(
+                                                                        dobYear,
+                                                                        month,
+                                                                        dobDay,
+                                                                    ),
                                                                 );
                                                             }
                                                         }}
@@ -1406,7 +1402,11 @@ export function ApplicationWizard({
                                                             ) {
                                                                 setData(
                                                                     'date_of_birth',
-                                                                    `${dobYear}-${String(dobMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+                                                                    toDateOnlyString(
+                                                                        dobYear,
+                                                                        dobMonth,
+                                                                        day,
+                                                                    ),
                                                                 );
                                                             }
                                                         }}
@@ -1452,7 +1452,11 @@ export function ApplicationWizard({
                                                             ) {
                                                                 setData(
                                                                     'date_of_birth',
-                                                                    `${year}-${String(dobMonth).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`,
+                                                                    toDateOnlyString(
+                                                                        year,
+                                                                        dobMonth,
+                                                                        dobDay,
+                                                                    ),
                                                                 );
                                                             }
                                                         }}
@@ -1462,11 +1466,7 @@ export function ApplicationWizard({
                                                         <option value="">
                                                             Year
                                                         </option>
-                                                        {Array.from(
-                                                            { length: 100 },
-                                                            (_, i) =>
-                                                                currentYear - i,
-                                                        ).map((year) => (
+                                                        {yearOptions.map((year) => (
                                                             <option
                                                                 key={year}
                                                                 value={year}
@@ -1483,7 +1483,11 @@ export function ApplicationWizard({
                                                         dobYear &&
                                                         dobMonth &&
                                                         dobDay
-                                                            ? `${dobYear}-${String(dobMonth).padStart(2, '0')}-${String(dobDay).padStart(2, '0')}`
+                                                            ? toDateOnlyString(
+                                                                  dobYear,
+                                                                  dobMonth,
+                                                                  dobDay,
+                                                              )
                                                             : ''
                                                     }
                                                 />

@@ -15,6 +15,7 @@ use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use App\Support\ApplicationWorkflowService;
 use App\Support\SystemEventLogger;
+use App\Support\VerificationLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -324,10 +325,14 @@ class GuestApplicationController extends Controller
             ->with('status', 'Your email address has been updated and a new verification email has been sent.');
     }
 
-    public function verify(Request $request, GuestApplicationDraft $draft, string $hash, ApplicationWorkflowService $workflow): Response
+    public function verify(Request $request, GuestApplicationDraft $draft, string $hash, ApplicationWorkflowService $workflow): Response|RedirectResponse
     {
         if (! hash_equals($hash, sha1($draft->email))) {
             abort(403, 'Invalid verification link.');
+        }
+
+        if (! VerificationLinks::hasValidSignature($request)) {
+            return $this->handleInvalidVerificationLink($request, $draft);
         }
 
         [$draft, $newlyFinalized] = $workflow->finalizeGuestDraft($draft);
@@ -490,6 +495,28 @@ class GuestApplicationController extends Controller
 
         return redirect()->route('apply.index')
             ->with('error', 'This guest application session has expired. Start again to continue.');
+    }
+
+    private function handleInvalidVerificationLink(Request $request, GuestApplicationDraft $draft): RedirectResponse
+    {
+        $this->rememberDraft($request, $draft);
+
+        $this->logGuestEvent($draft, 'graduation_application', 'guest.verification_link_invalid', 'Guest opened an expired or invalid verification link.', status: 'failed', severity: 'warning', meta: [
+            'expired' => VerificationLinks::hasExpired($request),
+            'has_correct_signature' => VerificationLinks::hasCorrectSignature($request),
+        ]);
+
+        if ($draft->hasBeenVerified()) {
+            return redirect()->route('apply.pending.show', $draft)
+                ->with('status', 'This verification link is no longer valid, but your application is already verified. Use the application access option below.');
+        }
+
+        $message = VerificationLinks::hasExpired($request)
+            ? 'This verification link has expired. Please request a fresh verification email below.'
+            : 'This verification link is no longer valid. Please request a fresh verification email below.';
+
+        return redirect()->route('apply.pending.show', $draft)
+            ->with('error', $message);
     }
 
     private function rememberDraft(Request $request, GuestApplicationDraft $draft): void

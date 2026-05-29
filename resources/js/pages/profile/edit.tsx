@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import ValidationSummary from '@/components/validation-summary';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
+import { parseDateOnly, toDateOnlyString } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import * as profileRoutes from '@/routes/profile';
 import { type BreadcrumbItem, type SharedData } from '@/types';
@@ -381,17 +382,15 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
     const photoInputRef = useRef<HTMLInputElement>(null);
 
     // Date of birth broken into day / month / year for easier selection
-    const parsedDob = initial.date_of_birth
-        ? new Date(initial.date_of_birth)
-        : null;
+    const parsedDob = parseDateOnly(initial.date_of_birth);
     const [dobDay, setDobDay] = useState<number | ''>(
-        parsedDob ? parsedDob.getDate() : '',
+        parsedDob ? parsedDob.day : '',
     );
     const [dobMonth, setDobMonth] = useState<number | ''>(
-        parsedDob ? parsedDob.getMonth() + 1 : '',
+        parsedDob ? parsedDob.month : '',
     );
     const [dobYear, setDobYear] = useState<number | ''>(
-        parsedDob ? parsedDob.getFullYear() : '',
+        parsedDob ? parsedDob.year : '',
     );
     const currentYear = new Date().getFullYear();
     const yearOptions = Array.from(
@@ -1034,11 +1033,7 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                                     <option value="">
                                                         Year
                                                     </option>
-                                                    {Array.from(
-                                                        { length: 100 },
-                                                        (_, i) =>
-                                                            currentYear - i,
-                                                    ).map((year) => (
+                                                    {yearOptions.map((year) => (
                                                         <option
                                                             key={year}
                                                             value={year}
@@ -1055,12 +1050,11 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                                     dobYear &&
                                                     dobMonth &&
                                                     dobDay
-                                                        ? `${dobYear}-${String(
+                                                        ? toDateOnlyString(
+                                                              dobYear,
                                                               dobMonth,
-                                                          ).padStart(
-                                                              2,
-                                                              '0',
-                                                          )}-${String(dobDay).padStart(2, '0')}`
+                                                              dobDay,
+                                                          )
                                                         : ''
                                                 }
                                             />

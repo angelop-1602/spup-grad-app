@@ -12,6 +12,7 @@ import coordinatorRoutes from '@/routes/coordinator';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import {
+    Activity,
     Calendar,
     FileText,
     LayoutGrid,
@@ -40,6 +41,11 @@ const adminNavItems: NavItem[] = [
         href: adminRoutes.coordinators.index(),
         icon: UserCog,
     },
+    {
+        title: 'Audit Trail',
+        href: '/admin/audit-trail',
+        icon: Activity,
+    },
 ];
 
 const coordinatorNavItems: NavItem[] = [
@@ -53,16 +59,21 @@ const coordinatorNavItems: NavItem[] = [
         href: coordinatorRoutes.applications.index(),
         icon: FileText,
     },
+    {
+        title: 'Audit Trail',
+        href: '/coordinator/audit-trail',
+        icon: Activity,
+    },
 ];
 
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
     const isAdmin = !!auth.admin;
     const isCoordinator = !!auth.coordinator;
-    
+
     let mainNavItems: NavItem[];
     let dashboardHref: string;
-    
+
     if (isAdmin) {
         mainNavItems = adminNavItems;
         dashboardHref = adminRoutes.dashboard().url;
@@ -77,8 +88,12 @@ export function AppSidebar() {
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
-                <Link href={dashboardHref} prefetch className="block w-full flex items-center justify-center">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
+                <Link
+                    href={dashboardHref}
+                    prefetch
+                    className="block flex w-full items-center justify-center"
+                >
+                    <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
                         <img
                             src="/SPUP-Logo-with-yellow.png"
                             alt="St. Paul University Philippines Logo"
@@ -86,7 +101,7 @@ export function AppSidebar() {
                         />
                     </div>
                     <div className="ml-1 grid flex-1 text-left text-sm">
-                        <span className="mb-0.5 truncate leading-tight font-semibold ">
+                        <span className="mb-0.5 truncate leading-tight font-semibold">
                             Graduation Application
                         </span>
                     </div>
@@ -94,7 +109,9 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                {mainNavItems.length > 0 ? <NavMain items={mainNavItems} /> : null}
+                {mainNavItems.length > 0 ? (
+                    <NavMain items={mainNavItems} />
+                ) : null}
             </SidebarContent>
 
             <SidebarFooter>

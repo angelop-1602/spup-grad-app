@@ -3,19 +3,23 @@
 use App\Http\Controllers\Coordinator\Auth\CoordinatorLoginController;
 use App\Http\Controllers\Coordinator\Auth\CoordinatorPasswordResetController;
 use App\Http\Controllers\Coordinator\Auth\CoordinatorPasswordResetLinkController;
-use App\Http\Middleware\RedirectIfCoordinatorAuthenticated;
+use App\Http\Middleware\EnsureRoleAccess;
+use App\Http\Middleware\RedirectIfAnyGuardAuthenticated;
+use App\Support\RoleSessionManager;
 use Illuminate\Support\Facades\Route;
 
 // Redirect /coordinator to login if not authenticated
 Route::get('coordinator', function () {
-    if (auth()->guard('coordinator')->check()) {
-        return redirect()->route('coordinator.dashboard');
+    $homeUrl = app(RoleSessionManager::class)->redirectToAuthenticatedHome(request());
+
+    if ($homeUrl) {
+        return redirect()->to($homeUrl);
     }
 
     return redirect()->route('coordinator.login');
 });
 
-Route::middleware([RedirectIfCoordinatorAuthenticated::class])->group(function () {
+Route::middleware([RedirectIfAnyGuardAuthenticated::class])->group(function () {
     Route::get('coordinator/login', [CoordinatorLoginController::class, 'create'])->name('coordinator.login');
     Route::post('coordinator/login', [CoordinatorLoginController::class, 'store']);
 
@@ -27,14 +31,17 @@ Route::middleware([RedirectIfCoordinatorAuthenticated::class])->group(function (
 });
 
 use App\Http\Controllers\Coordinator\ApplicationController;
+use App\Http\Controllers\Coordinator\AuditTrailController;
 use App\Http\Controllers\Coordinator\DashboardController;
 use App\Http\Controllers\Coordinator\HistoricalApplicationController;
+use App\Http\Controllers\NotificationController;
 
-Route::middleware(['auth:coordinator'])->group(function () {
+Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])->group(function () {
     Route::post('coordinator/logout', [CoordinatorLoginController::class, 'destroy'])->name('coordinator.logout');
 
     // Dashboard
     Route::get('coordinator/dashboard', [DashboardController::class, 'index'])->name('coordinator.dashboard');
+    Route::get('coordinator/audit-trail', [AuditTrailController::class, 'index'])->name('coordinator.audit-trail.index');
 
     // Applications / Windows
     Route::get('coordinator/applications', [ApplicationController::class, 'index'])->name('coordinator.applications.index');
@@ -49,7 +56,9 @@ Route::middleware(['auth:coordinator'])->group(function () {
     Route::put('coordinator/applications/{application:application_number}/requirements', [ApplicationController::class, 'updateRequirements'])->name('coordinator.applications.update-requirements');
     Route::get('coordinator/applications/{application:application_number}/download', [ApplicationController::class, 'download'])->name('coordinator.applications.download');
     Route::get('coordinator/applications/{application:application_number}/photo/download', [ApplicationController::class, 'downloadPhoto'])->name('coordinator.applications.photo.download');
-    Route::post('coordinator/notifications/{notification}/mark-as-read', [ApplicationController::class, 'markNotificationAsRead'])->name('coordinator.notifications.mark-as-read');
+    Route::get('coordinator/notifications', [NotificationController::class, 'index'])->name('coordinator.notifications.index');
+    Route::post('coordinator/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('coordinator.notifications.mark-all-as-read');
+    Route::post('coordinator/notifications/{notification}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('coordinator.notifications.mark-as-read');
 
     // Historical applications (details only)
     Route::get('coordinator/historical-applications/{historicalApplication}', [HistoricalApplicationController::class, 'show'])->name('coordinator.historical-applications.show');

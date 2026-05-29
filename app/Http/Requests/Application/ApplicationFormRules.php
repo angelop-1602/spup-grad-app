@@ -39,7 +39,7 @@ class ApplicationFormRules
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'suffix' => ['nullable', 'string', 'max:255'],
-            'date_of_birth' => ['required', 'date', 'before:today'],
+            'date_of_birth' => ['required', 'date_format:Y-m-d', 'before:today'],
             'place_of_birth' => ['required', 'string', 'max:255'],
             'sex' => ['required', 'string', Rule::in(['Male', 'Female', 'Prefer not to say'])],
             'civil_status' => ['required', 'string', 'max:255'],
@@ -155,6 +155,7 @@ class ApplicationFormRules
     {
         return [
             'contact_number.regex' => 'Contact number must use digits only, like 09171234567 or +639171234567.',
+            'date_of_birth.date_format' => 'Date of birth must use YYYY-MM-DD format.',
             'date_of_birth.before' => 'Date of birth must be before today.',
             'photo.image' => 'Photo must be a valid JPG or PNG image.',
             'photo.mimes' => 'Photo must be a JPG or PNG image.',

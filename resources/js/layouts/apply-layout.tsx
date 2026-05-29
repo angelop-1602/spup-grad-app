@@ -1,6 +1,7 @@
 import AppLogoIcon from '@/components/app-logo-icon';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import FlashToastHandler from '@/components/flash-toast-handler';
+import ReportIssueButton from '@/components/report-issue-button';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -145,6 +146,7 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
 
                 <main className="flex-1">{children}</main>
             </div>
+            <ReportIssueButton />
         </div>
     );
 }

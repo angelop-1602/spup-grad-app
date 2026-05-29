@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
 import ApplyLayout from '@/layouts/apply-layout';
+import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import applicationRoutes from '@/routes/applications/index';
 import applyRoutes from '@/routes/apply';
@@ -543,9 +544,9 @@ export default function ShowApplication({
                                                 Date of Birth
                                             </dt>
                                             <dd className="text-sm">
-                                                {new Date(
+                                                {formatDateOnly(
                                                     profile.date_of_birth,
-                                                ).toLocaleDateString()}
+                                                )}
                                             </dd>
                                         </div>
                                         <div className="space-y-1">

@@ -6,7 +6,9 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\FailedLoginResponse;
 use App\Models\GuestApplicationDraft;
+use App\Support\RoleSessionManager;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -25,12 +27,6 @@ class FortifyServiceProvider extends ServiceProvider
         $this->app->singleton(
             \Laravel\Fortify\Http\Controllers\RegisteredUserController::class,
             \App\Http\Controllers\Auth\RegisteredUserController::class
-        );
-
-        // Override Fortify's EmailVerificationPromptController with our custom one
-        $this->app->singleton(
-            \Laravel\Fortify\Http\Controllers\EmailVerificationPromptController::class,
-            \App\Http\Controllers\Auth\EmailVerificationPromptController::class
         );
 
         // Register custom failed login response early to ensure it's used
@@ -80,6 +76,8 @@ class FortifyServiceProvider extends ServiceProvider
             }
 
             // Email verification is disabled - allow login
+            app(RoleSessionManager::class)->keepOnlyGuard('web', $request);
+
             return $user;
         });
     }
@@ -89,21 +87,38 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureViews(): void
     {
-        Fortify::loginView(fn () => redirect()->route('apply.index')
-            ->with('info', 'Student login is no longer used. Please continue through the public application portal.'));
+        Fortify::loginView(fn () => $this->applicantPortalRedirect(
+            'Student login is no longer used. Please continue through the public application portal.'
+        ));
 
-        Fortify::resetPasswordView(fn () => redirect()->route('apply.index')
-            ->with('info', 'Student account password reset is no longer available. Please use the public application portal.'));
+        Fortify::resetPasswordView(fn () => $this->applicantPortalRedirect(
+            'Student account password reset is no longer available. Please use the public application portal.'
+        ));
 
-        Fortify::requestPasswordResetLinkView(fn () => redirect()->route('apply.index')
-            ->with('info', 'Student account password reset is no longer available. Please use the public application portal.'));
+        Fortify::requestPasswordResetLinkView(fn () => $this->applicantPortalRedirect(
+            'Student account password reset is no longer available. Please use the public application portal.'
+        ));
 
-        Fortify::registerView(fn () => redirect()->route('apply.index')
-            ->with('info', 'Student account registration is no longer used. Please complete your application through the public portal.'));
+        Fortify::registerView(fn () => $this->applicantPortalRedirect(
+            'Student account registration is no longer used. Please complete your application through the public portal.'
+        ));
 
-        Fortify::twoFactorChallengeView(fn () => redirect()->route('apply.index'));
+        Fortify::twoFactorChallengeView(fn () => $this->applicantPortalRedirect());
 
-        Fortify::confirmPasswordView(fn () => redirect()->route('apply.index'));
+        Fortify::confirmPasswordView(fn () => $this->applicantPortalRedirect());
+    }
+
+    private function applicantPortalRedirect(?string $info = null): RedirectResponse
+    {
+        $homeUrl = app(RoleSessionManager::class)->redirectToAuthenticatedHome(request());
+
+        if ($homeUrl) {
+            return redirect()->to($homeUrl);
+        }
+
+        $response = redirect()->route('apply.index');
+
+        return $info ? $response->with('info', $info) : $response;
     }
 
     /**
@@ -131,21 +146,18 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by('developer-two-factor:'.optional($request->user('developer'))->getAuthIdentifier().'|'.$request->ip());
         });
 
+        RateLimiter::for('support-issues', function (Request $request) {
+            $identity = $request->user()?->getAuthIdentifier()
+                ? 'student:'.$request->user()->getAuthIdentifier()
+                : 'guest:'.$request->ip();
+
+            return Limit::perMinutes(10, 5)->by('support-issues:'.$identity);
+        });
+
         // Rate limit registration to prevent spam and abuse
         RateLimiter::for('register', function (Request $request) {
             // Limit by IP address - 3 registrations per hour per IP
             return Limit::perHour(3)->by($request->ip());
-        });
-
-        // Rate limit email verification resend
-        RateLimiter::for('verification-resend', function (Request $request) {
-            // Limit by email address - 3 resends per hour per email
-            $draft = $request->route('draft');
-            $email = $request->user()?->email
-                ?? ($draft instanceof GuestApplicationDraft ? $draft->email : null)
-                ?? $request->input('email', 'anonymous');
-
-            return Limit::perHour(3)->by('verification-resend:'.$email);
         });
 
         RateLimiter::for('guest-application-resend', function (Request $request) {

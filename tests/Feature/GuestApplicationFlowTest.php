@@ -230,6 +230,27 @@ test('guest application docx omits school name for spup college graduates', func
         ->not->toContain('Main Campus Should Not Print');
 });
 
+test('guest application docx compacts long fixed-line values', function () {
+    $application = guestApplicationForDocx([
+        'place_of_birth' => 'CVMC, Regional Government Center, Dalan na Pagayaya, Carig Sur, Tuguegarao City, 3500 Cagayan',
+        'graduate_subjects' => [
+            [
+                'subject_code' => 'MBA 201A',
+                'subject_title' => 'Good Governance for Business Sustainability',
+                'units' => 3,
+            ],
+        ],
+    ]);
+
+    $xml = guestApplicationDocxXml($application);
+
+    expect($xml)
+        ->toContain('Regional Government Center')
+        ->toContain('Good Governance for Business Sustainability')
+        ->toMatch('/<w:w w:val="76"\/>.*Regional Government Center/s')
+        ->toMatch('/<w:w w:val="84"\/>.*Good Governance for Business Sustainability/s');
+});
+
 test('student application edit accepts method spoofed multipart payload', function () {
     $application = guestApplicationForDocx();
 
@@ -332,6 +353,58 @@ test('guest can change email before verification and the old verification link s
 
     $this->get($oldVerificationUrl)->assertForbidden();
     Notification::assertSentTo($draft->fresh(), GuestApplicationVerificationNotification::class);
+});
+
+test('expired guest verification links redirect back to the pending screen', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+    $payload = guestApplicationPayload($window, $department, $course, [
+        'email' => 'expired.verify@example.com',
+    ]);
+
+    $this->post(route('apply.store'), $payload);
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $expiredVerificationUrl = URL::temporarySignedRoute(
+        'apply.verify',
+        now()->subMinute(),
+        ['draft' => $draft->id, 'hash' => sha1($draft->email)],
+    );
+
+    $this->get($expiredVerificationUrl)
+        ->assertRedirect(route('apply.pending.show', $draft, absolute: false))
+        ->assertSessionHas('error', 'This verification link has expired. Please request a fresh verification email below.');
+
+    expect($draft->fresh()->verified_at)->toBeNull()
+        ->and(Application::count())->toBe(0);
+});
+
+test('relative signed guest verification links finalize applications', function () {
+    Notification::fake();
+
+    [$window, $department, $course] = guestApplicationCatalog();
+    $payload = guestApplicationPayload($window, $department, $course, [
+        'email' => 'relative.verify@example.com',
+    ]);
+
+    $this->post(route('apply.store'), $payload);
+    $draft = GuestApplicationDraft::firstOrFail();
+
+    $relativeVerificationUrl = (new GuestApplicationVerificationNotification($draft))
+        ->toMail($draft)
+        ->actionUrl;
+
+    $this->get($relativeVerificationUrl)
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('apply/verified')
+            ->where('draft.id', $draft->id)
+            ->where('alreadyVerified', false)
+        );
+
+    expect($draft->fresh()->verified_at)->not->toBeNull()
+        ->and(Application::count())->toBe(1);
 });
 
 test('guest can change email to the same student email from a previous window', function () {
@@ -513,6 +586,7 @@ test('guest portal downloads the generated application as a pdf', function () {
     Notification::fake();
     config([
         'services.freeconvert.api_key' => 'test-freeconvert-key',
+        'services.freeconvert.api_keys' => '',
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
@@ -615,73 +689,86 @@ test('guest portal downloads the generated application as a pdf', function () {
     expect($response->headers->get('content-type'))->toContain('application/pdf');
 });
 
-test('application export can convert docx to pdf through gotenberg', function () {
+test('application export rotates through configured freeconvert api keys', function () {
     config([
         'services.freeconvert.api_key' => '',
-        'services.pdfco.api_key' => '',
-        'services.gotenberg.url' => 'https://gotenberg.test',
-        'services.gotenberg.timeout' => 30,
-        'services.libreoffice.enabled' => false,
-    ]);
-    Http::fake([
-        'https://gotenberg.test/forms/libreoffice/convert' => Http::response('%PDF-1.4 gotenberg pdf body', 200, [
-            'Content-Type' => 'application/pdf',
-        ]),
+        'services.freeconvert.api_keys' => ['first-freeconvert-key', 'second-freeconvert-key'],
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
     ]);
 
-    $application = guestApplicationForDocx();
-    $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
-    $pdfPath = $response->getFile()->getPathname();
+    $jobCreationTokens = [];
 
-    try {
-        expect($response->headers->get('content-type'))->toContain('application/pdf');
-        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 gotenberg pdf body'))->toBeTrue();
-    } finally {
-        @unlink($pdfPath);
-    }
-
-    Http::assertSent(fn ($request) => $request->method() === 'POST'
-        && (string) $request->url() === 'https://gotenberg.test/forms/libreoffice/convert');
-});
-
-test('application export can convert docx to pdf through pdfco', function () {
-    config([
-        'services.freeconvert.api_key' => '',
-        'services.gotenberg.url' => null,
-        'services.pdfco.api_key' => 'test-pdfco-key',
-        'services.pdfco.base_url' => 'https://api.pdfco.test/v1',
-        'services.pdfco.timeout' => 30,
-        'services.pdfco.expiration' => 60,
-        'services.libreoffice.enabled' => false,
-    ]);
-    Http::fake(function ($request) {
+    Http::fake(function ($request) use (&$jobCreationTokens) {
         $url = (string) $request->url();
 
-        if ($request->method() === 'GET' && str_starts_with($url, 'https://api.pdfco.test/v1/file/upload/get-presigned-url')) {
+        if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
+            $jobCreationTokens[] = $request->header('Authorization')[0] ?? '';
+
+            if (count($jobCreationTokens) === 1) {
+                return Http::response([
+                    'message' => 'rate limit exceeded',
+                ], 429);
+            }
+
             return Http::response([
-                'error' => false,
-                'presignedUrl' => 'https://upload.pdfco.test/graduation-application.docx',
-                'url' => 'https://files.pdfco.test/graduation-application.docx',
+                'id' => 'job-rotated',
+                'status' => 'created',
+                'tasks' => [
+                    [
+                        'name' => 'import-docx',
+                        'operation' => 'import/upload',
+                        'result' => [
+                            'form' => [
+                                'url' => 'https://upload.freeconvert.test/api/upload/job-rotated',
+                                'parameters' => ['signature' => 'signed-upload'],
+                            ],
+                        ],
+                    ],
+                    [
+                        'name' => 'convert-pdf',
+                        'operation' => 'convert',
+                        'status' => 'processing',
+                    ],
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'processing',
+                    ],
+                ],
+            ], 201);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-rotated') {
+            return Http::response(['ok' => true]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-rotated') {
+            return Http::response([
+                'id' => 'job-rotated',
+                'status' => 'completed',
+                'tasks' => [
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'completed',
+                        'result' => [
+                            'url' => 'https://download.freeconvert.test/job-rotated/result.pdf',
+                        ],
+                    ],
+                ],
             ]);
         }
 
-        if ($request->method() === 'PUT' && $url === 'https://upload.pdfco.test/graduation-application.docx') {
-            return Http::response([], 200);
-        }
-
-        if ($request->method() === 'POST' && $url === 'https://api.pdfco.test/v1/pdf/convert/from/doc') {
-            return Http::response([
-                'error' => false,
-                'status' => 200,
-                'url' => 'https://download.pdfco.test/result.pdf',
-                'name' => 'result.pdf',
-            ]);
-        }
-
-        if ($request->method() === 'GET' && $url === 'https://download.pdfco.test/result.pdf') {
-            return Http::response('%PDF-1.4 pdfco pdf body', 200, [
+        if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-rotated/result.pdf') {
+            return Http::response('%PDF-1.4 rotated freeconvert pdf body', 200, [
                 'Content-Type' => 'application/pdf',
             ]);
+        }
+
+        if ($request->method() === 'DELETE' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-rotated') {
+            return Http::response([], 204);
         }
 
         return Http::response([], 404);
@@ -693,35 +780,90 @@ test('application export can convert docx to pdf through pdfco', function () {
 
     try {
         expect($response->headers->get('content-type'))->toContain('application/pdf');
-        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 pdfco pdf body'))->toBeTrue();
+        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 rotated freeconvert pdf body'))->toBeTrue();
+        expect($jobCreationTokens)->toBe([
+            'Bearer first-freeconvert-key',
+            'Bearer second-freeconvert-key',
+        ]);
     } finally {
         @unlink($pdfPath);
     }
-
-    Http::assertSent(fn ($request) => $request->method() === 'POST'
-        && (string) $request->url() === 'https://api.pdfco.test/v1/pdf/convert/from/doc'
-        && $request->data()['url'] === 'https://files.pdfco.test/graduation-application.docx'
-        && $request->data()['async'] === false);
 });
 
 test('application pdf export reuses cached conversion until application data changes', function () {
     config([
-        'services.freeconvert.api_key' => '',
-        'services.gotenberg.url' => 'https://gotenberg.test',
-        'services.gotenberg.timeout' => 30,
-        'services.pdfco.api_key' => '',
-        'services.libreoffice.enabled' => false,
+        'services.freeconvert.api_key' => 'cache-freeconvert-key',
+        'services.freeconvert.api_keys' => '',
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
     ]);
 
     $conversionRequests = 0;
 
     Http::fake(function ($request) use (&$conversionRequests) {
-        if ($request->method() === 'POST' && (string) $request->url() === 'https://gotenberg.test/forms/libreoffice/convert') {
+        $url = (string) $request->url();
+
+        if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
             $conversionRequests++;
 
-            return Http::response('%PDF-1.4 cached pdf body '.$conversionRequests, 200, [
+            return Http::response([
+                'id' => 'job-'.$conversionRequests,
+                'status' => 'created',
+                'tasks' => [
+                    [
+                        'name' => 'import-docx',
+                        'operation' => 'import/upload',
+                        'result' => [
+                            'form' => [
+                                'url' => 'https://upload.freeconvert.test/api/upload/job-'.$conversionRequests,
+                                'parameters' => ['signature' => 'signed-upload'],
+                            ],
+                        ],
+                    ],
+                    [
+                        'name' => 'convert-pdf',
+                        'operation' => 'convert',
+                        'status' => 'processing',
+                    ],
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'processing',
+                    ],
+                ],
+            ], 201);
+        }
+
+        if ($request->method() === 'POST' && str_starts_with($url, 'https://upload.freeconvert.test/api/upload/job-')) {
+            return Http::response(['ok' => true]);
+        }
+
+        if ($request->method() === 'GET' && preg_match('/^https:\/\/api\.freeconvert\.test\/v1\/process\/jobs\/job-(\d+)$/', $url, $matches) === 1) {
+            return Http::response([
+                'id' => 'job-'.$matches[1],
+                'status' => 'completed',
+                'tasks' => [
+                    [
+                        'name' => 'export-pdf',
+                        'operation' => 'export/url',
+                        'status' => 'completed',
+                        'result' => [
+                            'url' => 'https://download.freeconvert.test/job-'.$matches[1].'/result.pdf',
+                        ],
+                    ],
+                ],
+            ]);
+        }
+
+        if ($request->method() === 'GET' && preg_match('/^https:\/\/download\.freeconvert\.test\/job-(\d+)\/result\.pdf$/', $url, $matches) === 1) {
+            return Http::response('%PDF-1.4 cached pdf body '.$matches[1], 200, [
                 'Content-Type' => 'application/pdf',
             ]);
+        }
+
+        if ($request->method() === 'DELETE' && str_starts_with($url, 'https://api.freeconvert.test/v1/process/jobs/job-')) {
+            return Http::response([], 204);
         }
 
         return Http::response([], 404);
@@ -747,12 +889,10 @@ test('guest portal falls back to docx when pdf conversion fails', function () {
     Notification::fake();
     config([
         'services.freeconvert.api_key' => 'test-freeconvert-key',
+        'services.freeconvert.api_keys' => '',
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
-        'services.gotenberg.url' => null,
-        'services.pdfco.api_key' => '',
-        'services.libreoffice.enabled' => false,
     ]);
     Http::fake([
         'https://api.freeconvert.test/v1/process/jobs' => Http::response([

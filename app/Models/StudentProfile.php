@@ -68,7 +68,7 @@ class StudentProfile extends Model
     protected function casts(): array
     {
         $casts = [
-            'date_of_birth' => 'date',
+            'date_of_birth' => 'date:Y-m-d',
             'grade_school_year_graduated' => 'integer',
             'junior_high_school_year_graduated' => 'integer',
             'senior_high_school_year_graduated' => 'integer',

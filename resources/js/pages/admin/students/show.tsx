@@ -1,6 +1,4 @@
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import adminRoutes from '@/routes/admin';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -9,11 +7,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { formatName } from '@/utils/format-name';
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Users, Trash2, KeyRound, ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
-import { useToast } from '@/contexts/toast-context';
 import {
     Dialog,
     DialogContent,
@@ -22,10 +15,24 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { useToast } from '@/contexts/toast-context';
+import AppLayout from '@/layouts/app-layout';
+import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
+import adminRoutes from '@/routes/admin';
+import { type BreadcrumbItem } from '@/types';
+import { formatName } from '@/utils/format-name';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import {
+    AlertCircle,
+    ArrowLeft,
+    CheckCircle2,
+    KeyRound,
+    Pencil,
+    Trash2,
+    Users,
+} from 'lucide-react';
+import { useState } from 'react';
 
 interface StudentProfile {
     id: number;
@@ -252,7 +259,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
         <AppLayout breadcrumbs={breadcrumbs(student)}>
             <Head title={`Student: ${displayName}`} />
 
-            <div className="flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-x-auto rounded-xl p-3 md:p-4">
+            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-3 md:gap-6 md:p-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <Button
@@ -269,15 +276,21 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                             </Link>
                         </Button>
                         <div>
-                            <h1 className="text-xl md:text-2xl lg:text-3xl font-semibold tracking-tight">
+                            <h1 className="text-xl font-semibold tracking-tight md:text-2xl lg:text-3xl">
                                 {displayName}
                             </h1>
-                            <p className="mt-1 text-xs md:text-sm text-muted-foreground">
+                            <p className="mt-1 text-xs text-muted-foreground md:text-sm">
                                 Student account overview
                             </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={`/admin/students/${student.id}/edit`}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit
+                            </Link>
+                        </Button>
                         <Button
                             variant="destructive"
                             size="sm"
@@ -295,12 +308,15 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                             <CardHeader className="flex flex-row items-center gap-3">
                                 {profilePhotoUrl(student.profile) ? (
                                     <img
-                                        src={profilePhotoUrl(student.profile) ?? ''}
+                                        src={
+                                            profilePhotoUrl(student.profile) ??
+                                            ''
+                                        }
                                         alt={displayName}
-                                        className="h-14 w-14 rounded-full object-cover border border-border"
+                                        className="h-14 w-14 rounded-full border border-border object-cover"
                                     />
                                 ) : (
-                                    <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center border border-border">
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted">
                                         <Users className="h-7 w-7 text-muted-foreground" />
                                     </div>
                                 )}
@@ -330,7 +346,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                         {student.email}
                                     </span>
                                 </div>
-                                <div className="flex justify-between gap-3 items-center">
+                                <div className="flex items-center justify-between gap-3">
                                     <span className="text-muted-foreground">
                                         Password
                                     </span>
@@ -340,7 +356,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                         className="h-6 px-2 text-xs"
                                         onClick={() => setResetDialogOpen(true)}
                                     >
-                                        <KeyRound className="h-3 w-3 mr-1" />
+                                        <KeyRound className="mr-1 h-3 w-3" />
                                         Reset Password
                                     </Button>
                                 </div>
@@ -363,7 +379,11 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                         {profilePhotoUrl(student.profile) && (
                                             <div className="flex justify-center pb-4">
                                                 <img
-                                                    src={profilePhotoUrl(student.profile) ?? ''}
+                                                    src={
+                                                        profilePhotoUrl(
+                                                            student.profile,
+                                                        ) ?? ''
+                                                    }
                                                     alt={displayName}
                                                     className="h-32 w-32 rounded-lg border-2 border-border object-cover"
                                                 />
@@ -371,7 +391,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                         )}
                                         <div className="grid gap-4 md:grid-cols-2">
                                             <div>
-                                                <span className="text-muted-foreground block text-xs mb-1">
+                                                <span className="mb-1 block text-xs text-muted-foreground">
                                                     Full name
                                                 </span>
                                                 <span className="font-medium">
@@ -380,84 +400,109 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                             </div>
                                             {student.profile.date_of_birth && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Date of Birth
                                                     </span>
                                                     <span>
-                                                        {new Date(
-                                                            student.profile.date_of_birth,
-                                                        ).toLocaleDateString()}
+                                                        {formatDateOnly(
+                                                            student.profile
+                                                                .date_of_birth,
+                                                        )}
                                                     </span>
                                                 </div>
                                             )}
                                             {student.profile.place_of_birth && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Place of Birth
                                                     </span>
                                                     <span>
-                                                        {student.profile.place_of_birth}
+                                                        {
+                                                            student.profile
+                                                                .place_of_birth
+                                                        }
                                                     </span>
                                                 </div>
                                             )}
                                             {student.profile.sex && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Sex
                                                     </span>
-                                                    <span>{student.profile.sex}</span>
+                                                    <span>
+                                                        {student.profile.sex}
+                                                    </span>
                                                 </div>
                                             )}
                                             {student.profile.civil_status && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Civil Status
                                                     </span>
                                                     <span>
-                                                        {student.profile.civil_status}
+                                                        {
+                                                            student.profile
+                                                                .civil_status
+                                                        }
                                                     </span>
                                                 </div>
                                             )}
                                             {student.profile.religion && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Religion
                                                     </span>
-                                                    <span>{student.profile.religion}</span>
+                                                    <span>
+                                                        {
+                                                            student.profile
+                                                                .religion
+                                                        }
+                                                    </span>
                                                 </div>
                                             )}
                                             {student.profile.nationality && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Nationality
                                                     </span>
-                                                    <span>{student.profile.nationality}</span>
+                                                    <span>
+                                                        {
+                                                            student.profile
+                                                                .nationality
+                                                        }
+                                                    </span>
                                                 </div>
                                             )}
                                             {student.profile.contact_number && (
                                                 <div>
-                                                    <span className="text-muted-foreground block text-xs mb-1">
+                                                    <span className="mb-1 block text-xs text-muted-foreground">
                                                         Contact number
                                                     </span>
                                                     <span>
-                                                        {student.profile.contact_number}
+                                                        {
+                                                            student.profile
+                                                                .contact_number
+                                                        }
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
                                         {student.profile.permanent_address && (
                                             <div>
-                                                <span className="text-muted-foreground block text-xs mb-1">
+                                                <span className="mb-1 block text-xs text-muted-foreground">
                                                     Permanent address
                                                 </span>
                                                 <span className="block">
-                                                    {student.profile.permanent_address}
+                                                    {
+                                                        student.profile
+                                                            .permanent_address
+                                                    }
                                                 </span>
                                             </div>
                                         )}
                                     </>
                                 ) : (
-                                    <p className="text-xs md:text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground md:text-sm">
                                         This student has not completed their
                                         profile yet. Only the student can create
                                         and update their profile information.
@@ -481,28 +526,51 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                     {(student.profile.grade_school_name ||
                                         student.profile.grade_1_school) && (
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
                                                 Grade School
                                             </p>
-                                            {student.profile.grade_school_name ? (
+                                            {student.profile
+                                                .grade_school_name ? (
                                                 <p className="text-sm">
-                                                    {student.profile.grade_school_name}
-                                                    {student.profile.grade_school_year_graduated &&
+                                                    {
+                                                        student.profile
+                                                            .grade_school_name
+                                                    }
+                                                    {student.profile
+                                                        .grade_school_year_graduated &&
                                                         ` (${student.profile.grade_school_year_graduated})`}
                                                 </p>
                                             ) : (
                                                 <div className="space-y-1">
-                                                    {[1, 2, 3, 4, 5, 6].map((grade) => {
-                                                        const school = student.profile?.[`grade_${grade}_school` as keyof StudentProfile] as string | null;
-                                                        const year = student.profile?.[`grade_${grade}_year` as keyof StudentProfile] as number | null;
-                                                        if (!school) return null;
-                                                        return (
-                                                            <p key={grade} className="text-xs">
-                                                                Grade {grade}: {school}
-                                                                {year && ` (${year})`}
-                                                            </p>
-                                                        );
-                                                    })}
+                                                    {[1, 2, 3, 4, 5, 6].map(
+                                                        (grade) => {
+                                                            const school =
+                                                                student
+                                                                    .profile?.[
+                                                                    `grade_${grade}_school` as keyof StudentProfile
+                                                                ] as
+                                                                    | string
+                                                                    | null;
+                                                            const year = student
+                                                                .profile?.[
+                                                                `grade_${grade}_year` as keyof StudentProfile
+                                                            ] as number | null;
+                                                            if (!school)
+                                                                return null;
+                                                            return (
+                                                                <p
+                                                                    key={grade}
+                                                                    className="text-xs"
+                                                                >
+                                                                    Grade{' '}
+                                                                    {grade}:{' '}
+                                                                    {school}
+                                                                    {year &&
+                                                                        ` (${year})`}
+                                                                </p>
+                                                            );
+                                                        },
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -512,36 +580,63 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                     {(student.profile.junior_high_school_name ||
                                         student.profile.jhs_1_school) && (
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
                                                 Junior High School
                                             </p>
-                                            {student.profile.junior_high_school_name ? (
+                                            {student.profile
+                                                .junior_high_school_name ? (
                                                 <p className="text-sm">
-                                                    {student.profile.junior_high_school_name}
-                                                    {student.profile.junior_high_school_year_graduated &&
+                                                    {
+                                                        student.profile
+                                                            .junior_high_school_name
+                                                    }
+                                                    {student.profile
+                                                        .junior_high_school_year_graduated &&
                                                         ` (${student.profile.junior_high_school_year_graduated})`}
                                                 </p>
                                             ) : (
                                                 <div className="space-y-1">
-                                                    {[1, 2, 3, 4].map((year) => {
-                                                        const school = student.profile?.[`jhs_${year}_school` as keyof StudentProfile] as string | null;
-                                                        const gradYear = student.profile?.[`jhs_${year}_year` as keyof StudentProfile] as number | null;
-                                                        if (!school) return null;
-                                                        return (
-                                                            <p key={year} className="text-xs">
-                                                                {year}
-                                                                {year === 1
-                                                                    ? 'st'
-                                                                    : year === 2
-                                                                    ? 'nd'
-                                                                    : year === 3
-                                                                    ? 'rd'
-                                                                    : 'th'}{' '}
-                                                                Year: {school}
-                                                                {gradYear && ` (${gradYear})`}
-                                                            </p>
-                                                        );
-                                                    })}
+                                                    {[1, 2, 3, 4].map(
+                                                        (year) => {
+                                                            const school =
+                                                                student
+                                                                    .profile?.[
+                                                                    `jhs_${year}_school` as keyof StudentProfile
+                                                                ] as
+                                                                    | string
+                                                                    | null;
+                                                            const gradYear =
+                                                                student
+                                                                    .profile?.[
+                                                                    `jhs_${year}_year` as keyof StudentProfile
+                                                                ] as
+                                                                    | number
+                                                                    | null;
+                                                            if (!school)
+                                                                return null;
+                                                            return (
+                                                                <p
+                                                                    key={year}
+                                                                    className="text-xs"
+                                                                >
+                                                                    {year}
+                                                                    {year === 1
+                                                                        ? 'st'
+                                                                        : year ===
+                                                                            2
+                                                                          ? 'nd'
+                                                                          : year ===
+                                                                              3
+                                                                            ? 'rd'
+                                                                            : 'th'}{' '}
+                                                                    Year:{' '}
+                                                                    {school}
+                                                                    {gradYear &&
+                                                                        ` (${gradYear})`}
+                                                                </p>
+                                                            );
+                                                        },
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -551,28 +646,45 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                     {(student.profile.senior_high_school_name ||
                                         student.profile.shs_11_school) && (
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
                                                 Senior High School
                                             </p>
-                                            {student.profile.senior_high_school_name ? (
+                                            {student.profile
+                                                .senior_high_school_name ? (
                                                 <p className="text-sm">
-                                                    {student.profile.senior_high_school_name}
-                                                    {student.profile.senior_high_school_year_graduated &&
+                                                    {
+                                                        student.profile
+                                                            .senior_high_school_name
+                                                    }
+                                                    {student.profile
+                                                        .senior_high_school_year_graduated &&
                                                         ` (${student.profile.senior_high_school_year_graduated})`}
                                                 </p>
                                             ) : (
                                                 <div className="space-y-1">
-                                                    {student.profile.shs_11_school && (
+                                                    {student.profile
+                                                        .shs_11_school && (
                                                         <p className="text-xs">
-                                                            Grade 11: {student.profile.shs_11_school}
-                                                            {student.profile.shs_11_year &&
+                                                            Grade 11:{' '}
+                                                            {
+                                                                student.profile
+                                                                    .shs_11_school
+                                                            }
+                                                            {student.profile
+                                                                .shs_11_year &&
                                                                 ` (${student.profile.shs_11_year})`}
                                                         </p>
                                                     )}
-                                                    {student.profile.shs_12_school && (
+                                                    {student.profile
+                                                        .shs_12_school && (
                                                         <p className="text-xs">
-                                                            Grade 12: {student.profile.shs_12_school}
-                                                            {student.profile.shs_12_year &&
+                                                            Grade 12:{' '}
+                                                            {
+                                                                student.profile
+                                                                    .shs_12_school
+                                                            }
+                                                            {student.profile
+                                                                .shs_12_year &&
                                                                 ` (${student.profile.shs_12_year})`}
                                                         </p>
                                                     )}
@@ -584,65 +696,104 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                     {/* College */}
                                     {student.profile.college_school_name && (
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
                                                 College
                                             </p>
                                             <p className="text-sm">
-                                                {student.profile.college_degree && (
+                                                {student.profile
+                                                    .college_degree && (
                                                     <span className="font-medium">
-                                                        {student.profile.college_degree}
+                                                        {
+                                                            student.profile
+                                                                .college_degree
+                                                        }
                                                     </span>
                                                 )}
-                                                {student.profile.college_degree &&
-                                                    student.profile.college_school_name &&
+                                                {student.profile
+                                                    .college_degree &&
+                                                    student.profile
+                                                        .college_school_name &&
                                                     ' - '}
-                                                {student.profile.college_school_name}
-                                                {student.profile.college_year_graduated &&
+                                                {
+                                                    student.profile
+                                                        .college_school_name
+                                                }
+                                                {student.profile
+                                                    .college_year_graduated &&
                                                     ` (${student.profile.college_year_graduated})`}
                                             </p>
-                                            {student.profile.college_transferee_note && (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    {student.profile.college_transferee_note}
+                                            {student.profile
+                                                .college_transferee_note && (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {
+                                                        student.profile
+                                                            .college_transferee_note
+                                                    }
                                                 </p>
                                             )}
                                         </div>
                                     )}
 
                                     {/* Graduate School */}
-                                    {(student.profile.graduate_school_school_name ||
+                                    {(student.profile
+                                        .graduate_school_school_name ||
                                         student.profile.grad_masteral_school ||
-                                        student.profile.grad_doctoral_school) && (
+                                        student.profile
+                                            .grad_doctoral_school) && (
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
                                                 Graduate School
                                             </p>
-                                            {student.profile.graduate_school_school_name ? (
+                                            {student.profile
+                                                .graduate_school_school_name ? (
                                                 <p className="text-sm">
-                                                    {student.profile.graduate_school_degree && (
+                                                    {student.profile
+                                                        .graduate_school_degree && (
                                                         <span className="font-medium">
-                                                            {student.profile.graduate_school_degree}
+                                                            {
+                                                                student.profile
+                                                                    .graduate_school_degree
+                                                            }
                                                         </span>
                                                     )}
-                                                    {student.profile.graduate_school_degree &&
-                                                        student.profile.graduate_school_school_name &&
+                                                    {student.profile
+                                                        .graduate_school_degree &&
+                                                        student.profile
+                                                            .graduate_school_school_name &&
                                                         ' - '}
-                                                    {student.profile.graduate_school_school_name}
-                                                    {student.profile.graduate_school_year_graduated &&
+                                                    {
+                                                        student.profile
+                                                            .graduate_school_school_name
+                                                    }
+                                                    {student.profile
+                                                        .graduate_school_year_graduated &&
                                                         ` (${student.profile.graduate_school_year_graduated})`}
                                                 </p>
                                             ) : (
                                                 <div className="space-y-1">
-                                                    {student.profile.grad_masteral_school && (
+                                                    {student.profile
+                                                        .grad_masteral_school && (
                                                         <p className="text-xs">
-                                                            Masteral: {student.profile.grad_masteral_school}
-                                                            {student.profile.grad_masteral_year &&
+                                                            Masteral:{' '}
+                                                            {
+                                                                student.profile
+                                                                    .grad_masteral_school
+                                                            }
+                                                            {student.profile
+                                                                .grad_masteral_year &&
                                                                 ` (${student.profile.grad_masteral_year})`}
                                                         </p>
                                                     )}
-                                                    {student.profile.grad_doctoral_school && (
+                                                    {student.profile
+                                                        .grad_doctoral_school && (
                                                         <p className="text-xs">
-                                                            Doctoral: {student.profile.grad_doctoral_school}
-                                                            {student.profile.grad_doctoral_year &&
+                                                            Doctoral:{' '}
+                                                            {
+                                                                student.profile
+                                                                    .grad_doctoral_school
+                                                            }
+                                                            {student.profile
+                                                                .grad_doctoral_year &&
                                                                 ` (${student.profile.grad_doctoral_year})`}
                                                         </p>
                                                     )}
@@ -652,17 +803,22 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                     )}
 
                                     {!student.profile.grade_school_name &&
-                                        !student.profile.junior_high_school_name &&
-                                        !student.profile.senior_high_school_name &&
+                                        !student.profile
+                                            .junior_high_school_name &&
+                                        !student.profile
+                                            .senior_high_school_name &&
                                         !student.profile.college_school_name &&
-                                        !student.profile.graduate_school_school_name &&
+                                        !student.profile
+                                            .graduate_school_school_name &&
                                         !student.profile.grade_1_school &&
                                         !student.profile.jhs_1_school &&
                                         !student.profile.shs_11_school &&
                                         !student.profile.grad_masteral_school &&
-                                        !student.profile.grad_doctoral_school && (
+                                        !student.profile
+                                            .grad_doctoral_school && (
                                             <p className="text-xs text-muted-foreground">
-                                                No educational background information available.
+                                                No educational background
+                                                information available.
                                             </p>
                                         )}
                                 </CardContent>
@@ -688,7 +844,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                             (application) => (
                                                 <div
                                                     key={application.id}
-                                                    className="rounded-md border px-3 py-2 text-xs md:text-sm flex flex-col gap-1"
+                                                    className="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs md:text-sm"
                                                 >
                                                     <div className="flex items-center justify-between gap-2">
                                                         <div className="min-w-0">
@@ -699,7 +855,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                                                         .name
                                                                 }
                                                             </p>
-                                                            <p className="text-[10px] md:text-xs text-muted-foreground">
+                                                            <p className="text-[10px] text-muted-foreground md:text-xs">
                                                                 {
                                                                     application
                                                                         .department
@@ -722,7 +878,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                                             }
                                                         </span>
                                                     </div>
-                                                    <div className="flex items-center justify-between gap-2 text-[10px] md:text-xs text-muted-foreground">
+                                                    <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground md:text-xs">
                                                         <span>
                                                             Application #:{' '}
                                                             {
@@ -741,7 +897,7 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                         )}
                                     </div>
                                 ) : (
-                                    <p className="text-xs md:text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground md:text-sm">
                                         This student has not submitted any
                                         applications yet.
                                     </p>
@@ -811,12 +967,12 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                                 <p className="text-sm font-medium text-muted-foreground">
                                     New password will be set to:
                                 </p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-mono text-lg font-semibold">
-                                            GA@{new Date().getFullYear()}!
-                                        </span>
-                                    </div>
-                                <p className="text-xs text-muted-foreground mt-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-lg font-semibold">
+                                        GA@{new Date().getFullYear()}!
+                                    </span>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">
                                     The student will use this password on their
                                     next login.
                                 </p>
@@ -834,7 +990,9 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
                         {resetError && (
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <AlertDescription>{resetError}</AlertDescription>
+                                <AlertDescription>
+                                    {resetError}
+                                </AlertDescription>
                             </Alert>
                         )}
                     </div>
@@ -867,5 +1025,3 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
         </AppLayout>
     );
 }
-
-

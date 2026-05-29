@@ -4,6 +4,7 @@ import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
 import AppLayout from '@/layouts/app-layout';
+import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
@@ -425,9 +426,9 @@ export default function AdminShowApplication({
                                                 Date of Birth
                                             </dt>
                                             <dd className="text-sm">
-                                                {new Date(
+                                                {formatDateOnly(
                                                     profile.date_of_birth,
-                                                ).toLocaleDateString()}
+                                                )}
                                             </dd>
                                         </div>
                                         <div className="space-y-1">

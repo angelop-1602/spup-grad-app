@@ -138,6 +138,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Guest Application Verification
+    |--------------------------------------------------------------------------
+    |
+    | The expiry time is the number of minutes each guest application
+    | verification link remains valid. Applicants can request a fresh link if
+    | this one expires.
+    |
+    */
+
+    'verification' => [
+        'expire' => (int) env(
+            'GUEST_APPLICATION_VERIFICATION_EXPIRE',
+            env('AUTH_EMAIL_VERIFICATION_EXPIRE', 1440),
+        ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |
