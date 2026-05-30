@@ -20,7 +20,7 @@ export function NavUser() {
     const { auth } = usePage<SharedData>().props;
     const { state } = useSidebar();
     const isMobile = useIsMobile();
-    const user = auth.admin || auth.user;
+    const user = auth.admin || auth.coordinator || auth.developer || auth.user;
 
     if (!user) {
         return null;

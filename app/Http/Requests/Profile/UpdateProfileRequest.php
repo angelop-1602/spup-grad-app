@@ -20,6 +20,12 @@ class UpdateProfileRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        if ($this->filled('student_id')) {
+            $this->merge([
+                'student_id' => trim((string) $this->input('student_id')),
+            ]);
+        }
+
         // Convert empty strings to null for year fields to allow nullable validation
         $yearFields = [
             'grad_masteral_year',
@@ -45,6 +51,14 @@ class UpdateProfileRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'student_id' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[A-Za-z0-9-]+$/',
+                Rule::unique('users', 'student_id')->ignore($this->user()?->id),
+            ],
+
             // Personal Info
             'last_name' => ['required', 'string', 'max:255'],
             'first_name' => ['required', 'string', 'max:255'],
@@ -192,6 +206,8 @@ class UpdateProfileRequest extends FormRequest
             'contact_number.regex' => 'Contact number must be in international format (+[country code][number]) or local format (7-15 digits)',
             'date_of_birth.date_format' => 'Date of birth must use YYYY-MM-DD format',
             'date_of_birth.before' => 'Date of birth must be before today',
+            'student_id.regex' => 'The student ID may only contain letters, numbers, and hyphens (-), and must not be an email address.',
+            'student_id.unique' => 'An account with this Student ID already exists.',
         ];
     }
 }

@@ -112,7 +112,7 @@ class DashboardController extends Controller
                 'id' => $coordinator->id,
                 'name' => $coordinator->name,
                 'email' => $coordinator->email,
-                'departments' => $coordinator->departments()->select('departments.id', 'departments.name')->get(),
+                'departments' => $coordinator->departments()->select('departments.id', 'departments.name', 'departments.code')->get(),
             ],
         ]);
     }

@@ -54,6 +54,13 @@ class StudentProfileController extends Controller
 
         $validated = $request->validated();
 
+        $studentId = $validated['student_id'] ?? null;
+        unset($validated['student_id']);
+
+        if ($studentId && strcasecmp((string) $user->student_id, (string) $studentId) !== 0) {
+            $user->forceFill(['student_id' => $studentId])->save();
+        }
+
         // Handle photo upload
         if ($request->hasFile('photo')) {
             // Delete old photo if exists

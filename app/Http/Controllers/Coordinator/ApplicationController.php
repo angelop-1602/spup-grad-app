@@ -8,14 +8,21 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Coordinator\UpdateApplicationStatusRequest;
 use App\Models\Application;
 use App\Models\ApplicationWindow;
+use App\Models\SystemHealthCheck;
+use App\Notifications\DuplicateApplicationDetected;
+use App\Support\DuplicateApplicationRecords;
 use App\Support\GraduateExportData;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
+use App\Support\PossibleDuplicateApplications;
 use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -164,8 +171,7 @@ class ApplicationController extends Controller
                 return $code;
             })
             ->map(function ($deptGroup, $deptCode) use ($calculateAttendance, $calculateNationalities) {
-                $firstDept = $deptGroup->first();
-                $deptName = $firstDept->department ? ($firstDept->department->name ?? 'Unknown') : 'Unknown';
+                $deptLabel = (string) $deptCode;
 
                 // Group programs within this department
                 $programs = $deptGroup->groupBy(function ($app) {
@@ -202,7 +208,7 @@ class ApplicationController extends Controller
                 })->values()->toArray();
 
                 return [
-                    'name' => $deptName,
+                    'name' => $deptLabel,
                     'total' => $deptGroup->count(),
                     'attendance' => $calculateAttendance($deptGroup),
                     'nationalities' => $calculateNationalities($deptGroup),
@@ -244,7 +250,7 @@ class ApplicationController extends Controller
     /**
      * Show a specific application window with applications limited to coordinator departments.
      */
-    public function window(Request $request, ApplicationWindow $window): Response
+    public function window(Request $request, ApplicationWindow $window, DuplicateApplicationRecords $duplicates): Response
     {
         $coordinator = Auth::guard('coordinator')->user();
         $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
@@ -377,8 +383,7 @@ class ApplicationController extends Controller
                 return $code;
             })
             ->map(function ($deptGroup, $deptCode) use ($calculateAttendance, $calculateNationalities) {
-                $firstDept = $deptGroup->first();
-                $deptName = $firstDept->department ? ($firstDept->department->name ?? 'Unknown') : 'Unknown';
+                $deptLabel = (string) $deptCode;
 
                 // Group programs within this department
                 $programs = $deptGroup->groupBy(function ($app) {
@@ -415,7 +420,7 @@ class ApplicationController extends Controller
                 })->values()->toArray();
 
                 return [
-                    'name' => $deptName,
+                    'name' => $deptLabel,
                     'total' => $deptGroup->count(),
                     'attendance' => $calculateAttendance($deptGroup),
                     'nationalities' => $calculateNationalities($deptGroup),
@@ -529,13 +534,79 @@ class ApplicationController extends Controller
                 'search' => $search,
                 'status' => $statusFilter,
             ],
+            'unverifiedApplications' => $duplicates->unverifiedDraftsForWindow($window, $departmentIds),
+            'duplicatePairs' => $duplicates->duplicatePairsForWindow($window, $departmentIds),
         ]);
+    }
+
+    public function sendDuplicateAlert(
+        Request $request,
+        ApplicationWindow $window,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'left' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/'],
+            'right' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::notIn([$request->input('left')])],
+        ]);
+
+        $coordinator = Auth::guard('coordinator')->user();
+        $departmentIds = $coordinator
+            ? $coordinator->departments()
+                ->pluck('departments.id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
+            : [];
+
+        [$left, $right] = [
+            $duplicates->resolve($validated['left']),
+            $duplicates->resolve($validated['right']),
+        ];
+
+        if (! $left || ! $right) {
+            return back()->withErrors([
+                'duplicate' => 'One of the duplicate records no longer exists.',
+            ]);
+        }
+
+        if ((int) $left['window_id'] !== $window->id || (int) $right['window_id'] !== $window->id) {
+            return back()->withErrors([
+                'duplicate' => 'Both duplicate records must belong to the selected application window.',
+            ]);
+        }
+
+        if (! in_array((int) ($left['department_id'] ?? 0), $departmentIds, true)
+            || ! in_array((int) ($right['department_id'] ?? 0), $departmentIds, true)) {
+            abort(403, 'Unauthorized access to duplicate records outside your assigned departments.');
+        }
+
+        if (! $duplicates->recordsMatch($left, $right)) {
+            return back()->withErrors([
+                'duplicate' => 'These records no longer match on first name, last name, and student ID.',
+            ]);
+        }
+
+        $reviewUrl = URL::temporarySignedRoute(
+            'duplicate-applications.show',
+            now()->addDays(14),
+            [
+                'left' => $left['key'],
+                'right' => $right['key'],
+            ],
+        );
+
+        $notification = new DuplicateApplicationDetected(
+            $duplicates->publicPayload($left),
+            $duplicates->publicPayload($right),
+            $reviewUrl,
+        );
+
+        return $this->sendDuplicateAlertEmail($left, $right, $notification, $duplicates);
     }
 
     /**
      * Display the specified application (read-only).
      */
-    public function show(Application $application): Response
+    public function show(Application $application, PossibleDuplicateApplications $duplicates): Response
     {
         $coordinator = Auth::guard('coordinator')->user();
 
@@ -641,6 +712,10 @@ class ApplicationController extends Controller
 
         return Inertia::render('coordinator/applications/show', [
             'application' => $application,
+            'possibleDuplicates' => $duplicates->forApplication(
+                $application,
+                'coordinator.applications.show',
+            ),
         ]);
     }
 
@@ -869,6 +944,63 @@ class ApplicationController extends Controller
         );
 
         return \App\Http\Controllers\ApplicationController::generateProfilePhotoDownload($application);
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     */
+    private function sendDuplicateAlertEmail(
+        array $left,
+        array $right,
+        DuplicateApplicationDetected $notification,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $notifiables = $duplicates->notifiablesForRecords([$left, $right]);
+        $mailMeta = [
+            'notification' => $notification::class,
+            'mailer' => config('mail.default'),
+            'delivery_mode' => is_subclass_of($notification::class, \Illuminate\Contracts\Queue\ShouldQueue::class)
+                ? 'queued'
+                : 'sync',
+            'recipient_count' => $notifiables->count(),
+            'left_record' => $left['key'],
+            'right_record' => $right['key'],
+        ];
+
+        if ($notifiables->isEmpty()) {
+            return back()->withErrors([
+                'duplicate' => 'No email recipient is available for these duplicate records.',
+            ]);
+        }
+
+        try {
+            Notification::send($notifiables, $notification);
+            SystemHealthCheck::record('mail', 'ok', 'Coordinator duplicate application alert email sent.', $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'coordinator.duplicate_application.alert_sent',
+                message: 'Coordinator sent a duplicate application resolution email.',
+                meta: $mailMeta,
+            );
+
+            return back()->with('success', 'Duplicate alert email sent.');
+        } catch (\Throwable $e) {
+            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'coordinator.duplicate_application.alert_sent',
+                message: 'Duplicate application alert email failed.',
+                status: 'failed',
+                severity: 'error',
+                meta: [
+                    ...$mailMeta,
+                    'error' => $e->getMessage(),
+                ],
+            );
+
+            return back()->with('warning', 'Duplicate alert could not be sent. Check mail diagnostics for details.');
+        }
     }
 
     /**

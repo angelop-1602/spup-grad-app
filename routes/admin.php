@@ -13,7 +13,9 @@ use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\HistoricalApplicationController;
 use App\Http\Controllers\Admin\MajorController;
 use App\Http\Controllers\Admin\StudentController;
+use App\Http\Controllers\Admin\UnverifiedApplicationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\StaffGlobalSearchController;
 use App\Http\Middleware\EnsureRoleAccess;
 use App\Http\Middleware\RedirectIfAnyGuardAuthenticated;
 use Illuminate\Http\Request;
@@ -142,6 +144,9 @@ Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(funct
     })->name('admin.dashboard');
 
     Route::get('admin/audit-trail', [AuditTrailController::class, 'index'])->name('admin.audit-trail.index');
+    Route::get('admin/global-search', [StaffGlobalSearchController::class, 'index'])->name('admin.global-search');
+    Route::get('admin/unverified-applications', [UnverifiedApplicationController::class, 'index'])->name('admin.unverified-applications.index');
+    Route::post('admin/windows/{window}/duplicates/alert', [ApplicationWindowController::class, 'sendDuplicateAlert'])->name('admin.windows.duplicates.alert');
 
     // Application Windows
     Route::get('admin/windows/all', [ApplicationWindowController::class, 'all'])->name('admin.windows.all');
@@ -158,6 +163,9 @@ Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(funct
     ]);
 
     // Applications (show and download only - no index page, use windows instead)
+    Route::get('admin/applications/{application:application_number}/edit', [ApplicationController::class, 'edit'])->name('admin.applications.edit');
+    Route::put('admin/applications/{application:application_number}', [ApplicationController::class, 'update'])->name('admin.applications.update');
+    Route::delete('admin/applications/{application:application_number}', [ApplicationController::class, 'destroy'])->name('admin.applications.destroy');
     Route::get('admin/applications/{application:application_number}', [ApplicationController::class, 'show'])->name('admin.applications.show');
     Route::put('admin/applications/{application:application_number}/status', [ApplicationController::class, 'updateStatus'])->name('admin.applications.update-status');
     Route::put('admin/applications/{application:application_number}/requirements', [ApplicationController::class, 'updateRequirements'])->name('admin.applications.update-requirements');

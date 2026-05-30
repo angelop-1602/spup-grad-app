@@ -233,6 +233,12 @@ export interface ApplicationWizardProps {
     application?: ExistingApplication;
     portalMode?: PortalMode;
     isApproved?: boolean;
+    updateUrl?: string;
+    cancelHref?: string | null;
+    requireIdentityConfirmation?: boolean;
+    requireAgreement?: boolean;
+    pageTitle?: string;
+    introText?: string;
 }
 
 type Step = 'personal' | 'educational' | 'application';
@@ -245,6 +251,12 @@ export function ApplicationWizard({
     application,
     portalMode = 'student',
     isApproved = false,
+    updateUrl,
+    cancelHref: cancelHrefOverride,
+    requireIdentityConfirmation = true,
+    requireAgreement = true,
+    pageTitle: pageTitleOverride,
+    introText: introTextOverride,
 }: ApplicationWizardProps) {
     const page = usePage<SharedData>();
     const user = page.props.auth?.user;
@@ -786,13 +798,14 @@ export function ApplicationWizard({
 
         if (isEditMode && activeApplication) {
             const updateRoute =
-                portalMode === 'guest'
+                updateUrl ??
+                (portalMode === 'guest'
                     ? applyRoutes.portal.update(
                           activeApplication.application_number,
                       ).url
                     : applicationRoutes.update(
                           activeApplication.application_number,
-                      ).url;
+                      ).url);
 
             post(updateRoute, { forceFormData: true, onError });
 
@@ -970,37 +983,43 @@ export function ApplicationWizard({
         },
     ];
 
-    const pageTitle = isGuestMode
-        ? 'Apply for Graduation'
-        : 'Graduation Application';
-    const introText = isGuestMode
-        ? 'Complete the full graduation application now. We will email a verification link after you submit.'
-        : 'Complete your graduation application details.';
+    const pageTitle =
+        pageTitleOverride ??
+        (isGuestMode ? 'Apply for Graduation' : 'Graduation Application');
+    const introText =
+        introTextOverride ??
+        (isGuestMode
+            ? 'Complete the full graduation application now. We will email a verification link after you submit.'
+            : 'Complete your graduation application details.');
     const expectedStudentId = String(
         data.student_id ||
             user?.student_id ||
             activeApplication?.user?.student_id ||
             '',
     ).trim();
-    const confirmationMatches = isGuestMode
-        ? data.email.trim().toLowerCase() !== '' &&
-          emailConfirmation.trim().toLowerCase() ===
-              data.email.trim().toLowerCase()
-        : expectedStudentId !== '' &&
-          studentIdConfirmation.trim() === expectedStudentId;
+    const confirmationMatches = !requireIdentityConfirmation
+        ? true
+        : isGuestMode
+          ? data.email.trim().toLowerCase() !== '' &&
+            emailConfirmation.trim().toLowerCase() ===
+                data.email.trim().toLowerCase()
+          : expectedStudentId !== '' &&
+            studentIdConfirmation.trim() === expectedStudentId;
+    const agreementSatisfied = !requireAgreement || agreedToRequirements;
     const submitLabel = isEditMode
         ? 'Update Application'
         : isGuestMode
           ? 'Submit & Verify by Email'
           : 'Submit Application';
     const cancelHref =
-        isEditMode && activeApplication
+        cancelHrefOverride ??
+        (isEditMode && activeApplication
             ? portalMode === 'guest'
                 ? applyRoutes.portal.show(activeApplication.application_number)
                       .url
                 : applicationRoutes.show(activeApplication.application_number)
                       .url
-            : null;
+            : null);
 
     return (
         <div className="mt-10 flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl md:gap-6">
@@ -1161,6 +1180,47 @@ export function ApplicationWizard({
                                             </div>
                                         </div>
                                     )}
+
+                                    {!isGuestMode &&
+                                        !requireIdentityConfirmation && (
+                                            <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                                <div>
+                                                    <h3 className="text-sm font-semibold text-foreground">
+                                                        Student Identity
+                                                    </h3>
+                                                </div>
+                                                <div className="grid gap-4 md:grid-cols-2">
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor="student_id">
+                                                            Student ID *
+                                                        </Label>
+                                                        <Input
+                                                            id="student_id"
+                                                            name="student_id"
+                                                            value={
+                                                                data.student_id
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'student_id',
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            autoComplete="off"
+                                                            pattern="[A-Za-z0-9-]+"
+                                                            title="Use letters, numbers, and hyphens only."
+                                                            required
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                errors.student_id
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
 
                                     <div className="space-y-4 rounded-md border bg-muted/40 p-4">
                                         <div>
@@ -3297,99 +3357,112 @@ export function ApplicationWizard({
                                 )}
 
                                 {/* Confirmation Section */}
-                                <div className="space-y-4 rounded-md border bg-muted/40 p-4">
-                                    <Label className="text-sm font-semibold text-foreground">
-                                        Confirmation
-                                    </Label>
-                                    <div className="space-y-4">
-                                        <div className="flex items-start gap-3">
-                                            <input
-                                                type="checkbox"
-                                                id="agreed_to_requirements"
-                                                aria-label="Agree to comply with requirements"
-                                                checked={agreedToRequirements}
-                                                onChange={(e) =>
-                                                    setAgreedToRequirements(
-                                                        e.target.checked,
-                                                    )
-                                                }
-                                                className="mt-1 h-4 w-4 rounded border-gray-300"
-                                            />
-                                            <Label
-                                                htmlFor="agreed_to_requirements"
-                                                className="cursor-pointer text-sm leading-relaxed"
-                                            >
-                                                I agree to comply with the
-                                                requirements for the degree I am
-                                                applying for.
-                                            </Label>
-                                        </div>
-                                        {agreedToRequirements && (
-                                            <div className="grid gap-2">
-                                                <Label
-                                                    htmlFor={
-                                                        isGuestMode
-                                                            ? 'email_confirmation'
-                                                            : 'student_id_confirmation'
+                                {requireAgreement && (
+                                    <div className="space-y-4 rounded-md border bg-muted/40 p-4">
+                                        <Label className="text-sm font-semibold text-foreground">
+                                            Confirmation
+                                        </Label>
+                                        <div className="space-y-4">
+                                            <div className="flex items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    id="agreed_to_requirements"
+                                                    aria-label="Agree to comply with requirements"
+                                                    checked={
+                                                        agreedToRequirements
                                                     }
+                                                    onChange={(e) =>
+                                                        setAgreedToRequirements(
+                                                            e.target.checked,
+                                                        )
+                                                    }
+                                                    className="mt-1 h-4 w-4 rounded border-gray-300"
+                                                />
+                                                <Label
+                                                    htmlFor="agreed_to_requirements"
+                                                    className="cursor-pointer text-sm leading-relaxed"
                                                 >
-                                                    {isGuestMode
-                                                        ? 'Enter your email address to confirm *'
-                                                        : 'Enter your Student ID Number to confirm *'}
+                                                    I agree to comply with the
+                                                    requirements for the degree
+                                                    I am applying for.
                                                 </Label>
-                                                {isGuestMode ? (
-                                                    <>
-                                                        <Input
-                                                            id="email_confirmation"
-                                                            name="email_confirmation"
-                                                            type="email"
-                                                            value={
-                                                                emailConfirmation
-                                                            }
-                                                            onChange={(e) =>
-                                                                setEmailConfirmation(
-                                                                    e.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            placeholder="Enter your email address"
-                                                        />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Please enter the
-                                                            same email you used
-                                                            above:{' '}
-                                                            {data.email ||
-                                                                'you@example.com'}
-                                                        </p>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Input
-                                                            id="student_id_confirmation"
-                                                            name="student_id_confirmation"
-                                                            value={
-                                                                studentIdConfirmation
-                                                            }
-                                                            onChange={(e) =>
-                                                                setStudentIdConfirmation(
-                                                                    e.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            placeholder="Enter your Student ID"
-                                                        />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Please enter your
-                                                            Student ID:{' '}
-                                                            {expectedStudentId ||
-                                                                'N/A'}
-                                                        </p>
-                                                    </>
-                                                )}
                                             </div>
-                                        )}
+                                            {agreedToRequirements &&
+                                                requireIdentityConfirmation && (
+                                                    <div className="grid gap-2">
+                                                        <Label
+                                                            htmlFor={
+                                                                isGuestMode
+                                                                    ? 'email_confirmation'
+                                                                    : 'student_id_confirmation'
+                                                            }
+                                                        >
+                                                            {isGuestMode
+                                                                ? 'Enter your email address to confirm *'
+                                                                : 'Enter your Student ID Number to confirm *'}
+                                                        </Label>
+                                                        {isGuestMode ? (
+                                                            <>
+                                                                <Input
+                                                                    id="email_confirmation"
+                                                                    name="email_confirmation"
+                                                                    type="email"
+                                                                    value={
+                                                                        emailConfirmation
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        setEmailConfirmation(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                    placeholder="Enter your email address"
+                                                                />
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Please enter
+                                                                    the same
+                                                                    email you
+                                                                    used above:{' '}
+                                                                    {data.email ||
+                                                                        'you@example.com'}
+                                                                </p>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Input
+                                                                    id="student_id_confirmation"
+                                                                    name="student_id_confirmation"
+                                                                    value={
+                                                                        studentIdConfirmation
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        setStudentIdConfirmation(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                    placeholder="Enter your Student ID"
+                                                                />
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Please enter
+                                                                    your Student
+                                                                    ID:{' '}
+                                                                    {expectedStudentId ||
+                                                                        'N/A'}
+                                                                </p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
@@ -3420,7 +3493,7 @@ export function ApplicationWizard({
                                             type="submit"
                                             disabled={
                                                 processing ||
-                                                !agreedToRequirements ||
+                                                !agreementSatisfied ||
                                                 !confirmationMatches
                                             }
                                         >

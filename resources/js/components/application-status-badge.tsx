@@ -1,6 +1,11 @@
 import { CheckCircle2, Clock, AlertCircle, XCircle } from 'lucide-react';
 
-export type ApplicationStatus = 'submitted' | 'pending' | 'approved' | 'incomplete';
+export type ApplicationStatus =
+    | 'submitted'
+    | 'pending'
+    | 'approved'
+    | 'incomplete'
+    | 'rejected';
 
 interface StatusConfig {
     submitted: {
@@ -22,6 +27,11 @@ interface StatusConfig {
         label: string;
         color: string;
         icon: typeof AlertCircle;
+    };
+    rejected: {
+        label: string;
+        color: string;
+        icon: typeof XCircle;
     };
 }
 
@@ -45,6 +55,11 @@ const statusConfig: StatusConfig = {
         label: 'Incomplete',
         color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
         icon: AlertCircle,
+    },
+    rejected: {
+        label: 'Rejected',
+        color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+        icon: XCircle,
     },
 };
 

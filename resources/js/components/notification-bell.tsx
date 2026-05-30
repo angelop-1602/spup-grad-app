@@ -29,6 +29,7 @@ interface Notification {
     upload_count?: number;
     course_name?: string;
     department_name?: string;
+    department_code?: string;
     created_at: string;
     read_at?: string | null;
 }
@@ -302,6 +303,26 @@ export function NotificationBell() {
         return coordinatorRoutes.applications.show(applicationNumber).url;
     };
 
+    const notificationTitle = (notification: Notification) => {
+        if (notification.type === 'application_submitted') {
+            return 'New application submitted';
+        }
+
+        return (notification.upload_count ?? 1) > 1
+            ? `Uploaded ${notification.upload_count} files`
+            : 'Uploaded a file';
+    };
+
+    const notificationDetail = (notification: Notification) => {
+        if (notification.type === 'application_submitted') {
+            return [notification.department_code, notification.course_name]
+                .filter(Boolean)
+                .join(' - ');
+        }
+
+        return notification.requirement_label;
+    };
+
     const handleNotificationClick = async (notification: Notification) => {
         setNotificationList((current) =>
             current.filter((item) => item.id !== notification.id),
@@ -435,16 +456,23 @@ export function NotificationBell() {
                                                 {notification.student_name}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                {(notification.upload_count ??
-                                                    1) > 1
-                                                    ? `Uploaded ${notification.upload_count} files`
-                                                    : 'Uploaded a file'}
-                                                {' - '}
-                                                {notification.requirement_label}
+                                                {notificationTitle(
+                                                    notification,
+                                                )}
+                                                {notificationDetail(
+                                                    notification,
+                                                )
+                                                    ? ` - ${notificationDetail(notification)}`
+                                                    : ''}
                                             </p>
                                             {notification.course_name && (
                                                 <p className="truncate text-xs text-muted-foreground">
-                                                    {notification.course_name}
+                                                    {[
+                                                        notification.department_code,
+                                                        notification.course_name,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' - ')}
                                                 </p>
                                             )}
                                             <p className="text-xs text-muted-foreground">

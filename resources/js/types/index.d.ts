@@ -42,6 +42,7 @@ export interface SharedData {
         upload_count?: number;
         course_name?: string;
         department_name?: string;
+        department_code?: string;
         created_at: string;
         read_at?: string | null;
     }>;

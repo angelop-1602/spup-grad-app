@@ -10,7 +10,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Camera, Filter, RefreshCw } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import {
@@ -42,10 +42,15 @@ type TicketsIndexProps = {
 };
 
 function cleanTicketFilters(filters: Record<string, string>) {
-    return Object.fromEntries(
-        Object.entries(filters).filter(
-            ([key, value]) => value !== '' && (value !== 'all' || key === 'status'),
-        ),
+    return Object.entries(filters).reduce<Record<string, string>>(
+        (cleaned, [key, value]) => {
+            if (value !== '' && (value !== 'all' || key === 'status')) {
+                cleaned[key] = value;
+            }
+
+            return cleaned;
+        },
+        {},
     );
 }
 
@@ -144,10 +149,7 @@ export default function DeveloperTicketsIndex({
                             <SelectContent>
                                 <SelectItem value="all">All</SelectItem>
                                 {filterOptions.categories.map((category) => (
-                                    <SelectItem
-                                        key={category}
-                                        value={category}
-                                    >
+                                    <SelectItem key={category} value={category}>
                                         {headline(category)}
                                     </SelectItem>
                                 ))}
@@ -171,10 +173,7 @@ export default function DeveloperTicketsIndex({
                             <SelectContent>
                                 <SelectItem value="all">All</SelectItem>
                                 {filterOptions.priorities.map((priority) => (
-                                    <SelectItem
-                                        key={priority}
-                                        value={priority}
-                                    >
+                                    <SelectItem key={priority} value={priority}>
                                         {headline(priority)}
                                     </SelectItem>
                                 ))}
@@ -219,9 +218,7 @@ export default function DeveloperTicketsIndex({
                                 <th className="px-3 py-2 font-medium">
                                     Ticket
                                 </th>
-                                <th className="px-3 py-2 font-medium">
-                                    Issue
-                                </th>
+                                <th className="px-3 py-2 font-medium">Issue</th>
                                 <th className="px-3 py-2 font-medium">
                                     Reporter
                                 </th>
@@ -240,15 +237,24 @@ export default function DeveloperTicketsIndex({
                             {tickets.data.map((ticket) => (
                                 <tr
                                     key={ticket.ticket_number}
-                                    className="border-t align-top"
+                                    className="cursor-pointer border-t align-top hover:bg-muted/40"
+                                    role="link"
+                                    tabIndex={0}
+                                    onClick={() => router.visit(ticket.show_url)}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.key === 'Enter' ||
+                                            event.key === ' '
+                                        ) {
+                                            event.preventDefault();
+                                            router.visit(ticket.show_url);
+                                        }
+                                    }}
                                 >
                                     <td className="px-3 py-3">
-                                        <Link
-                                            href={ticket.show_url}
-                                            className="font-semibold underline-offset-4 hover:underline"
-                                        >
+                                        <span className="font-semibold">
                                             {ticket.ticket_number}
-                                        </Link>
+                                        </span>
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             {headline(ticket.category)}
                                         </p>

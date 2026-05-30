@@ -8,6 +8,7 @@ import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import adminRoutes from '@/routes/admin';
 import coordinatorRoutes from '@/routes/coordinator';
+import developerRoutes from '@/routes/developer';
 import { type SharedData, type User } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import { LogOut } from 'lucide-react';
@@ -21,13 +22,16 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
     const { auth } = usePage<SharedData>().props;
     const isAdmin = !!auth.admin;
     const isCoordinator = !!auth.coordinator;
-    
+    const isDeveloper = !!auth.developer;
+
     // Determine logout route based on user type
     let logoutRoute = logout();
     if (isAdmin) {
         logoutRoute = adminRoutes.logout();
     } else if (isCoordinator) {
         logoutRoute = coordinatorRoutes.logout();
+    } else if (isDeveloper) {
+        logoutRoute = developerRoutes.logout();
     }
 
     const handleLogout = () => {

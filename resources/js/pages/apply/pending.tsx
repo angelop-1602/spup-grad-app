@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useClipboard } from '@/hooks/use-clipboard';
 import ApplyLayout from '@/layouts/apply-layout';
+import { safeLocalStorage } from '@/lib/browser-storage';
 import applyRoutes from '@/routes/apply';
 import { Head, router, useForm } from '@inertiajs/react';
 import {
@@ -76,7 +77,7 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
         if (!isVerified) {
             const expiresAt = Date.now() + RESEND_COOLDOWN_SECONDS * 1000;
 
-            window.localStorage.setItem(
+            safeLocalStorage.setItem(
                 resendCooldownStorageKey,
                 String(expiresAt),
             );
@@ -87,13 +88,13 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
     };
 
     useEffect(() => {
-        const handleStorage = (event: StorageEvent) => {
-            if (event.key !== GUEST_VERIFICATION_EVENT_KEY || !event.newValue) {
-                return;
-            }
-
+        const handleVerificationPayload = (rawPayload: string | null) => {
             try {
-                const payload = JSON.parse(event.newValue) as {
+                if (!rawPayload) {
+                    return;
+                }
+
+                const payload = JSON.parse(rawPayload) as {
                     draftId?: number;
                     accessUrl?: string;
                 };
@@ -106,23 +107,43 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
             }
         };
 
+        const handleStorage = (event: StorageEvent) => {
+            if (event.key === GUEST_VERIFICATION_EVENT_KEY) {
+                handleVerificationPayload(event.newValue);
+            }
+        };
+
+        const handleCurrentTabVerification = (event: Event) => {
+            if (event instanceof CustomEvent) {
+                handleVerificationPayload(String(event.detail ?? ''));
+            }
+        };
+
         window.addEventListener('storage', handleStorage);
+        window.addEventListener(
+            GUEST_VERIFICATION_EVENT_KEY,
+            handleCurrentTabVerification,
+        );
 
         return () => {
             window.removeEventListener('storage', handleStorage);
+            window.removeEventListener(
+                GUEST_VERIFICATION_EVENT_KEY,
+                handleCurrentTabVerification,
+            );
         };
     }, [draft.id, isRedirecting]);
 
     useEffect(() => {
         if (isVerified) {
             setResendCooldown(0);
-            window.localStorage.removeItem(resendCooldownStorageKey);
+            safeLocalStorage.removeItem(resendCooldownStorageKey);
             return;
         }
 
         const updateCooldown = () => {
             const expiresAt = Number(
-                window.localStorage.getItem(resendCooldownStorageKey) ?? 0,
+                safeLocalStorage.getItem(resendCooldownStorageKey) ?? 0,
             );
             const remaining = Math.max(
                 0,
@@ -132,7 +153,7 @@ export default function PendingDraftPage({ draft }: PendingDraftProps) {
             setResendCooldown(remaining);
 
             if (remaining === 0) {
-                window.localStorage.removeItem(resendCooldownStorageKey);
+                safeLocalStorage.removeItem(resendCooldownStorageKey);
             }
         };
 

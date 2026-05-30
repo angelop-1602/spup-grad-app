@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/card';
 import { useClipboard } from '@/hooks/use-clipboard';
 import ApplyLayout from '@/layouts/apply-layout';
+import { safeLocalStorage } from '@/lib/browser-storage';
 import { Head } from '@inertiajs/react';
 import {
     CheckCircle2,
@@ -48,12 +49,9 @@ export default function GuestApplicationVerifiedPage({
             issuedAt: Date.now(),
         });
 
-        localStorage.setItem(GUEST_VERIFICATION_EVENT_KEY, payload);
+        safeLocalStorage.setItem(GUEST_VERIFICATION_EVENT_KEY, payload);
         window.dispatchEvent(
-            new StorageEvent('storage', {
-                key: GUEST_VERIFICATION_EVENT_KEY,
-                newValue: payload,
-            }),
+            new CustomEvent(GUEST_VERIFICATION_EVENT_KEY, { detail: payload }),
         );
 
         const closeTimer = window.setTimeout(() => {

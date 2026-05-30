@@ -23,6 +23,7 @@ class DashboardOverview
             'student_id' => $application->user?->student_id,
             'email' => $application->user?->email,
             'department_name' => $application->department?->name,
+            'department_code' => $application->department?->code,
             'course_name' => $application->course?->name,
             'major' => $application->major,
             'status' => $application->status,

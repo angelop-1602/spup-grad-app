@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Developer;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApplicationWindow;
 use App\Models\GuestApplicationDraft;
 use App\Models\SupportTicket;
 use App\Models\SystemHealthCheck;
+use App\Notifications\DuplicateApplicationDetected;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\ApplicationWorkflowService;
 use App\Support\DeveloperDiagnosticsService;
+use App\Support\DuplicateApplicationRecords;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -29,6 +35,110 @@ class DeveloperDashboardController extends Controller
     public function manualVerification(Request $request, DeveloperDiagnosticsService $diagnostics): Response
     {
         return Inertia::render('developer/manual-verification', $diagnostics->dashboardData($this->filters($request)));
+    }
+
+    public function windows(Request $request): Response
+    {
+        $search = trim($request->string('search')->toString());
+        $now = now()->toDateTimeString();
+
+        $windows = ApplicationWindow::query()
+            ->withCount('applications')
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($inner) use ($search): void {
+                    $inner->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                });
+            })
+            ->orderByRaw(
+                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
+                [$now, $now, $now]
+            )
+            ->orderBy('start_date', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+
+        $currentWindow = ApplicationWindow::current();
+        $currentWindow?->loadCount('applications');
+
+        return Inertia::render('developer/windows', [
+            'windows' => $windows,
+            'currentWindow' => $currentWindow,
+            'filters' => [
+                'search' => $search,
+            ],
+        ]);
+    }
+
+    public function window(ApplicationWindow $window, DuplicateApplicationRecords $duplicates): Response
+    {
+        $window->loadCount('applications');
+
+        return Inertia::render('developer/window', [
+            'window' => [
+                'id' => $window->id,
+                'title' => $window->title,
+                'description' => $window->description,
+                'status' => $window->status,
+                'start_date' => $window->start_date?->toIso8601String(),
+                'end_date' => $window->end_date?->toIso8601String(),
+                'applications_count' => $window->applications_count,
+            ],
+            'verifiedApplications' => $duplicates->verifiedApplicationsForWindow($window),
+            'unverifiedApplications' => $duplicates->unverifiedDraftsForWindow($window),
+            'duplicatePairs' => $duplicates->duplicatePairsForWindow($window),
+        ]);
+    }
+
+    public function sendDuplicateAlert(
+        Request $request,
+        ApplicationWindow $window,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'left' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/'],
+            'right' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::notIn([$request->input('left')])],
+        ]);
+
+        [$left, $right] = [
+            $duplicates->resolve($validated['left']),
+            $duplicates->resolve($validated['right']),
+        ];
+
+        if (! $left || ! $right) {
+            return back()->withErrors([
+                'duplicate' => 'One of the duplicate records no longer exists.',
+            ]);
+        }
+
+        if ((int) $left['window_id'] !== $window->id || (int) $right['window_id'] !== $window->id) {
+            return back()->withErrors([
+                'duplicate' => 'Both duplicate records must belong to the selected application window.',
+            ]);
+        }
+
+        if (! $duplicates->recordsMatch($left, $right)) {
+            return back()->withErrors([
+                'duplicate' => 'These records no longer match on first name, last name, and student ID.',
+            ]);
+        }
+
+        $reviewUrl = URL::temporarySignedRoute(
+            'duplicate-applications.show',
+            now()->addDays(14),
+            [
+                'left' => $left['key'],
+                'right' => $right['key'],
+            ],
+        );
+
+        $notification = new DuplicateApplicationDetected(
+            $duplicates->publicPayload($left),
+            $duplicates->publicPayload($right),
+            $reviewUrl,
+        );
+
+        return $this->sendDuplicateAlertEmail($left, $right, $notification, $duplicates);
     }
 
     public function events(Request $request, DeveloperDiagnosticsService $diagnostics): Response
@@ -191,6 +301,63 @@ class DeveloperDashboardController extends Controller
             );
 
             return false;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     */
+    private function sendDuplicateAlertEmail(
+        array $left,
+        array $right,
+        DuplicateApplicationDetected $notification,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $notifiables = $duplicates->notifiablesForRecords([$left, $right]);
+        $mailMeta = [
+            'notification' => $notification::class,
+            'mailer' => config('mail.default'),
+            'delivery_mode' => is_subclass_of($notification::class, \Illuminate\Contracts\Queue\ShouldQueue::class)
+                ? 'queued'
+                : 'sync',
+            'recipient_count' => $notifiables->count(),
+            'left_record' => $left['key'],
+            'right_record' => $right['key'],
+        ];
+
+        if ($notifiables->isEmpty()) {
+            return back()->withErrors([
+                'duplicate' => 'No email recipient is available for these duplicate records.',
+            ]);
+        }
+
+        try {
+            Notification::send($notifiables, $notification);
+            SystemHealthCheck::record('mail', 'ok', 'Duplicate application alert email sent.', $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'developer.duplicate_application.alert_sent',
+                message: 'Developer sent a duplicate application resolution email.',
+                meta: $mailMeta,
+            );
+
+            return back()->with('success', 'Duplicate alert email sent.');
+        } catch (\Throwable $e) {
+            SystemHealthCheck::record('mail', 'critical', $e->getMessage(), $mailMeta);
+            app(SystemEventLogger::class)->log(
+                module: 'email',
+                action: 'developer.duplicate_application.alert_sent',
+                message: 'Duplicate application alert email failed.',
+                status: 'failed',
+                severity: 'error',
+                meta: [
+                    ...$mailMeta,
+                    'error' => $e->getMessage(),
+                ],
+            );
+
+            return back()->with('warning', 'Duplicate alert could not be sent. Check mail diagnostics for details.');
         }
     }
 

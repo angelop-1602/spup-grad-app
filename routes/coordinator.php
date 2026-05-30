@@ -34,7 +34,9 @@ use App\Http\Controllers\Coordinator\ApplicationController;
 use App\Http\Controllers\Coordinator\AuditTrailController;
 use App\Http\Controllers\Coordinator\DashboardController;
 use App\Http\Controllers\Coordinator\HistoricalApplicationController;
+use App\Http\Controllers\Coordinator\ManualVerificationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\StaffGlobalSearchController;
 
 Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])->group(function () {
     Route::post('coordinator/logout', [CoordinatorLoginController::class, 'destroy'])->name('coordinator.logout');
@@ -42,12 +44,16 @@ Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])-
     // Dashboard
     Route::get('coordinator/dashboard', [DashboardController::class, 'index'])->name('coordinator.dashboard');
     Route::get('coordinator/audit-trail', [AuditTrailController::class, 'index'])->name('coordinator.audit-trail.index');
+    Route::get('coordinator/global-search', [StaffGlobalSearchController::class, 'index'])->name('coordinator.global-search');
+    Route::get('coordinator/manual-verification', [ManualVerificationController::class, 'index'])->name('coordinator.manual-verification.index');
+    Route::post('coordinator/manual-verification/{draft}/verify', [ManualVerificationController::class, 'verify'])->name('coordinator.manual-verification.verify');
 
     // Applications / Windows
     Route::get('coordinator/applications', [ApplicationController::class, 'index'])->name('coordinator.applications.index');
     Route::get('coordinator/windows/historical/{batch}', [ApplicationController::class, 'historical'])
         ->name('coordinator.windows.historical');
     Route::get('coordinator/windows/{window}', [ApplicationController::class, 'window'])->name('coordinator.windows.show');
+    Route::post('coordinator/windows/{window}/duplicates/alert', [ApplicationController::class, 'sendDuplicateAlert'])->name('coordinator.windows.duplicates.alert');
     // Export route must come before parameterized routes to avoid route conflicts
     Route::get('coordinator/applications/export', [ApplicationController::class, 'export'])->name('coordinator.applications.export');
     Route::get('coordinator/windows/{window}/export-statistics-pdf', [ApplicationController::class, 'exportStatisticsPdf'])->name('coordinator.windows.export-statistics-pdf');

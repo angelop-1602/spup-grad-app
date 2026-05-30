@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\ApplicationController as StudentApplicationController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateApplicationStatusRequest;
+use App\Http\Requests\Application\StaffUpdateApplicationRequest;
 use App\Models\Application;
+use App\Models\Department;
+use App\Support\ApplicationWorkflowService;
+use App\Support\PossibleDuplicateApplications;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +23,7 @@ class ApplicationController extends Controller
     /**
      * Display the specified application.
      */
-    public function show(Application $application): Response
+    public function show(Application $application, PossibleDuplicateApplications $duplicates): Response
     {
         $application->load([
             'user.profile',
@@ -116,7 +120,80 @@ class ApplicationController extends Controller
 
         return Inertia::render('admin/applications/show', [
             'application' => $application,
+            'possibleDuplicates' => $duplicates->forApplication(
+                $application,
+                'admin.applications.show',
+                'admin.applications.edit',
+                'admin.applications.destroy',
+            ),
         ]);
+    }
+
+    public function edit(Application $application, PossibleDuplicateApplications $duplicates): Response
+    {
+        $this->loadApplicationForEditing($application);
+
+        return Inertia::render('admin/applications/edit', [
+            'application' => $application,
+            'profile' => $application->user?->profile,
+            'departments' => $this->departmentsForEditing(),
+            'isApproved' => $application->status === 'approved',
+            'updateUrl' => route('admin.applications.update', $application->application_number, false),
+            'cancelHref' => route('admin.applications.show', $application->application_number, false),
+            'possibleDuplicates' => $duplicates->forApplication(
+                $application,
+                'admin.applications.show',
+                'admin.applications.edit',
+                'admin.applications.destroy',
+            ),
+        ]);
+    }
+
+    public function update(
+        StaffUpdateApplicationRequest $request,
+        Application $application,
+        ApplicationWorkflowService $workflow,
+        SystemEventLogger $logger,
+    ): RedirectResponse {
+        $workflow->updateApplicationForUser($application, $request->validated(), $request->file('photo'));
+
+        $application->load('requirements.children');
+        $oldStatus = $application->status;
+        $application->recalculateStatusBasedOnRequirements();
+        $newStatus = $application->fresh()->status;
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.application.data_updated',
+            message: 'Admin updated application data.',
+            subject: $application,
+            meta: [
+                'application_number' => $application->application_number,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+            ],
+        );
+
+        return redirect()
+            ->route('admin.applications.show', $application)
+            ->with('success', 'Application data updated successfully.');
+    }
+
+    public function destroy(Application $application, SystemEventLogger $logger): RedirectResponse
+    {
+        $applicationNumber = $application->application_number;
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.application.deleted',
+            message: 'Admin deleted an application.',
+            subject: $application,
+            meta: ['application_number' => $applicationNumber],
+        );
+
+        $application->delete();
+
+        return back()->with('success', "Application {$applicationNumber} deleted successfully.");
     }
 
     /**
@@ -309,5 +386,28 @@ class ApplicationController extends Controller
         }
 
         return redirect()->back();
+    }
+
+    private function loadApplicationForEditing(Application $application): void
+    {
+        $application->load([
+            'user.profile',
+            'window',
+            'department',
+            'course',
+            'subjectEnrollments',
+        ]);
+    }
+
+    private function departmentsForEditing()
+    {
+        return Department::with([
+            'courses' => function ($query) {
+                $query->active()->orderBy('name');
+            },
+            'courses.majors' => function ($query) {
+                $query->active()->orderBy('name');
+            },
+        ])->active()->orderBy('name')->get();
     }
 }

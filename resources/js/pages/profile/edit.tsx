@@ -842,9 +842,14 @@ export default function ProfileEdit({ profile }: ProfileEditProps) {
                                             </Label>
                                             <Input
                                                 id="student_id"
-                                                value={user.student_id ?? ''}
-                                                readOnly
-                                                disabled
+                                                name="student_id"
+                                                defaultValue={user.student_id ?? ''}
+                                                required
+                                                pattern="[A-Za-z0-9-]+"
+                                                title="Use letters, numbers, and hyphens only."
+                                            />
+                                            <InputError
+                                                message={errors.student_id}
                                             />
                                         </div>
                                         <div className="grid gap-2">

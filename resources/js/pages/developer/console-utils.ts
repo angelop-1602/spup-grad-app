@@ -31,8 +31,24 @@ export type ManualVerificationDraft = {
     tracking_pin: string;
     window_title: string;
     application_number: string | null;
+    application_edit_url: string | null;
+    verification_status: string;
     created_at: string | null;
     verified_at: string | null;
+};
+
+export type DeveloperApplicationSearchResult = {
+    id: number;
+    application_number: string;
+    applicant_name: string;
+    student_id: string | null;
+    email: string | null;
+    window_title: string | null;
+    department_code: string | null;
+    course_name: string | null;
+    status: string;
+    edit_url: string;
+    created_at: string | null;
 };
 
 export type SystemEvent = {
@@ -82,6 +98,23 @@ export const statusClass: Record<string, string> = {
     normal: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
     high: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
     emergency: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+    pending:
+        'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300',
+    verified:
+        'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    needs_application:
+        'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+    submitted:
+        'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+    active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    upcoming:
+        'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+    ended: 'border-muted-foreground/30 bg-muted text-muted-foreground',
+    approved:
+        'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    incomplete:
+        'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+    rejected: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
 };
 
 export function headline(value: string | null | undefined) {
@@ -95,11 +128,16 @@ export function headline(value: string | null | undefined) {
 export function cleanFilters(
     filters: Record<string, string | null>,
 ): Record<string, string> {
-    return Object.fromEntries(
-        Object.entries(filters).filter(
-            ([key, value]) => value && (value !== 'all' || key === 'window_id'),
-        ),
-    ) as Record<string, string>;
+    return Object.entries(filters).reduce<Record<string, string>>(
+        (cleaned, [key, value]) => {
+            if (value && (value !== 'all' || key === 'window_id')) {
+                cleaned[key] = value;
+            }
+
+            return cleaned;
+        },
+        {},
+    );
 }
 
 export function formatDate(value: string | null | undefined) {

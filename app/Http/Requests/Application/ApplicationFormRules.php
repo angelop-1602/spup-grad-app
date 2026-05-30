@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Application;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -149,6 +150,20 @@ class ApplicationFormRules
     }
 
     /**
+     * @return array<int, mixed>
+     */
+    public static function studentIdRules(FormRequest $request, ?int $ignoreUserId = null): array
+    {
+        return [
+            'required',
+            'string',
+            'max:255',
+            'regex:/^[A-Za-z0-9-]+$/',
+            Rule::unique(User::class, 'student_id')->ignore($ignoreUserId),
+        ];
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function messages(): array
@@ -161,6 +176,8 @@ class ApplicationFormRules
             'photo.mimes' => 'Photo must be a JPG or PNG image.',
             'photo.max' => 'Photo must not be larger than 2MB.',
             'photo.dimensions' => 'Photo must be at least 200 by 200 pixels.',
+            'student_id.regex' => 'The student ID may only contain letters, numbers, and hyphens (-), and must not be an email address.',
+            'student_id.unique' => 'An account with this Student ID already exists.',
         ];
     }
 }

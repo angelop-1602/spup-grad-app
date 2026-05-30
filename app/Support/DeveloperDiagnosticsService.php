@@ -34,7 +34,8 @@ class DeveloperDiagnosticsService
             'applicationWindows' => $this->applicationWindowOptions(),
             'currentWindow' => $this->windowPayload(ApplicationWindow::current()),
             'selectedWindowId' => $selectedWindowId,
-            'manualVerificationDrafts' => $this->manualVerificationDrafts($selectedWindowId),
+            'manualVerificationDrafts' => $this->manualVerificationDrafts($selectedWindowId, $filters['search'] ?? null),
+            'applicationSearchResults' => $this->applicationSearchResults($selectedWindowId, $filters['search'] ?? null),
             'eventFilters' => $this->filterOptions(),
             'events' => $this->eventsQuery($resolvedFilters)->paginate(25)->withQueryString(),
             'recentLogLines' => $this->recentLogLines(),
@@ -163,14 +164,43 @@ class DeveloperDiagnosticsService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function manualVerificationDrafts(?int $windowId): array
+    private function manualVerificationDrafts(?int $windowId, mixed $search = null): array
     {
+        $searchTerm = trim((string) ($search ?? ''));
+
         return GuestApplicationDraft::query()
-            ->with(['window:id,title', 'application:id,application_number'])
+            ->with([
+                'window:id,title',
+                'application:id,application_number,user_id',
+                'application.user:id,name,email,student_id',
+                'application.user.profile:id,user_id,first_name,middle_name,last_name,suffix',
+            ])
             ->when($windowId, fn (Builder $query) => $query->where('window_id', $windowId))
-            ->where(function (Builder $query) {
-                $query->whereNull('verified_at')
-                    ->orWhereNull('application_id');
+            ->when($searchTerm !== '', function (Builder $query) use ($searchTerm): void {
+                $query->where(function (Builder $inner) use ($searchTerm): void {
+                    $inner->where('email', 'like', "%{$searchTerm}%")
+                        ->orWhere('student_id', 'like', "%{$searchTerm}%")
+                        ->orWhere('tracking_code', 'like', "%{$searchTerm}%")
+                        ->orWhere('tracking_pin', 'like', "%{$searchTerm}%")
+                        ->orWhereHas('application', function (Builder $applicationQuery) use ($searchTerm): void {
+                            $applicationQuery->where('application_number', 'like', "%{$searchTerm}%")
+                                ->orWhereHas('user', function (Builder $userQuery) use ($searchTerm): void {
+                                    $userQuery->where('name', 'like', "%{$searchTerm}%")
+                                        ->orWhere('student_id', 'like', "%{$searchTerm}%")
+                                        ->orWhere('email', 'like', "%{$searchTerm}%")
+                                        ->orWhereHas('profile', function (Builder $profileQuery) use ($searchTerm): void {
+                                            $profileQuery->where('first_name', 'like', "%{$searchTerm}%")
+                                                ->orWhere('middle_name', 'like', "%{$searchTerm}%")
+                                                ->orWhere('last_name', 'like', "%{$searchTerm}%");
+                                        });
+                                });
+                        });
+                });
+            }, function (Builder $query): void {
+                $query->where(function (Builder $pendingQuery): void {
+                    $pendingQuery->whereNull('verified_at')
+                        ->orWhereNull('application_id');
+                });
             })
             ->latest('created_at')
             ->limit(25)
@@ -184,11 +214,99 @@ class DeveloperDiagnosticsService
                 'tracking_pin' => $draft->ensureTrackingPin(),
                 'window_title' => $draft->window?->title ?? 'Unavailable',
                 'application_number' => $draft->application?->application_number,
+                'application_edit_url' => $draft->application
+                    ? route('developer.applications.edit', $draft->application->application_number, false)
+                    : null,
+                'verification_status' => $this->draftVerificationStatus($draft),
                 'created_at' => $draft->created_at?->toIso8601String(),
                 'verified_at' => $draft->verified_at?->toIso8601String(),
             ])
             ->values()
             ->all();
+    }
+
+    private function draftVerificationStatus(GuestApplicationDraft $draft): string
+    {
+        if ($draft->hasBeenVerified()) {
+            return 'verified';
+        }
+
+        if ($draft->verified_at && ! $draft->application_id) {
+            return 'needs_application';
+        }
+
+        return 'pending';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function applicationSearchResults(?int $windowId, mixed $search = null): array
+    {
+        $searchTerm = trim((string) ($search ?? ''));
+
+        if ($searchTerm === '') {
+            return [];
+        }
+
+        return Application::query()
+            ->with([
+                'user:id,name,email,student_id',
+                'user.profile:id,user_id,first_name,middle_name,last_name,suffix',
+                'window:id,title',
+                'department:id,name,code',
+                'course:id,name,code,department_id',
+            ])
+            ->when($windowId, fn (Builder $query) => $query->where('window_id', $windowId))
+            ->where(function (Builder $query) use ($searchTerm): void {
+                $query->where('application_number', 'like', "%{$searchTerm}%")
+                    ->orWhereHas('user', function (Builder $userQuery) use ($searchTerm): void {
+                        $userQuery->where('name', 'like', "%{$searchTerm}%")
+                            ->orWhere('student_id', 'like', "%{$searchTerm}%")
+                            ->orWhere('email', 'like', "%{$searchTerm}%")
+                            ->orWhereHas('profile', function (Builder $profileQuery) use ($searchTerm): void {
+                                $profileQuery->where('first_name', 'like', "%{$searchTerm}%")
+                                    ->orWhere('middle_name', 'like', "%{$searchTerm}%")
+                                    ->orWhere('last_name', 'like', "%{$searchTerm}%");
+                            });
+                    });
+            })
+            ->latest('created_at')
+            ->limit(25)
+            ->get()
+            ->map(fn (Application $application) => [
+                'id' => $application->id,
+                'application_number' => $application->application_number,
+                'applicant_name' => $this->applicationApplicantName($application),
+                'student_id' => $application->user?->student_id,
+                'email' => $application->user?->email,
+                'window_title' => $application->window?->title ?? 'Unavailable',
+                'department_code' => $application->department?->code ?: $application->department?->name,
+                'course_name' => $application->course?->name,
+                'status' => $application->status,
+                'edit_url' => route('developer.applications.edit', $application->application_number, false),
+                'created_at' => $application->created_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function applicationApplicantName(Application $application): string
+    {
+        $profile = $application->user?->profile;
+
+        if (! $profile) {
+            return $application->user?->name ?? 'Unknown Applicant';
+        }
+
+        $name = trim(implode(' ', array_filter([
+            $profile->first_name,
+            $profile->middle_name,
+            $profile->last_name,
+            $profile->suffix,
+        ])));
+
+        return $name !== '' ? $name : ($application->user?->name ?? 'Unknown Applicant');
     }
 
     /**

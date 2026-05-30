@@ -33,7 +33,10 @@ class GraduateExportData
         }
 
         if ($departmentName) {
-            $query->whereHas('department', fn ($departmentQuery) => $departmentQuery->where('name', $departmentName));
+            $query->whereHas('department', function ($departmentQuery) use ($departmentName): void {
+                $departmentQuery->where('name', $departmentName)
+                    ->orWhere('code', $departmentName);
+            });
         }
 
         if ($search) {
@@ -194,7 +197,7 @@ class GraduateExportData
     private static function graduateRow(Application $application): array
     {
         $profile = $application->user?->profile;
-        $department = self::titleCase($application->department?->name, 'No Department');
+        $department = $application->department?->code ?: self::titleCase($application->department?->name, 'No Department');
         $degree = self::titleCase($application->course?->name ?: $application->degree_title, 'No Degree');
         $major = self::titleCase($application->major, 'No Major');
         $thesisType = self::thesisType($application);

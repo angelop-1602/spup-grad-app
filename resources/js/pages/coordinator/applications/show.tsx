@@ -1,4 +1,8 @@
 import type { ApplicationRequirement } from '@/components/requirements-list';
+import {
+    PossibleDuplicateApplications,
+    type PossibleDuplicateApplication,
+} from '@/components/possible-duplicate-applications';
 import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
@@ -132,6 +136,7 @@ interface Application {
 
 interface ShowApplicationProps {
     application: Application;
+    possibleDuplicates: PossibleDuplicateApplication[];
 }
 
 const requirementStatusConfig = {
@@ -144,39 +149,38 @@ const requirementStatusConfig = {
     },
 };
 
+function flattenRequirements(requirements: ApplicationRequirement[]) {
+    const flattened: ApplicationRequirement[] = [];
+
+    requirements
+        .filter((req) => !req.parent_id)
+        .forEach((req) => {
+            flattened.push(req, ...(req.children || []));
+        });
+
+    return flattened;
+}
+
 export default function CoordinatorShowApplication({
     application,
+    possibleDuplicates,
 }: ShowApplicationProps) {
     const { addToast } = useToast();
     const [requirementsData, setRequirementsData] = useState(
-        application.requirements
-            .filter((req) => !req.parent_id) // Only process parent requirements
-            .flatMap((req) => {
-                const children = req.children || [];
-                // Include parent and all children
-                return [req, ...children];
-            })
-            .map((req) => ({
-                id: req.id,
-                status: req.status,
-                notes: req.notes || '',
-            })),
+        flattenRequirements(application.requirements).map((req) => ({
+            id: req.id,
+            status: req.status,
+            notes: req.notes || '',
+        })),
     );
     // Store initial requirements for comparison
     const initialRequirements = useMemo(
         () =>
-            application.requirements
-                .filter((req) => !req.parent_id) // Only process parent requirements
-                .flatMap((req) => {
-                    const children = req.children || [];
-                    // Include parent and all children
-                    return [req, ...children];
-                })
-                .map((req) => ({
-                    id: req.id,
-                    status: req.status,
-                    notes: req.notes || '',
-                })),
+            flattenRequirements(application.requirements).map((req) => ({
+                id: req.id,
+                status: req.status,
+                notes: req.notes || '',
+            })),
         [application.id], // Only reset when application changes
     );
 
@@ -343,6 +347,8 @@ export default function CoordinatorShowApplication({
                     </div>
                 </div>
 
+                <PossibleDuplicateApplications duplicates={possibleDuplicates} />
+
                 {/* Main Content Grid */}
                 <div className="grid gap-4 md:gap-6 lg:grid-cols-3 lg:gap-8">
                     {/* Left Column - Details */}
@@ -363,7 +369,11 @@ export default function CoordinatorShowApplication({
                                         {profilePhotoUrl(profile) ? (
                                             <div className="space-y-3">
                                                 <img
-                                                    src={profilePhotoUrl(profile) ?? ''}
+                                                    src={
+                                                        profilePhotoUrl(
+                                                            profile,
+                                                        ) ?? ''
+                                                    }
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-40 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />

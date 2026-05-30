@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\ApplicationRequirement;
 use App\Models\GuestApplicationDraft;
 use App\Models\User;
+use App\Notifications\ApplicationSubmitted;
 use App\Notifications\RequirementFileUploaded;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
@@ -165,17 +166,22 @@ class ApplicationWorkflowService
 
     public function createApplicationForUser(User $user, array $applicationData, ?UploadedFile $photo = null): Application
     {
+        $this->syncUserIdentity($user, $applicationData);
+
         $application = $user->applications()->create($this->extractApplicationAttributes($applicationData));
 
         $this->syncSubjectEnrollments($application, $applicationData, false);
         $this->initializeRequirements($application);
         $this->syncProfileForUser($user, $applicationData, $photo);
+        $this->notifyApplicationSubmitted($application);
 
         return $application;
     }
 
     public function updateApplicationForUser(Application $application, array $applicationData, ?UploadedFile $photo = null): Application
     {
+        $this->syncUserIdentity($application->user, $applicationData);
+
         $application->update($this->extractApplicationAttributes($applicationData));
         $this->syncSubjectEnrollments($application, $applicationData, true);
         $this->syncProfileForUser($application->user, $applicationData, $photo);
@@ -259,6 +265,8 @@ class ApplicationWorkflowService
 
         $requirement->update($updateData);
 
+        $this->syncIdPictureToProfilePhoto($application, $requirement, $file, $filePath);
+
         $application->load(['requirements.children']);
 
         if ($requirement->parent_id) {
@@ -301,6 +309,31 @@ class ApplicationWorkflowService
         }
     }
 
+    public function notifyApplicationSubmitted(Application $application): void
+    {
+        $application->load([
+            'user.profile',
+            'department.coordinators',
+            'course',
+        ]);
+
+        $studentName = $application->user?->profile
+            ? trim($application->user->profile->first_name.' '.($application->user->profile->middle_name ? $application->user->profile->middle_name.' ' : '').$application->user->profile->last_name.($application->user->profile->suffix ? ' '.$application->user->profile->suffix : ''))
+            : ($application->user?->name ?? 'Unknown Student');
+
+        $notification = new ApplicationSubmitted($application, $studentName);
+
+        $coordinators = $application->department?->coordinators ?? collect();
+        if ($coordinators->isNotEmpty()) {
+            Notification::send($coordinators, $notification);
+        }
+
+        $admins = \App\Models\Admin::all();
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, $notification);
+        }
+    }
+
     public function buildUserName(array $applicationData, string $fallback = 'Guest Applicant'): string
     {
         $parts = array_filter([
@@ -318,7 +351,7 @@ class ApplicationWorkflowService
      */
     private function extractApplicationAttributes(array $applicationData): array
     {
-        $attributes = Arr::except($applicationData, ['graduate_subjects', 'subject_enrollments']);
+        $attributes = Arr::except($applicationData, ['email', 'student_id', 'photo', 'graduate_subjects', 'subject_enrollments']);
         $graduateSubjects = $applicationData['graduate_subjects'] ?? [];
 
         if (! empty($graduateSubjects)) {
@@ -333,6 +366,52 @@ class ApplicationWorkflowService
         }
 
         return $attributes;
+    }
+
+    private function syncUserIdentity(User $user, array $applicationData): void
+    {
+        $updates = [];
+
+        if (array_key_exists('student_id', $applicationData)) {
+            $studentId = trim((string) $applicationData['student_id']);
+            if ($studentId !== '' && strcasecmp((string) $user->student_id, $studentId) !== 0) {
+                $updates['student_id'] = $studentId;
+            }
+        }
+
+        $name = $this->buildUserName($applicationData, (string) ($user->name ?: $user->student_id ?: 'Student'));
+        if ($name !== '' && $name !== $user->name) {
+            $updates['name'] = $name;
+        }
+
+        if ($updates !== []) {
+            $user->forceFill($updates)->save();
+        }
+    }
+
+    private function syncIdPictureToProfilePhoto(
+        Application $application,
+        ApplicationRequirement $requirement,
+        UploadedFile $file,
+        string $filePath,
+    ): void {
+        if ($requirement->requirement_key !== 'id_picture') {
+            return;
+        }
+
+        if (! Str::startsWith((string) $file->getMimeType(), 'image/')) {
+            return;
+        }
+
+        $application->loadMissing('user.profile');
+
+        if (! $application->user) {
+            return;
+        }
+
+        $application->user->profile()->updateOrCreate([], [
+            'photo_path' => $filePath,
+        ]);
     }
 
     private function syncSubjectEnrollments(Application $application, array $applicationData, bool $replaceExisting): void

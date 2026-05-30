@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/contexts/toast-context';
+import { safeSessionStorage } from '@/lib/browser-storage';
 import { type SharedData } from '@/types';
 import { useForm, usePage } from '@inertiajs/react';
 import { BadgeAlert, Paperclip, Send } from 'lucide-react';
@@ -85,12 +86,12 @@ export default function ReportIssueButton() {
             return;
         }
 
-        if (sessionStorage.getItem(REPORT_ISSUE_TOAST_KEY)) {
+        if (safeSessionStorage.getItem(REPORT_ISSUE_TOAST_KEY)) {
             return;
         }
 
         const showIssueToast = () => {
-            if (sessionStorage.getItem(REPORT_ISSUE_TOAST_KEY)) {
+            if (safeSessionStorage.getItem(REPORT_ISSUE_TOAST_KEY)) {
                 return;
             }
 
@@ -101,7 +102,7 @@ export default function ReportIssueButton() {
                     'Take a screenshot first, then click Report issue so you can attach it to the report.',
                 duration: 8000,
             });
-            sessionStorage.setItem(REPORT_ISSUE_TOAST_KEY, 'true');
+            safeSessionStorage.setItem(REPORT_ISSUE_TOAST_KEY, 'true');
         };
 
         const handleError = () => showIssueToast();

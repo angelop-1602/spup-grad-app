@@ -10,15 +10,17 @@ import {
 import AppLayout from '@/layouts/app-layout';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertCircle,
     Bell,
-    Calendar,
     Clock,
+    Download,
     FileText,
+    Plus,
     ShieldCheck,
 } from 'lucide-react';
+import { KeyboardEvent, useEffect } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -29,12 +31,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 interface Notification {
     id: string;
+    type?: string;
     student_name: string;
     student_id: string;
     requirement_label: string;
     application_number: string;
     upload_count?: number;
     course_name: string;
+    department_code?: string;
     created_at: string;
 }
 
@@ -45,6 +49,7 @@ interface Applicant {
     student_id: string | null;
     email: string | null;
     department_name: string | null;
+    department_code: string | null;
     course_name: string | null;
     major: string | null;
     status: string;
@@ -84,6 +89,36 @@ export default function AdminDashboard({
     newApplicants,
     notifications,
 }: AdminDashboardProps) {
+    useEffect(() => {
+        const refresh = () => {
+            router.reload({
+                only: [
+                    'stats',
+                    'newApplicants',
+                    'notifications',
+                    'unreadNotificationCount',
+                ],
+            });
+        };
+
+        const intervalId = window.setInterval(refresh, 5000);
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                refresh();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener(
+                'visibilitychange',
+                handleVisibilityChange,
+            );
+        };
+    }, []);
+
     const formatTimeAgo = (date: string | null) => {
         if (!date) {
             return 'Unknown';
@@ -119,16 +154,40 @@ export default function AdminDashboard({
 
     const statusBadge = (status: string) => {
         if (status === 'approved') {
-            return <Badge variant="secondary">Approved</Badge>;
+            return (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                    Approved
+                </Badge>
+            );
         }
 
         if (status === 'incomplete') {
-            return <Badge variant="outline">Incomplete</Badge>;
+            return (
+                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    Incomplete
+                </Badge>
+            );
         }
 
         return (
-            <Badge>{status === 'submitted' ? 'Submitted' : 'Pending'}</Badge>
+            <Badge className="px-1.5 py-0 text-[10px]">
+                {status === 'submitted' ? 'Submitted' : 'Pending'}
+            </Badge>
         );
+    };
+
+    const openApplication = (url: string) => {
+        router.visit(url);
+    };
+
+    const openApplicationFromKeyboard = (
+        event: KeyboardEvent<HTMLTableRowElement>,
+        url: string,
+    ) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openApplication(url);
+        }
     };
 
     return (
@@ -144,14 +203,28 @@ export default function AdminDashboard({
                             Graduation application operations overview
                         </p>
                     </div>
-                    {!stats.current_window && (
+                    <div className="flex flex-wrap gap-2">
+                        {stats.current_window && (
+                            <Button asChild variant="outline">
+                                <a
+                                    href={
+                                        adminRoutes.windows.export({
+                                            window: stats.current_window.id,
+                                        }).url
+                                    }
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Export Excel
+                                </a>
+                            </Button>
+                        )}
                         <Button asChild>
                             <Link href={adminRoutes.windows.create().url}>
-                                <Calendar className="mr-2 h-4 w-4" />
+                                <Plus className="h-4 w-4" />
                                 Create Window
                             </Link>
                         </Button>
-                    )}
+                    </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -195,23 +268,20 @@ export default function AdminDashboard({
                         <CardContent>
                             {newApplicants.length > 0 ? (
                                 <div className="overflow-x-auto">
-                                    <table className="w-full">
+                                    <table className="w-full table-fixed text-xs">
                                         <thead>
                                             <tr className="border-b">
-                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                <th className="w-[34%] px-3 py-2 text-left font-medium text-muted-foreground">
                                                     Applicant
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                <th className="w-[33%] px-3 py-2 text-left font-medium text-muted-foreground">
                                                     Program
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                <th className="w-[17%] px-3 py-2 text-left font-medium text-muted-foreground">
                                                     Status
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                <th className="w-[16%] px-3 py-2 text-left font-medium text-muted-foreground">
                                                     Submitted
-                                                </th>
-                                                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
-                                                    Action
                                                 </th>
                                             </tr>
                                         </thead>
@@ -219,16 +289,30 @@ export default function AdminDashboard({
                                             {newApplicants.map((applicant) => (
                                                 <tr
                                                     key={applicant.id}
-                                                    className="border-b transition-colors hover:bg-muted/50"
+                                                    role="link"
+                                                    tabIndex={0}
+                                                    aria-label={`Open ${applicant.application_number}`}
+                                                    onClick={() =>
+                                                        openApplication(
+                                                            applicant.show_url,
+                                                        )
+                                                    }
+                                                    onKeyDown={(event) =>
+                                                        openApplicationFromKeyboard(
+                                                            event,
+                                                            applicant.show_url,
+                                                        )
+                                                    }
+                                                    className="cursor-pointer border-b transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none"
                                                 >
-                                                    <td className="px-4 py-3">
-                                                        <div>
-                                                            <p className="font-medium">
+                                                    <td className="px-3 py-2 align-top">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate font-medium">
                                                                 {
                                                                     applicant.student_name
                                                                 }
                                                             </p>
-                                                            <p className="text-xs text-muted-foreground">
+                                                            <p className="truncate text-[11px] text-muted-foreground">
                                                                 {
                                                                     applicant.student_id
                                                                 }{' '}
@@ -239,42 +323,27 @@ export default function AdminDashboard({
                                                             </p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <div>
-                                                            <p className="text-sm">
+                                                    <td className="px-3 py-2 align-top">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate">
                                                                 {applicant.course_name ??
                                                                     'No course'}
                                                             </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {applicant.department_name ??
-                                                                    'No department'}
+                                                            <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+                                                                {applicant.department_code ??
+                                                                    'N/A'}
                                                             </p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-3 py-2 align-top">
                                                         {statusBadge(
                                                             applicant.status,
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                                                    <td className="px-3 py-2 align-top text-muted-foreground">
                                                         {formatTimeAgo(
                                                             applicant.submitted_at,
                                                         )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <Button
-                                                            asChild
-                                                            variant="outline"
-                                                            size="sm"
-                                                        >
-                                                            <Link
-                                                                href={
-                                                                    applicant.show_url
-                                                                }
-                                                            >
-                                                                Open
-                                                            </Link>
-                                                        </Button>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -293,6 +362,13 @@ export default function AdminDashboard({
                     <RecentRequirementUploads
                         notifications={notifications}
                         formatTimeAgo={formatTimeAgo}
+                        applicationUrl={(applicationNumber) =>
+                            adminRoutes.applications.show(applicationNumber).url
+                        }
+                        openApplication={openApplication}
+                        openApplicationFromKeyboard={
+                            openApplicationFromKeyboard
+                        }
                     />
                 </div>
             </div>
@@ -330,10 +406,24 @@ function MetricCard({
 function RecentRequirementUploads({
     notifications,
     formatTimeAgo,
+    applicationUrl,
+    openApplication,
+    openApplicationFromKeyboard,
 }: {
     notifications: Notification[];
     formatTimeAgo: (date: string | null) => string;
+    applicationUrl: (applicationNumber: string) => string;
+    openApplication: (url: string) => void;
+    openApplicationFromKeyboard: (
+        event: KeyboardEvent<HTMLTableRowElement>,
+        url: string,
+    ) => void;
 }) {
+    const notificationLabel = (notification: Notification) =>
+        notification.type === 'application_submitted'
+            ? 'New application'
+            : notification.requirement_label;
+
     return (
         <Card>
             <CardHeader>
@@ -345,16 +435,16 @@ function RecentRequirementUploads({
             <CardContent>
                 {notifications.length > 0 ? (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full table-fixed text-xs">
                             <thead>
                                 <tr className="border-b">
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                    <th className="w-[38%] px-3 py-2 text-left font-medium text-muted-foreground">
                                         Student
                                     </th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                    <th className="w-[45%] px-3 py-2 text-left font-medium text-muted-foreground">
                                         Requirement
                                     </th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                    <th className="w-[17%] px-3 py-2 text-left font-medium text-muted-foreground">
                                         Uploaded
                                     </th>
                                 </tr>
@@ -365,27 +455,45 @@ function RecentRequirementUploads({
                                     .map((notification) => (
                                         <tr
                                             key={notification.id}
-                                            className="border-b transition-colors hover:bg-muted/50"
+                                            role="link"
+                                            tabIndex={0}
+                                            aria-label={`Open ${notification.application_number}`}
+                                            onClick={() =>
+                                                openApplication(
+                                                    applicationUrl(
+                                                        notification.application_number,
+                                                    ),
+                                                )
+                                            }
+                                            onKeyDown={(event) =>
+                                                openApplicationFromKeyboard(
+                                                    event,
+                                                    applicationUrl(
+                                                        notification.application_number,
+                                                    ),
+                                                )
+                                            }
+                                            className="cursor-pointer border-b transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none"
                                         >
-                                            <td className="px-4 py-3">
-                                                <p className="font-medium">
+                                            <td className="px-3 py-2 align-top">
+                                                <p className="truncate font-medium">
                                                     {notification.student_name}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p className="truncate text-[11px] text-muted-foreground">
                                                     {notification.student_id} -{' '}
                                                     {
                                                         notification.application_number
                                                     }
                                                 </p>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <p className="text-sm">
-                                                    {
-                                                        notification.requirement_label
-                                                    }
+                                            <td className="px-3 py-2 align-top">
+                                                <p className="truncate">
+                                                    {notificationLabel(
+                                                        notification,
+                                                    )}
                                                     {(notification.upload_count ??
                                                         1) > 1 && (
-                                                        <span className="ml-2 text-xs text-muted-foreground">
+                                                        <span className="ml-1 text-[11px] text-muted-foreground">
                                                             x
                                                             {
                                                                 notification.upload_count
@@ -393,11 +501,16 @@ function RecentRequirementUploads({
                                                         </span>
                                                     )}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {notification.course_name}
+                                                <p className="truncate text-[11px] text-muted-foreground">
+                                                    {[
+                                                        notification.department_code,
+                                                        notification.course_name,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' - ')}
                                                 </p>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                                            <td className="px-3 py-2 align-top text-muted-foreground">
                                                 {formatTimeAgo(
                                                     notification.created_at,
                                                 )}

@@ -1,6 +1,11 @@
 import { ApplicationApplicantCell } from '@/components/application-applicant-cell';
 import { DownloadFormMenuItem } from '@/components/download-form-button';
 import { NationalitySummary } from '@/components/nationality-summary';
+import {
+    WindowApplicationReviewTabs,
+    type WindowApplicationDuplicatePair,
+    type WindowApplicationReviewRecord,
+} from '@/components/window-application-review-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -187,6 +192,8 @@ interface ShowWindowProps {
     window: ApplicationWindow;
     applications: PaginatedApplications;
     stats: WindowStats;
+    unverifiedApplications?: WindowApplicationReviewRecord[];
+    duplicatePairs?: WindowApplicationDuplicatePair[];
     filters?: {
         search?: string;
         status?: string;
@@ -197,6 +204,8 @@ export default function ShowWindow({
     window,
     applications,
     stats,
+    unverifiedApplications = [],
+    duplicatePairs = [],
     filters = {},
 }: ShowWindowProps) {
     // Debug: Log received props
@@ -434,7 +443,8 @@ export default function ShowWindow({
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="text-sm">
-                                            {application.department?.name ||
+                                            {application.department?.code ||
+                                                application.department?.name ||
                                                 'N/A'}
                                         </span>
                                     </td>
@@ -584,10 +594,7 @@ export default function ShowWindow({
                 dept.code,
                 {
                     id: dept.code,
-                    name:
-                        dept.code === dept.name
-                            ? dept.name
-                            : `${dept.code} - ${dept.name}`,
+                    name: dept.code || dept.name,
                 },
             ]),
         ).values(),
@@ -706,6 +713,16 @@ export default function ShowWindow({
                     </DialogContent>
                 </Dialog>
 
+                <WindowApplicationReviewTabs
+                    applicationsCount={totalApplications}
+                    unverifiedApplications={unverifiedApplications}
+                    duplicatePairs={duplicatePairs}
+                    duplicateAlertUrl={`/admin/windows/${window.id}/duplicates/alert`}
+                    verifyDraftUrl={(draft) =>
+                        `/admin/students/guest-drafts/${draft.id}/verify`
+                    }
+                >
+                    <div className="space-y-6">
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
@@ -1024,8 +1041,8 @@ export default function ShowWindow({
                                                         <div className="flex items-center gap-2">
                                                             <div className="h-2 w-2 rounded-full bg-blue-500" />
                                                             <span className="text-sm font-medium">
-                                                                {dept.code} -{' '}
-                                                                {dept.name}
+                                                                {dept.code ||
+                                                                    dept.name}
                                                             </span>
                                                         </div>
                                                         <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
@@ -1106,6 +1123,8 @@ export default function ShowWindow({
                         )}
                     </CardContent>
                 </Card>
+                    </div>
+                </WindowApplicationReviewTabs>
             </div>
         </AppLayout>
     );

@@ -10,11 +10,13 @@ use App\Models\Developer;
 use App\Models\GuestApplicationDraft;
 use App\Models\SystemEvent;
 use App\Models\User;
+use App\Notifications\DuplicateApplicationDetected;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\SystemEventLogger;
 use Database\Seeders\DeveloperSeeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 use Laravel\Fortify\Fortify;
@@ -251,6 +253,192 @@ test('developer diagnostics console exposes separated pages', function () {
         );
 });
 
+test('developer can view application windows and use global search', function () {
+    [$developer] = diagnosticsConfirmedDeveloper();
+    [$window, $department, $course] = diagnosticsGuestCatalog();
+
+    $user = User::factory()->create([
+        'email' => 'global.search@example.com',
+        'student_id' => '2026-9001',
+    ]);
+
+    $application = app(\App\Support\ApplicationWorkflowService::class)
+        ->createApplicationForUser($user, [
+            ...diagnosticsGuestPayload($window, $department, $course),
+            'email' => 'global.search@example.com',
+            'student_id' => '2026-9001',
+        ]);
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.windows'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('developer/windows')
+            ->where('windows.data.0.id', $window->id)
+            ->where('windows.data.0.applications_count', 1)
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->getJson(route('developer.global-search', ['search' => $application->application_number]))
+        ->assertOk()
+        ->assertJsonFragment([
+            'type' => 'application',
+            'title' => $application->application_number,
+            'url' => route('developer.applications.edit', $application, absolute: false),
+        ]);
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->getJson(route('developer.global-search', ['search' => 'March 2026']))
+        ->assertOk()
+        ->assertJsonFragment([
+            'type' => 'window',
+            'title' => $window->title,
+        ]);
+});
+
+test('developer can review window applications and send duplicate alerts', function () {
+    Notification::fake();
+
+    [$developer] = diagnosticsConfirmedDeveloper();
+    [$window, $department, $course] = diagnosticsGuestCatalog();
+
+    $payload = diagnosticsGuestPayload($window, $department, $course);
+    $user = User::factory()->create([
+        'email' => 'verified.duplicate@example.com',
+        'student_id' => '2020-0001',
+    ]);
+
+    $application = app(\App\Support\ApplicationWorkflowService::class)
+        ->createApplicationForUser($user, [
+            ...$payload,
+            'email' => 'verified.duplicate@example.com',
+            'student_id' => '2020-0001',
+        ]);
+
+    $draft = GuestApplicationDraft::create([
+        'window_id' => $window->id,
+        'email' => 'draft.duplicate@example.com',
+        'student_id' => '2020-0001',
+        'payload' => [
+            ...$payload,
+            'email' => 'draft.duplicate@example.com',
+            'student_id' => '2020-0001',
+        ],
+    ]);
+
+    $leftKey = 'application-'.$application->id;
+    $rightKey = 'draft-'.$draft->id;
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.windows.show', $window))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('developer/window')
+            ->where('window.id', $window->id)
+            ->where('verifiedApplications.0.key', $leftKey)
+            ->where('unverifiedApplications.0.key', $rightKey)
+            ->has('duplicatePairs', 1)
+            ->where('duplicatePairs.0.left.key', $leftKey)
+            ->where('duplicatePairs.0.right.key', $rightKey)
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->post(route('developer.windows.duplicates.alert', $window), [
+            'left' => $leftKey,
+            'right' => $rightKey,
+        ])
+        ->assertRedirect();
+
+    Notification::assertSentTo(
+        $user->fresh(),
+        DuplicateApplicationDetected::class,
+        fn (DuplicateApplicationDetected $notification) => str_contains($notification->reviewUrl(), "/duplicate-applications/{$leftKey}/{$rightKey}")
+    );
+
+    Notification::assertSentTo(
+        $draft->fresh(),
+        DuplicateApplicationDetected::class,
+        fn (DuplicateApplicationDetected $notification) => str_contains($notification->reviewUrl(), "/duplicate-applications/{$leftKey}/{$rightKey}")
+    );
+});
+
+test('signed duplicate resolution deletes only one selected record', function () {
+    [$window, $department, $course] = diagnosticsGuestCatalog();
+
+    $payload = diagnosticsGuestPayload($window, $department, $course);
+    $user = User::factory()->create([
+        'email' => 'keep.duplicate@example.com',
+        'student_id' => '2020-0001',
+    ]);
+
+    $application = app(\App\Support\ApplicationWorkflowService::class)
+        ->createApplicationForUser($user, [
+            ...$payload,
+            'email' => 'keep.duplicate@example.com',
+            'student_id' => '2020-0001',
+        ]);
+
+    $draft = GuestApplicationDraft::create([
+        'window_id' => $window->id,
+        'email' => 'delete.duplicate@example.com',
+        'student_id' => '2020-0001',
+        'payload' => [
+            ...$payload,
+            'email' => 'delete.duplicate@example.com',
+            'student_id' => '2020-0001',
+        ],
+    ]);
+
+    $leftKey = 'application-'.$application->id;
+    $rightKey = 'draft-'.$draft->id;
+
+    $this->get(URL::temporarySignedRoute('duplicate-applications.show', now()->addDays(14), [
+        'left' => $leftKey,
+        'right' => $rightKey,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('duplicate-applications/resolve')
+            ->where('resolved', false)
+            ->where('left.key', $leftKey)
+            ->where('right.key', $rightKey)
+        );
+
+    $this->post(URL::temporarySignedRoute('duplicate-applications.destroy', now()->addDays(14), [
+        'left' => $leftKey,
+        'right' => $rightKey,
+    ]), [
+        'selected_record' => $rightKey,
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('applications', ['id' => $application->id]);
+    $this->assertDatabaseMissing('guest_application_drafts', ['id' => $draft->id]);
+
+    $this->get(URL::temporarySignedRoute('duplicate-applications.show', now()->addDays(14), [
+        'left' => $leftKey,
+        'right' => $rightKey,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('duplicate-applications/resolve')
+            ->where('resolved', true)
+        );
+
+    $this->post(URL::temporarySignedRoute('duplicate-applications.destroy', now()->addDays(14), [
+        'left' => $leftKey,
+        'right' => $rightKey,
+    ]), [
+        'selected_record' => $leftKey,
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('applications', ['id' => $application->id]);
+});
+
 test('developer seeder creates account from environment', function () {
     putenv('DEVELOPER_NAME=Angelo P. Peralta');
     putenv('DEVELOPER_EMAIL=aperalta@spup.edu.ph');
@@ -347,6 +535,8 @@ test('developer can see tracking details and manually verify a guest draft', fun
         ->and($draft->application_id)->not->toBeNull()
         ->and(Application::count())->toBe(1);
 
+    $draft->load('application');
+
     Notification::assertSentTo($draft->fresh(), GuestApplicationAccessNotification::class);
 
     $this->assertDatabaseHas('system_events', [
@@ -361,6 +551,27 @@ test('developer can see tracking details and manually verify a guest draft', fun
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('manualVerificationDrafts', 0)
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.manual-verification', ['search' => $draft->tracking_code, 'window_id' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('manualVerificationDrafts', 1)
+            ->where('manualVerificationDrafts.0.id', $draft->id)
+            ->where('manualVerificationDrafts.0.verification_status', 'verified')
+            ->where('manualVerificationDrafts.0.application_edit_url', route('developer.applications.edit', $draft->application, absolute: false))
+        );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->get(route('developer.manual-verification', ['search' => $draft->application->application_number, 'window_id' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('applicationSearchResults', 1)
+            ->where('applicationSearchResults.0.application_number', $draft->application->application_number)
+            ->where('applicationSearchResults.0.edit_url', route('developer.applications.edit', $draft->application, absolute: false))
         );
 });
 

@@ -62,6 +62,7 @@ class RequirementFileUploaded extends Notification
             'student_avatar' => $studentAvatar,
             'course_name' => $this->application->course->name,
             'department_name' => $this->application->department->name,
+            'department_code' => $this->application->department->code,
         ];
     }
 }

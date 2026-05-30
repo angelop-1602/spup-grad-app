@@ -32,7 +32,10 @@ class StoreApplicationRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ApplicationFormRules::make($this, true);
+        return [
+            'student_id' => ApplicationFormRules::studentIdRules($this, $this->user()?->id),
+            ...ApplicationFormRules::make($this, true),
+        ];
     }
 
     public function messages(): array

@@ -107,6 +107,13 @@ Route::post('/support/issues', [App\Http\Controllers\SupportIssueController::cla
     ->middleware([RedirectIfStaffAuthenticated::class, 'throttle:support-issues'])
     ->name('support.issues.store');
 
+Route::get('/duplicate-applications/{left}/{right}', [App\Http\Controllers\DuplicateApplicationResolutionController::class, 'show'])
+    ->middleware(['signed'])
+    ->name('duplicate-applications.show');
+Route::post('/duplicate-applications/{left}/{right}', [App\Http\Controllers\DuplicateApplicationResolutionController::class, 'destroy'])
+    ->middleware(['signed', 'throttle:6,1'])
+    ->name('duplicate-applications.destroy');
+
 // Guest-first graduation application flow
 Route::middleware(RedirectIfStaffAuthenticated::class)->group(function () {
     Route::get('/apply', [App\Http\Controllers\GuestApplicationController::class, 'index'])

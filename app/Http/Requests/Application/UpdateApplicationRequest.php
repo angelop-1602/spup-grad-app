@@ -34,7 +34,10 @@ class UpdateApplicationRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ApplicationFormRules::make($this, false);
+        return [
+            'student_id' => ApplicationFormRules::studentIdRules($this, $this->user()?->id),
+            ...ApplicationFormRules::make($this, false),
+        ];
     }
 
     public function messages(): array

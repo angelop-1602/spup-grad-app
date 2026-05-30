@@ -2,18 +2,28 @@
 
 namespace App\Support;
 
+use App\Notifications\ApplicationSubmitted;
 use App\Notifications\RequirementFileUploaded;
 
 class NotificationCenter
 {
     /**
+     * @var array<int, class-string>
+     */
+    private const SUPPORTED_TYPES = [
+        RequirementFileUploaded::class,
+        ApplicationSubmitted::class,
+    ];
+
+    /**
      * @return array{notifications: mixed, unreadNotificationCount: int}
      */
     public function payloadFor(object $notifiable): array
     {
-        $unreadNotifications = $this->unreadRequirementUploads($notifiable)->get();
+        $unreadNotifications = $this->unreadDashboardNotifications($notifiable)->get();
 
         $countsByApplication = $unreadNotifications
+            ->where('type', RequirementFileUploaded::class)
             ->groupBy(fn ($notification) => $notification->data['application_number'] ?? '')
             ->map->count();
 
@@ -29,11 +39,12 @@ class NotificationCenter
                     'student_name' => $data['student_name'] ?? 'Unknown',
                     'student_avatar' => $data['student_avatar'] ?? null,
                     'student_id' => $data['student_id'] ?? '',
-                    'requirement_label' => $data['requirement_label'] ?? 'Requirement',
+                    'requirement_label' => $data['requirement_label'] ?? 'New application',
                     'application_number' => $applicationNumber,
                     'upload_count' => $countsByApplication[$applicationNumber] ?? 1,
                     'course_name' => $data['course_name'] ?? '',
                     'department_name' => $data['department_name'] ?? '',
+                    'department_code' => $data['department_code'] ?? '',
                     'created_at' => $notification->created_at->toIso8601String(),
                     'read_at' => $notification->read_at?->toIso8601String(),
                 ];
@@ -49,7 +60,7 @@ class NotificationCenter
     public function markAsRead(object $notifiable, string $notificationId): void
     {
         $notification = $notifiable->notifications()
-            ->where('type', RequirementFileUploaded::class)
+            ->whereIn('type', self::SUPPORTED_TYPES)
             ->find($notificationId);
 
         if ($notification && ! $notification->read_at) {
@@ -59,14 +70,14 @@ class NotificationCenter
 
     public function markAllAsRead(object $notifiable): void
     {
-        $this->unreadRequirementUploads($notifiable)
+        $this->unreadDashboardNotifications($notifiable)
             ->get()
             ->markAsRead();
     }
 
-    private function unreadRequirementUploads(object $notifiable): mixed
+    private function unreadDashboardNotifications(object $notifiable): mixed
     {
         return $notifiable->unreadNotifications()
-            ->where('type', RequirementFileUploaded::class);
+            ->whereIn('type', self::SUPPORTED_TYPES);
     }
 }

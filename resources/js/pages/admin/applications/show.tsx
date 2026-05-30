@@ -1,5 +1,9 @@
 import { ApplicationStatusBadge } from '@/components/application-status-badge';
 import { DownloadFormButton } from '@/components/download-form-button';
+import {
+    PossibleDuplicateApplications,
+    type PossibleDuplicateApplication,
+} from '@/components/possible-duplicate-applications';
 import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
@@ -9,7 +13,7 @@ import { profilePhotoUrl } from '@/lib/profile-photo';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -144,6 +148,7 @@ interface Application {
 
 interface ShowApplicationProps {
     application: Application;
+    possibleDuplicates: PossibleDuplicateApplication[];
 }
 
 const requirementStatusConfig = {
@@ -156,23 +161,29 @@ const requirementStatusConfig = {
     },
 };
 
+function flattenRequirements(requirements: ApplicationRequirement[]) {
+    const flattened: ApplicationRequirement[] = [];
+
+    requirements
+        .filter((req) => !req.parent_id)
+        .forEach((req) => {
+            flattened.push(req, ...(req.children || []));
+        });
+
+    return flattened;
+}
+
 export default function AdminShowApplication({
     application,
+    possibleDuplicates,
 }: ShowApplicationProps) {
     const { addToast } = useToast();
     const [requirementsData, setRequirementsData] = useState(
-        application.requirements
-            .filter((req) => !req.parent_id) // Only process parent requirements
-            .flatMap((req) => {
-                const children = req.children || [];
-                // Include parent and all children
-                return [req, ...children];
-            })
-            .map((req) => ({
-                id: req.id,
-                status: req.status,
-                notes: req.notes || '',
-            })),
+        flattenRequirements(application.requirements).map((req) => ({
+            id: req.id,
+            status: req.status,
+            notes: req.notes || '',
+        })),
     );
     const [isSaving, setIsSaving] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
@@ -180,18 +191,11 @@ export default function AdminShowApplication({
     // Store initial requirements for comparison
     const initialRequirements = useMemo(
         () =>
-            application.requirements
-                .filter((req) => !req.parent_id) // Only process parent requirements
-                .flatMap((req) => {
-                    const children = req.children || [];
-                    // Include parent and all children
-                    return [req, ...children];
-                })
-                .map((req) => ({
-                    id: req.id,
-                    status: req.status,
-                    notes: req.notes || '',
-                })),
+            flattenRequirements(application.requirements).map((req) => ({
+                id: req.id,
+                status: req.status,
+                notes: req.notes || '',
+            })),
         [application.id], // Only reset when application changes
     );
 
@@ -354,8 +358,21 @@ export default function AdminShowApplication({
                                 size="sm"
                             />
                         )}
+                        <Button asChild variant="outline" size="sm">
+                            <Link
+                                href={`/admin/applications/${application.application_number}/edit`}
+                            >
+                                <Pencil className="size-4" />
+                                Edit Data
+                            </Link>
+                        </Button>
                     </div>
                 </div>
+
+                <PossibleDuplicateApplications
+                    duplicates={possibleDuplicates}
+                    canDelete
+                />
 
                 {/* Main Content Grid */}
                 <div className="grid gap-8 lg:grid-cols-3">
@@ -375,7 +392,11 @@ export default function AdminShowApplication({
                                         {profilePhotoUrl(profile) ? (
                                             <div className="space-y-3">
                                                 <img
-                                                    src={profilePhotoUrl(profile) ?? ''}
+                                                    src={
+                                                        profilePhotoUrl(
+                                                            profile,
+                                                        ) ?? ''
+                                                    }
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-44 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />

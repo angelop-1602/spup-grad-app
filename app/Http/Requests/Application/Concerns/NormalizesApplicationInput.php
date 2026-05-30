@@ -14,6 +14,12 @@ trait NormalizesApplicationInput
             ]);
         }
 
+        if ($this->filled('student_id')) {
+            $this->merge([
+                'student_id' => trim((string) $this->input('student_id')),
+            ]);
+        }
+
         $profileFields = [
             'shs_11_school',
             'shs_11_year',

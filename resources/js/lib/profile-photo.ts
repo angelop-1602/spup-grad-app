@@ -22,7 +22,7 @@ export function profilePhotoUrl(profile?: ProfilePhotoValue | null) {
         return rawPath;
     }
 
-    let path = rawPath.replaceAll('\\', '/').replace(/^\/+/, '');
+    let path = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
 
     for (const prefix of ['public/', 'storage/', 'app/public/']) {
         if (path.startsWith(prefix)) {
