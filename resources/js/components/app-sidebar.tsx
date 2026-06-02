@@ -37,11 +37,6 @@ const adminNavItems: NavItem[] = [
         icon: Calendar,
     },
     {
-        title: 'Unverified Applications',
-        href: adminRoutes.unverifiedApplications.index(),
-        icon: ShieldQuestion,
-    },
-    {
         title: 'Academic Structure',
         href: adminRoutes.departments.index(),
         icon: School,
@@ -68,11 +63,6 @@ const coordinatorNavItems: NavItem[] = [
         title: 'Applications',
         href: coordinatorRoutes.applications.index(),
         icon: FileText,
-    },
-    {
-        title: 'Manual Verification',
-        href: '/coordinator/manual-verification',
-        icon: ShieldQuestion,
     },
     {
         title: 'Audit Trail',

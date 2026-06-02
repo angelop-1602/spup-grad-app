@@ -81,10 +81,41 @@ class ApplicationWindow extends Model
     }
 
     /**
+     * Order windows with the current window first, then upcoming, then ended.
+     */
+    public function scopeOrderedForSelection($query)
+    {
+        $now = now()->toDateTimeString();
+
+        return $query
+            ->orderByRaw(
+                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
+                [$now, $now, $now]
+            )
+            ->orderByDesc('start_date')
+            ->orderByDesc('id');
+    }
+
+    /**
      * Get the current active window.
      */
     public static function current(): ?self
     {
-        return static::active()->first();
+        return static::active()
+            ->orderByDesc('start_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Get the current active window, or the latest known window when none is active.
+     */
+    public static function currentOrLatest(): ?self
+    {
+        return static::current()
+            ?? static::query()
+                ->orderByDesc('start_date')
+                ->orderByDesc('id')
+                ->first();
     }
 }

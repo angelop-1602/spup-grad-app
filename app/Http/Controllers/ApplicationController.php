@@ -13,6 +13,7 @@ use App\Support\ProfilePhoto;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -29,7 +30,9 @@ class ApplicationController extends Controller
 
     private const APPLICATION_PDF_CACHE_DIR = 'application-pdf-cache';
 
-    private const APPLICATION_PDF_CACHE_VERSION = 'v2';
+    private const APPLICATION_PDF_CACHE_VERSION = 'v4';
+
+    private const FREECONVERT_TRANSIENT_STATUSES = [408, 425, 429, 500, 502, 503, 504];
 
     private const COLLEGE_EXPORT_MEDIUM_FONT_LIMIT = 55;
 
@@ -753,6 +756,7 @@ class ApplicationController extends Controller
             'course',
             'subjectEnrollments',
             'requirements.approvedByCoordinator.departments',
+            'requirements.children.approvedByCoordinator.departments',
             'user.profile',
             'approvedByCoordinator.departments',
         ]);
@@ -988,8 +992,10 @@ class ApplicationController extends Controller
         }
 
         $baseUrl = rtrim((string) config('services.freeconvert.base_url', 'https://api.freeconvert.com/v1'), '/');
-        $timeout = max(10, (int) config('services.freeconvert.timeout', 60));
+        $timeout = self::freeConvertTimeout();
         $pollInterval = max(1, (int) config('services.freeconvert.poll_interval', 2));
+        $maxAttempts = max(1, (int) config('services.freeconvert.max_attempts', 3));
+        $retryDelayMs = max(1, (int) config('services.freeconvert.retry_delay_ms', 1000));
         $pdfPath = dirname($docxPath).'/'.pathinfo($docxPath, PATHINFO_FILENAME).'.pdf';
         $outputFileName = basename($pdfPath);
         $errors = [];
@@ -1004,6 +1010,8 @@ class ApplicationController extends Controller
                     $baseUrl,
                     $timeout,
                     $pollInterval,
+                    $maxAttempts,
+                    $retryDelayMs,
                     $pdfPath,
                     $outputFileName
                 );
@@ -1031,7 +1039,15 @@ class ApplicationController extends Controller
             ? $configuredKeys
             : preg_split('/[\s,]+/', (string) $configuredKeys);
 
-        $legacyKey = trim((string) config('services.freeconvert.api_key', ''));
+        $legacyKeys = config('services.freeconvert.legacy_api_keys', '');
+
+        if (! is_array($legacyKeys)) {
+            $legacyKeys = preg_split('/[\s,]+/', (string) $legacyKeys) ?: [];
+        }
+
+        $keys = array_merge($keys ?: [], $legacyKeys);
+
+        $legacyKey = trim((string) config('services.freeconvert.legacy_api_key', ''));
 
         if ($legacyKey !== '') {
             $keys[] = $legacyKey;
@@ -1043,46 +1059,61 @@ class ApplicationController extends Controller
         )));
     }
 
+    private static function freeConvertTimeout(): int
+    {
+        $configuredTimeout = max(5, (int) config('services.freeconvert.timeout', 25));
+        $maxExecutionTime = (int) ini_get('max_execution_time');
+
+        if ($maxExecutionTime <= 0) {
+            return $configuredTimeout;
+        }
+
+        return max(5, min($configuredTimeout, $maxExecutionTime - 5));
+    }
+
     private static function convertDocxToPdfWithFreeConvertKey(
         string $docxPath,
         string $apiKey,
         string $baseUrl,
         int $timeout,
         int $pollInterval,
+        int $maxAttempts,
+        int $retryDelayMs,
         string $pdfPath,
         string $outputFileName,
     ): string {
         $jobId = null;
 
         try {
-            $jobResponse = Http::baseUrl($baseUrl)
-                ->acceptJson()
-                ->asJson()
-                ->withToken($apiKey)
-                ->timeout($timeout)
-                ->post('/process/jobs', [
-                    'tag' => 'graduation-application-'.((string) Str::uuid()),
-                    'tasks' => [
-                        'import-docx' => [
-                            'operation' => 'import/upload',
+            $jobResponse = self::freeConvertRequestWithRetry(
+                fn () => Http::baseUrl($baseUrl)
+                    ->acceptJson()
+                    ->asJson()
+                    ->withToken($apiKey)
+                    ->timeout($timeout)
+                    ->post('/process/jobs', [
+                        'tag' => 'graduation-application-'.((string) Str::uuid()),
+                        'tasks' => [
+                            'import-docx' => [
+                                'operation' => 'import/upload',
+                            ],
+                            'convert-pdf' => [
+                                'operation' => 'convert',
+                                'input' => 'import-docx',
+                                'input_format' => 'docx',
+                                'output_format' => 'pdf',
+                            ],
+                            'export-pdf' => [
+                                'operation' => 'export/url',
+                                'input' => 'convert-pdf',
+                                'filename' => $outputFileName,
+                            ],
                         ],
-                        'convert-pdf' => [
-                            'operation' => 'convert',
-                            'input' => 'import-docx',
-                            'input_format' => 'docx',
-                            'output_format' => 'pdf',
-                        ],
-                        'export-pdf' => [
-                            'operation' => 'export/url',
-                            'input' => 'convert-pdf',
-                            'filename' => $outputFileName,
-                        ],
-                    ],
-                ]);
-
-            if (! $jobResponse->successful()) {
-                throw new \RuntimeException('FreeConvert job creation failed with status '.$jobResponse->status().'.');
-            }
+                    ]),
+                'FreeConvert job creation failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
 
             $job = $jobResponse->json();
             $jobId = data_get($job, 'id');
@@ -1094,32 +1125,39 @@ class ApplicationController extends Controller
                 throw new \RuntimeException('FreeConvert upload task did not include upload details.');
             }
 
-            $fileHandle = fopen($docxPath, 'r');
+            $uploadResponse = self::freeConvertRequestWithRetry(
+                function () use ($apiKey, $docxPath, $timeout, $uploadParameters, $uploadUrl): HttpResponse {
+                    $fileHandle = fopen($docxPath, 'r');
 
-            if ($fileHandle === false) {
-                throw new \RuntimeException('Unable to open generated DOCX for FreeConvert upload.');
-            }
+                    if ($fileHandle === false) {
+                        throw new \RuntimeException('Unable to open generated DOCX for FreeConvert upload.');
+                    }
 
-            try {
-                $uploadResponse = Http::withToken($apiKey)
-                    ->timeout($timeout)
-                    ->withOptions(['allow_redirects' => true])
-                    ->attach(
-                        'file',
-                        $fileHandle,
-                        basename($docxPath),
-                        ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-                    )
-                    ->post($uploadUrl, $uploadParameters);
-            } finally {
-                fclose($fileHandle);
-            }
+                    try {
+                        return Http::withToken($apiKey)
+                            ->timeout($timeout)
+                            ->withOptions(['allow_redirects' => true])
+                            ->attach(
+                                'file',
+                                $fileHandle,
+                                basename($docxPath),
+                                ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+                            )
+                            ->post($uploadUrl, $uploadParameters);
+                    } finally {
+                        fclose($fileHandle);
+                    }
+                },
+                'FreeConvert file upload failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
 
             if (! $uploadResponse->successful()) {
                 throw new \RuntimeException('FreeConvert file upload failed with status '.$uploadResponse->status().'.');
             }
 
-            $completedJob = self::waitForFreeConvertJob($baseUrl, $apiKey, $jobId, $timeout, $pollInterval);
+            $completedJob = self::waitForFreeConvertJob($baseUrl, $apiKey, $jobId, $timeout, $pollInterval, $maxAttempts, $retryDelayMs);
             $exportTask = self::findFreeConvertTask($completedJob, 'export-pdf', 'export/url');
             $downloadUrl = self::freeConvertResultUrl($exportTask);
 
@@ -1127,11 +1165,12 @@ class ApplicationController extends Controller
                 throw new \RuntimeException('FreeConvert export task did not return a download URL.');
             }
 
-            $downloadResponse = Http::timeout($timeout)->get($downloadUrl);
-
-            if (! $downloadResponse->successful()) {
-                throw new \RuntimeException('FreeConvert PDF download failed with status '.$downloadResponse->status().'.');
-            }
+            $downloadResponse = self::freeConvertRequestWithRetry(
+                fn () => Http::timeout($timeout)->get($downloadUrl),
+                'FreeConvert PDF download failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
 
             $body = $downloadResponse->body();
 
@@ -1158,20 +1197,28 @@ class ApplicationController extends Controller
         }
     }
 
-    private static function waitForFreeConvertJob(string $baseUrl, string $apiKey, string $jobId, int $timeout, int $pollInterval): array
-    {
+    private static function waitForFreeConvertJob(
+        string $baseUrl,
+        string $apiKey,
+        string $jobId,
+        int $timeout,
+        int $pollInterval,
+        int $maxAttempts,
+        int $retryDelayMs,
+    ): array {
         $deadline = time() + $timeout;
 
         do {
-            $response = Http::baseUrl($baseUrl)
-                ->acceptJson()
-                ->withToken($apiKey)
-                ->timeout(max(10, min($timeout, 30)))
-                ->get('/process/jobs/'.$jobId);
-
-            if (! $response->successful()) {
-                throw new \RuntimeException('FreeConvert job lookup failed with status '.$response->status().'.');
-            }
+            $response = self::freeConvertRequestWithRetry(
+                fn () => Http::baseUrl($baseUrl)
+                    ->acceptJson()
+                    ->withToken($apiKey)
+                    ->timeout(max(5, min($timeout, 30)))
+                    ->get('/process/jobs/'.$jobId),
+                'FreeConvert job lookup failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
 
             $job = $response->json();
             $status = data_get($job, 'status');
@@ -1190,6 +1237,81 @@ class ApplicationController extends Controller
         throw new \RuntimeException('FreeConvert job timed out.');
     }
 
+    private static function freeConvertRequestWithRetry(callable $request, string $failureMessage, int $maxAttempts, int $retryDelayMs): HttpResponse
+    {
+        $lastError = null;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = $request();
+
+                if ($response->successful()) {
+                    return $response;
+                }
+
+                $lastError = $failureMessage.' with status '.$response->status().self::freeConvertResponseDetails($response);
+
+                if (! self::shouldRetryFreeConvertResponse($response) || $attempt === $maxAttempts) {
+                    throw new \RuntimeException($lastError);
+                }
+
+                self::sleepBeforeFreeConvertRetry($response, $retryDelayMs, $attempt);
+            } catch (\Throwable $e) {
+                if ($e instanceof \RuntimeException && is_string($lastError) && $e->getMessage() === $lastError) {
+                    throw $e;
+                }
+
+                $lastError = $failureMessage.': '.$e->getMessage();
+
+                if ($attempt === $maxAttempts) {
+                    throw new \RuntimeException($lastError, 0, $e);
+                }
+
+                self::sleepBeforeFreeConvertRetry(null, $retryDelayMs, $attempt);
+            }
+        }
+
+        throw new \RuntimeException($lastError ?: $failureMessage);
+    }
+
+    private static function shouldRetryFreeConvertResponse(HttpResponse $response): bool
+    {
+        return in_array($response->status(), self::FREECONVERT_TRANSIENT_STATUSES, true);
+    }
+
+    private static function sleepBeforeFreeConvertRetry(?HttpResponse $response, int $retryDelayMs, int $attempt): void
+    {
+        $retryAfter = $response?->header('Retry-After');
+
+        if (is_numeric($retryAfter)) {
+            usleep(min((int) $retryAfter, 10) * 1_000_000);
+
+            return;
+        }
+
+        $delayMs = min($retryDelayMs * (2 ** max(0, $attempt - 1)), 10_000);
+        usleep((int) $delayMs * 1000);
+    }
+
+    private static function freeConvertResponseDetails(HttpResponse $response): string
+    {
+        $message = data_get($response->json(), 'message')
+            ?? data_get($response->json(), 'error')
+            ?? data_get($response->json(), 'errors.0.message');
+
+        if (is_string($message) && $message !== '') {
+            return " ({$message}).";
+        }
+
+        $body = trim($response->body());
+
+        if ($body === '') {
+            return '.';
+        }
+
+        return ' ('.Str::limit($body, 240).').';
+    }
+
     private static function findFreeConvertTask(array $job, string $name, string $operation): ?array
     {
         $tasks = data_get($job, 'tasks', []);
@@ -1198,14 +1320,18 @@ class ApplicationController extends Controller
             return null;
         }
 
-        foreach ($tasks as $task) {
-            if (data_get($task, 'name') === $name) {
+        foreach ($tasks as $taskName => $task) {
+            if (! is_array($task)) {
+                continue;
+            }
+
+            if ($taskName === $name || data_get($task, 'name') === $name) {
                 return $task;
             }
         }
 
         foreach ($tasks as $task) {
-            if (data_get($task, 'operation') === $operation) {
+            if (is_array($task) && data_get($task, 'operation') === $operation) {
                 return $task;
             }
         }

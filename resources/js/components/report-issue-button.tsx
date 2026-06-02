@@ -147,7 +147,7 @@ export default function ReportIssueButton() {
     };
 
     return (
-        <div className="fixed right-4 bottom-4 z-50 sm:right-6 sm:bottom-6">
+        <div className="fixed right-3 bottom-3 z-50 sm:right-4 sm:bottom-4">
             <Dialog
                 open={open}
                 onOpenChange={(nextOpen) => {
@@ -160,20 +160,25 @@ export default function ReportIssueButton() {
                 <DialogTrigger asChild>
                     <Button
                         type="button"
-                        size="lg"
-                        className="h-12 rounded-full border border-amber-300 bg-amber-400 px-4 font-semibold text-amber-950 shadow-lg shadow-amber-900/20 hover:bg-amber-300 focus-visible:ring-amber-500 dark:border-amber-300/70 dark:bg-amber-300 dark:text-amber-950 dark:hover:bg-amber-200"
+                        size="sm"
+                        className="h-9 rounded-full border border-amber-300 bg-amber-400 px-3 text-xs font-semibold text-amber-950 shadow-md shadow-amber-900/15 hover:bg-amber-300 focus-visible:ring-amber-500 dark:border-amber-300/70 dark:bg-amber-300 dark:text-amber-950 dark:hover:bg-amber-200"
                         aria-label="Report an issue"
+                        title="Report a technical or system issue"
                     >
-                        <BadgeAlert className="size-5" />
-                        <span>Report issue</span>
+                        <BadgeAlert className="size-4" />
+                        <span className="hidden sm:inline">Report issue</span>
                     </Button>
                 </DialogTrigger>
                 <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>Report an issue</DialogTitle>
                         <DialogDescription>
-                            Send the developer team the issue details. If
-                            possible, attach a screenshot that shows the issue.
+                            This form is for technical or system-related issues
+                            only, such as login problems, page errors, missing
+                            data, or upload issues. For concerns about
+                            application approval, requirement evaluation, or
+                            process decisions, please contact the appropriate
+                            office.
                         </DialogDescription>
                     </DialogHeader>
 

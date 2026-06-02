@@ -37,20 +37,30 @@ class ApplicationController extends Controller
      */
     public function index(Request $request): Response
     {
-        $now = now()->toDateTimeString();
+        $search = trim($request->string('search')->toString());
 
         $windows = ApplicationWindow::query()
             ->withCount('applications')
-            ->orderByRaw(
-                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
-                [$now, $now, $now]
-            )
-            ->orderBy('start_date', 'desc')
-            ->paginate(15);
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($inner) use ($search): void {
+                    $inner->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                });
+            })
+            ->orderedForSelection()
+            ->paginate(15)
+            ->withQueryString();
+
+        $currentWindow = ApplicationWindow::current();
+        $currentWindow?->loadCount('applications');
 
         return Inertia::render('coordinator/applications/index', [
             'windows' => $windows,
+            'currentWindow' => $currentWindow,
             'historicalWindows' => $this->historicalWindows('coordinator.windows.historical'),
+            'filters' => [
+                'search' => $search,
+            ],
         ]);
     }
 

@@ -36,11 +36,18 @@ return [
     ],
 
     'freeconvert' => [
-        'api_key' => env('FREECONVERT_API_KEY'),
-        'api_keys' => env('FREECONVERT_API_KEYS'),
+        'api_keys' => array_values(array_filter([
+            env('FREECONVERT_API_KEY_1'),
+            env('FREECONVERT_API_KEY_2'),
+            env('FREECONVERT_API_KEY_3'),
+        ])),
+        'legacy_api_key' => env('FREECONVERT_API_KEY'),
+        'legacy_api_keys' => env('FREECONVERT_API_KEYS'),
         'base_url' => env('FREECONVERT_BASE_URL', 'https://api.freeconvert.com/v1'),
-        'timeout' => (int) env('FREECONVERT_TIMEOUT', 60),
+        'timeout' => (int) env('FREECONVERT_TIMEOUT', 25),
         'poll_interval' => (int) env('FREECONVERT_POLL_INTERVAL', 2),
+        'max_attempts' => (int) env('FREECONVERT_MAX_ATTEMPTS', 3),
+        'retry_delay_ms' => (int) env('FREECONVERT_RETRY_DELAY_MS', 1000),
     ],
 
 ];

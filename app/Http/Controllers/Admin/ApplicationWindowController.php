@@ -34,20 +34,30 @@ class ApplicationWindowController extends Controller
      */
     public function index(Request $request): Response
     {
-        $now = now()->toDateTimeString();
+        $search = trim($request->string('search')->toString());
 
         $windows = ApplicationWindow::query()
             ->withCount('applications')
-            ->orderByRaw(
-                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
-                [$now, $now, $now]
-            )
-            ->orderBy('start_date', 'desc')
-            ->paginate(15);
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($inner) use ($search): void {
+                    $inner->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                });
+            })
+            ->orderedForSelection()
+            ->paginate(15)
+            ->withQueryString();
+
+        $currentWindow = ApplicationWindow::current();
+        $currentWindow?->loadCount('applications');
 
         return Inertia::render('admin/windows/index', [
             'windows' => $windows,
+            'currentWindow' => $currentWindow,
             'historicalWindows' => $this->historicalWindows('admin.windows.historical'),
+            'filters' => [
+                'search' => $search,
+            ],
         ]);
     }
 
@@ -72,9 +82,22 @@ class ApplicationWindowController extends Controller
     /**
      * Store a newly created application window.
      */
-    public function store(StoreApplicationWindowRequest $request): RedirectResponse
+    public function store(StoreApplicationWindowRequest $request, SystemEventLogger $logger): RedirectResponse
     {
-        ApplicationWindow::create($request->validated());
+        $window = ApplicationWindow::create($request->validated());
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.window.created',
+            message: 'Admin created an application window.',
+            subject: $window,
+            meta: [
+                'window_id' => $window->id,
+                'title' => $window->title,
+                'start_date' => $window->start_date?->toIso8601String(),
+                'end_date' => $window->end_date?->toIso8601String(),
+            ],
+        );
 
         return redirect()
             ->route('admin.windows.index')
@@ -618,9 +641,26 @@ class ApplicationWindowController extends Controller
     /**
      * Update the specified application window.
      */
-    public function update(UpdateApplicationWindowRequest $request, ApplicationWindow $window): RedirectResponse
+    public function update(
+        UpdateApplicationWindowRequest $request,
+        ApplicationWindow $window,
+        SystemEventLogger $logger,
+    ): RedirectResponse
     {
+        $before = $window->only(['title', 'description', 'start_date', 'end_date']);
         $window->update($request->validated());
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.window.updated',
+            message: 'Admin updated an application window.',
+            subject: $window,
+            meta: [
+                'window_id' => $window->id,
+                'before' => $before,
+                'after' => $window->only(['title', 'description', 'start_date', 'end_date']),
+            ],
+        );
 
         return redirect()
             ->route('admin.windows.index')
@@ -630,8 +670,18 @@ class ApplicationWindowController extends Controller
     /**
      * Remove the specified application window.
      */
-    public function destroy(ApplicationWindow $window): RedirectResponse
+    public function destroy(ApplicationWindow $window, SystemEventLogger $logger): RedirectResponse
     {
+        $windowPayload = $window->only(['id', 'title', 'start_date', 'end_date']);
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.window.deleted',
+            message: 'Admin deleted an application window.',
+            subject: $window,
+            meta: $windowPayload,
+        );
+
         $window->delete();
 
         return redirect()

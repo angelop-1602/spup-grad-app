@@ -1,11 +1,7 @@
 import { ApplicationApplicantCell } from '@/components/application-applicant-cell';
-import { DownloadFormMenuItem } from '@/components/download-form-button';
+import { DownloadFormButton } from '@/components/download-form-button';
 import { NationalitySummary } from '@/components/nationality-summary';
-import {
-    WindowApplicationReviewTabs,
-    type WindowApplicationDuplicatePair,
-    type WindowApplicationReviewRecord,
-} from '@/components/window-application-review-tabs';
+import { headline, staffStatusClass } from '@/components/staff-table-utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,27 +19,19 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    WindowApplicationReviewTabs,
+    type WindowApplicationDuplicatePair,
+    type WindowApplicationReviewRecord,
+} from '@/components/window-application-review-tabs';
 import AppLayout from '@/layouts/app-layout';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import {
-    ArrowLeft,
-    Download,
-    Edit,
-    Eye,
-    MoreVertical,
-    Search,
-} from 'lucide-react';
+import { ArrowLeft, Download, Edit, Eye, Search } from 'lucide-react';
 import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -208,29 +196,6 @@ export default function ShowWindow({
     duplicatePairs = [],
     filters = {},
 }: ShowWindowProps) {
-    // Debug: Log received props
-    console.log('ShowWindow Props:', {
-        window: window ? { id: window.id, title: window.title } : null,
-        applications: applications
-            ? {
-                  total: applications.total,
-                  dataLength: applications.data?.length,
-                  current_page: applications.current_page,
-                  last_page: applications.last_page,
-              }
-            : null,
-        stats: stats
-            ? {
-                  attendance: stats.attendance,
-                  departmentsCount: stats.departments?.length ?? 0,
-                  programsCount: stats.programs?.length ?? 0,
-                  majorsCount: stats.majors?.length ?? 0,
-                  nationalitiesCount: stats.nationalities?.length ?? 0,
-                  hierarchicalCount: stats.hierarchical?.length ?? 0,
-              }
-            : null,
-    });
-
     // Ensure we have valid data structures
     // Handle both paginated object and array format
     const safeApplications: PaginatedApplications =
@@ -267,17 +232,11 @@ export default function ShowWindow({
         status_counts: { all: 0, pending: 0, approved: 0, incomplete: 0 },
     };
 
-    // Debug: Log safe data
-    console.log('Safe Data:', {
-        applicationsTotal: safeApplications.total,
-        applicationsDataLength: safeApplications.data?.length,
-        statsAttendance: safeStats.attendance,
-        statsDepartments: safeStats.departments?.length ?? 0,
-        statsNationalities: safeStats.nationalities?.length ?? 0,
-        statsPrograms: safeStats.programs?.length ?? 0,
-        statsMajors: safeStats.majors?.length ?? 0,
-        statsHierarchical: safeStats.hierarchical?.length ?? 0,
-    });
+    const [searchQuery, setSearchQuery] = useState(filters?.search || '');
+    const [statusFilter, setStatusFilter] = useState(filters?.status || 'all');
+    const [exportDialogOpen, setExportDialogOpen] = useState(false);
+    const [selectedDepartmentId, setSelectedDepartmentId] =
+        useState<string>('all');
 
     // Add safety checks to prevent white screen
     if (!window) {
@@ -293,8 +252,6 @@ export default function ShowWindow({
         );
     }
 
-    const [searchQuery, setSearchQuery] = useState(filters?.search || '');
-    const [statusFilter, setStatusFilter] = useState(filters?.status || 'all');
     const isHistorical = Boolean(window?.is_historical);
     const windowShowUrl =
         isHistorical && window?.view_url
@@ -462,13 +419,16 @@ export default function ShowWindow({
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                            {application.status
-                                                .replace(/_/g, ' ')
-                                                .replace(/\b\w/g, (l) =>
-                                                    l.toUpperCase(),
-                                                )}
-                                        </span>
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                staffStatusClass[
+                                                    application.status
+                                                ] ?? ''
+                                            }
+                                        >
+                                            {headline(application.status)}
+                                        </Badge>
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="text-sm text-muted-foreground">
@@ -478,64 +438,54 @@ export default function ShowWindow({
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-8 w-8 p-0"
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                asChild
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 px-2 text-xs"
+                                            >
+                                                <Link
+                                                    href={
+                                                        application.detail_url
+                                                            ? application.detail_url
+                                                            : adminRoutes.applications.show(
+                                                                  {
+                                                                      application:
+                                                                          application.application_number,
+                                                                  },
+                                                              ).url
+                                                    }
                                                 >
-                                                    <MoreVertical className="h-4 w-4" />
-                                                    <span className="sr-only">
-                                                        Open menu
-                                                    </span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem asChild>
-                                                    <Link
-                                                        href={
-                                                            application.detail_url
-                                                                ? application.detail_url
-                                                                : adminRoutes.applications.show(
-                                                                      {
-                                                                          application:
-                                                                              application.application_number,
-                                                                      },
-                                                                  ).url
-                                                        }
-                                                        className="flex items-center"
-                                                    >
-                                                        <Eye className="mr-2 h-4 w-4" />
-                                                        View Details
-                                                    </Link>
-                                                </DropdownMenuItem>
-                                                {application.status ===
-                                                    'approved' &&
-                                                    (() => {
-                                                        const downloadUrl =
-                                                            application.download_url
-                                                                ? application.download_url
-                                                                : application.is_historical
-                                                                  ? null
-                                                                  : adminRoutes.applications.download(
-                                                                        {
-                                                                            application:
-                                                                                application.application_number,
-                                                                        },
-                                                                    ).url;
+                                                    <Eye className="size-3.5" />
+                                                    View
+                                                </Link>
+                                            </Button>
+                                            {application.status ===
+                                                'approved' &&
+                                                (() => {
+                                                    const downloadUrl =
+                                                        application.download_url
+                                                            ? application.download_url
+                                                            : application.is_historical
+                                                              ? null
+                                                              : adminRoutes.applications.download(
+                                                                    {
+                                                                        application:
+                                                                            application.application_number,
+                                                                    },
+                                                                ).url;
 
-                                                        return downloadUrl ? (
-                                                            <DownloadFormMenuItem
-                                                                href={
-                                                                    downloadUrl
-                                                                }
-                                                                className="flex items-center"
-                                                            />
-                                                        ) : null;
-                                                    })()}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                                    return downloadUrl ? (
+                                                        <DownloadFormButton
+                                                            href={downloadUrl}
+                                                            className="h-8 px-2 text-xs"
+                                                            showText
+                                                            label="PDF"
+                                                        />
+                                                    ) : null;
+                                                })()}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -583,10 +533,6 @@ export default function ShowWindow({
             </>
         );
     };
-
-    const [exportDialogOpen, setExportDialogOpen] = useState(false);
-    const [selectedDepartmentId, setSelectedDepartmentId] =
-        useState<string>('all');
 
     const uniqueDepartments = Array.from(
         new Map(
@@ -691,10 +637,7 @@ export default function ShowWindow({
                                 >
                                     <option value="all">All departments</option>
                                     {uniqueDepartments.map((dept) => (
-                                        <option
-                                            key={dept.id}
-                                            value={dept.id}
-                                        >
+                                        <option key={dept.id} value={dept.id}>
                                             {dept.name}
                                         </option>
                                     ))}
@@ -723,406 +666,441 @@ export default function ShowWindow({
                     }
                 >
                     <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Applications</CardTitle>
-                                <CardDescription>
-                                    {totalApplications} application
-                                    {totalApplications !== 1 ? 's' : ''} total
-                                </CardDescription>
-                            </div>
-                            <div className="w-full max-w-sm">
-                                <div className="relative">
-                                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        type="text"
-                                        placeholder="Search by name, student ID, email, department, or course..."
-                                        value={searchQuery}
-                                        onChange={(e) =>
-                                            handleSearch(e.target.value)
-                                        }
-                                        className="pl-9"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <Tabs
-                            value={statusFilter}
-                            onValueChange={handleStatusChange}
-                            className="w-full"
-                        >
-                            <TabsList className="grid w-full grid-cols-4">
-                                <TabsTrigger value="pending">
-                                    Pending ({pendingApplications})
-                                </TabsTrigger>
-                                <TabsTrigger value="approved">
-                                    Approved ({approvedApplications})
-                                </TabsTrigger>
-                                <TabsTrigger value="incomplete">
-                                    Incomplete ({incompleteApplications})
-                                </TabsTrigger>
-                                <TabsTrigger value="all">
-                                    All ({totalApplications})
-                                </TabsTrigger>
-                            </TabsList>
-
-                            <TabsContent value="pending" className="mt-4">
-                                {renderApplicationsTable()}
-                            </TabsContent>
-                            <TabsContent value="approved" className="mt-4">
-                                {renderApplicationsTable()}
-                            </TabsContent>
-                            <TabsContent value="incomplete" className="mt-4">
-                                {renderApplicationsTable()}
-                            </TabsContent>
-                            <TabsContent value="all" className="mt-4">
-                                {renderApplicationsTable()}
-                            </TabsContent>
-                        </Tabs>
-                    </CardContent>
-                </Card>
-
-                {/* Total by Department, Program & Major */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                                <CardTitle>
-                                    Total by Department, Program & Major
-                                </CardTitle>
-                                <CardDescription>
-                                    Hierarchical breakdown of applications by
-                                    department, program/course, and major with
-                                    attendance and nationality statistics
-                                </CardDescription>
-                            </div>
-                            {!isHistorical ? (
-                                <div className="flex flex-wrap gap-2">
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a
-                                            href={
-                                                adminRoutes.windows.exportStatisticsPdf(
-                                                    { window: window.id },
-                                                ).url
-                                            }
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            <Download className="mr-2 h-4 w-4" />
-                                            Summary PDF
-                                        </a>
-                                    </Button>
-                                </div>
-                            ) : null}
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        {(safeStats.hierarchical || []).length > 0 ? (
-                            <div className="space-y-4">
-                                {(safeStats.hierarchical || []).map(
-                                    (dept, deptIndex) => (
-                                        <div
-                                            key={deptIndex}
-                                            className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
-                                        >
-                                            <div className="mb-3 flex items-center justify-between border-b pb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                                    <span className="text-base font-semibold">
-                                                        {dept.name}
-                                                    </span>
-                                                </div>
-                                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                    Total: {dept.total}
-                                                </Badge>
-                                            </div>
-
-                                            {/* Department Stats Grid */}
-                                            <div className="mb-4 grid grid-cols-1 gap-4 rounded-lg bg-muted/30 p-3 md:grid-cols-3">
-                                                <div className="space-y-2">
-                                                    <p className="text-xs font-medium text-muted-foreground">
-                                                        Attendance
-                                                    </p>
-                                                    <div className="flex gap-2">
-                                                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                            Attending:{' '}
-                                                            {dept.attendance
-                                                                ?.attending ||
-                                                                0}
-                                                        </Badge>
-                                                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                                            Not Attending:{' '}
-                                                            {dept.attendance
-                                                                ?.not_attending ||
-                                                                0}
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2 md:col-span-2">
-                                                    <p className="text-xs font-medium text-muted-foreground">
-                                                        Nationalities
-                                                    </p>
-                                                    <NationalitySummary
-                                                        nationalities={
-                                                            dept.nationalities ||
-                                                            []
-                                                        }
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {dept.programs &&
-                                                dept.programs.length > 0 && (
-                                                    <div className="ml-2 space-y-3">
-                                                        {dept.programs.map(
-                                                            (
-                                                                program,
-                                                                programIndex,
-                                                            ) => (
-                                                                <div
-                                                                    key={
-                                                                        programIndex
-                                                                    }
-                                                                    className="space-y-2"
-                                                                >
-                                                                    <div className="mb-2 flex items-center justify-between">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                                                                            <span className="text-sm font-medium text-foreground">
-                                                                                {
-                                                                                    program.name
-                                                                                }
-                                                                            </span>
-                                                                            <Badge
-                                                                                variant="outline"
-                                                                                className="text-xs"
-                                                                            >
-                                                                                Total:{' '}
-                                                                                {
-                                                                                    program.total
-                                                                                }
-                                                                            </Badge>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="flex gap-1.5">
-                                                                                <Badge className="bg-green-100 text-xs text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                                                    Attending:{' '}
-                                                                                    {program
-                                                                                        .attendance
-                                                                                        ?.attending ||
-                                                                                        0}
-                                                                                </Badge>
-                                                                                <Badge className="bg-red-100 text-xs text-red-800 dark:bg-red-900 dark:text-red-200">
-                                                                                    Not
-                                                                                    Attending:{' '}
-                                                                                    {program
-                                                                                        .attendance
-                                                                                        ?.not_attending ||
-                                                                                        0}
-                                                                                </Badge>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="mb-2 ml-4">
-                                                                        <NationalitySummary
-                                                                            nationalities={
-                                                                                program.nationalities ||
-                                                                                []
-                                                                            }
-                                                                            compact
-                                                                        />
-                                                                    </div>
-                                                                    {program.majors &&
-                                                                        program
-                                                                            .majors
-                                                                            .length >
-                                                                            0 &&
-                                                                        program.majors.some(
-                                                                            (
-                                                                                m,
-                                                                            ) =>
-                                                                                m.name !==
-                                                                                'N/A',
-                                                                        ) && (
-                                                                            <div className="ml-4 space-y-1.5 border-l-2 border-muted pl-3">
-                                                                                {program.majors
-                                                                                    .filter(
-                                                                                        (
-                                                                                            m,
-                                                                                        ) =>
-                                                                                            m.name !==
-                                                                                            'N/A',
-                                                                                    )
-                                                                                    .map(
-                                                                                        (
-                                                                                            major,
-                                                                                            majorIndex,
-                                                                                        ) => (
-                                                                                            <div
-                                                                                                key={
-                                                                                                    majorIndex
-                                                                                                }
-                                                                                                className="flex items-center justify-between py-1"
-                                                                                            >
-                                                                                                <div className="flex items-center gap-2">
-                                                                                                    <div className="h-1 w-1 rounded-full bg-green-500" />
-                                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                                        {
-                                                                                                            major.name
-                                                                                                        }
-                                                                                                    </span>
-                                                                                                    <Badge
-                                                                                                        variant="outline"
-                                                                                                        className="text-xs"
-                                                                                                    >
-                                                                                                        Total:{' '}
-                                                                                                        {
-                                                                                                            major.total
-                                                                                                        }
-                                                                                                    </Badge>
-                                                                                                </div>
-                                                                                                <div className="flex items-center gap-2">
-                                                                                                    <span className="text-xs text-green-600">
-                                                                                                        Attending:{' '}
-                                                                                                        {major
-                                                                                                            .attendance
-                                                                                                            ?.attending ||
-                                                                                                            0}
-                                                                                                    </span>
-                                                                                                    <span className="text-xs text-red-600">
-                                                                                                        Not
-                                                                                                        Attending:{' '}
-                                                                                                        {major
-                                                                                                            .attendance
-                                                                                                            ?.not_attending ||
-                                                                                                            0}
-                                                                                                    </span>
-                                                                                                    <NationalitySummary
-                                                                                                        nationalities={
-                                                                                                            major.nationalities ||
-                                                                                                            []
-                                                                                                        }
-                                                                                                        inline
-                                                                                                    />
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        ),
-                                                                                    )}
-                                                                            </div>
-                                                                        )}
-                                                                </div>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                )}
-                                        </div>
-                                    ),
-                                )}
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                {/* Fallback: Department Totals */}
-                                {(safeStats.departments || []).length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
                                     <div>
-                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
-                                            Departments
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {(safeStats.departments || []).map(
-                                                (dept) => (
-                                                    <div
-                                                        key={dept.code}
-                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                    >
+                                        <CardTitle>Applications</CardTitle>
+                                        <CardDescription>
+                                            {totalApplications} application
+                                            {totalApplications !== 1
+                                                ? 's'
+                                                : ''}{' '}
+                                            total
+                                        </CardDescription>
+                                    </div>
+                                    <div className="w-full max-w-sm">
+                                        <div className="relative">
+                                            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                            <Input
+                                                type="text"
+                                                placeholder="Search by name, student ID, email, department, or course..."
+                                                value={searchQuery}
+                                                onChange={(e) =>
+                                                    handleSearch(e.target.value)
+                                                }
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <Tabs
+                                    value={statusFilter}
+                                    onValueChange={handleStatusChange}
+                                    className="w-full"
+                                >
+                                    <TabsList className="grid w-full grid-cols-4">
+                                        <TabsTrigger value="pending">
+                                            Pending ({pendingApplications})
+                                        </TabsTrigger>
+                                        <TabsTrigger value="approved">
+                                            Approved ({approvedApplications})
+                                        </TabsTrigger>
+                                        <TabsTrigger value="incomplete">
+                                            Incomplete ({incompleteApplications}
+                                            )
+                                        </TabsTrigger>
+                                        <TabsTrigger value="all">
+                                            All ({totalApplications})
+                                        </TabsTrigger>
+                                    </TabsList>
+
+                                    <TabsContent
+                                        value="pending"
+                                        className="mt-4"
+                                    >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                    <TabsContent
+                                        value="approved"
+                                        className="mt-4"
+                                    >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                    <TabsContent
+                                        value="incomplete"
+                                        className="mt-4"
+                                    >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                    <TabsContent value="all" className="mt-4">
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                </Tabs>
+                            </CardContent>
+                        </Card>
+
+                        {/* Total by Department, Program & Major */}
+                        <Card>
+                            <CardHeader>
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <CardTitle>
+                                            Total by Department, Program & Major
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Hierarchical breakdown of
+                                            applications by department,
+                                            program/course, and major with
+                                            attendance and nationality
+                                            statistics
+                                        </CardDescription>
+                                    </div>
+                                    {!isHistorical ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                asChild
+                                            >
+                                                <a
+                                                    href={
+                                                        adminRoutes.windows.exportStatisticsPdf(
+                                                            {
+                                                                window: window.id,
+                                                            },
+                                                        ).url
+                                                    }
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    <Download className="mr-2 h-4 w-4" />
+                                                    Summary PDF
+                                                </a>
+                                            </Button>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {(safeStats.hierarchical || []).length > 0 ? (
+                                    <div className="space-y-4">
+                                        {(safeStats.hierarchical || []).map(
+                                            (dept, deptIndex) => (
+                                                <div
+                                                    key={deptIndex}
+                                                    className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
+                                                >
+                                                    <div className="mb-3 flex items-center justify-between border-b pb-3">
                                                         <div className="flex items-center gap-2">
                                                             <div className="h-2 w-2 rounded-full bg-blue-500" />
-                                                            <span className="text-sm font-medium">
-                                                                {dept.code ||
-                                                                    dept.name}
+                                                            <span className="text-base font-semibold">
+                                                                {dept.name}
                                                             </span>
                                                         </div>
-                                                        <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                            {dept.total}
-                                                        </span>
+                                                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                            Total: {dept.total}
+                                                        </Badge>
                                                     </div>
-                                                ),
-                                            )}
-                                        </div>
+
+                                                    {/* Department Stats Grid */}
+                                                    <div className="mb-4 grid grid-cols-1 gap-4 rounded-lg bg-muted/30 p-3 md:grid-cols-3">
+                                                        <div className="space-y-2">
+                                                            <p className="text-xs font-medium text-muted-foreground">
+                                                                Attendance
+                                                            </p>
+                                                            <div className="flex gap-2">
+                                                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                                    Attending:{' '}
+                                                                    {dept
+                                                                        .attendance
+                                                                        ?.attending ||
+                                                                        0}
+                                                                </Badge>
+                                                                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                                    Not
+                                                                    Attending:{' '}
+                                                                    {dept
+                                                                        .attendance
+                                                                        ?.not_attending ||
+                                                                        0}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2 md:col-span-2">
+                                                            <p className="text-xs font-medium text-muted-foreground">
+                                                                Nationalities
+                                                            </p>
+                                                            <NationalitySummary
+                                                                nationalities={
+                                                                    dept.nationalities ||
+                                                                    []
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {dept.programs &&
+                                                        dept.programs.length >
+                                                            0 && (
+                                                            <div className="ml-2 space-y-3">
+                                                                {dept.programs.map(
+                                                                    (
+                                                                        program,
+                                                                        programIndex,
+                                                                    ) => (
+                                                                        <div
+                                                                            key={
+                                                                                programIndex
+                                                                            }
+                                                                            className="space-y-2"
+                                                                        >
+                                                                            <div className="mb-2 flex items-center justify-between">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                                                                                    <span className="text-sm font-medium text-foreground">
+                                                                                        {
+                                                                                            program.name
+                                                                                        }
+                                                                                    </span>
+                                                                                    <Badge
+                                                                                        variant="outline"
+                                                                                        className="text-xs"
+                                                                                    >
+                                                                                        Total:{' '}
+                                                                                        {
+                                                                                            program.total
+                                                                                        }
+                                                                                    </Badge>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <div className="flex gap-1.5">
+                                                                                        <Badge className="bg-green-100 text-xs text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                                                            Attending:{' '}
+                                                                                            {program
+                                                                                                .attendance
+                                                                                                ?.attending ||
+                                                                                                0}
+                                                                                        </Badge>
+                                                                                        <Badge className="bg-red-100 text-xs text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                                                            Not
+                                                                                            Attending:{' '}
+                                                                                            {program
+                                                                                                .attendance
+                                                                                                ?.not_attending ||
+                                                                                                0}
+                                                                                        </Badge>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="mb-2 ml-4">
+                                                                                <NationalitySummary
+                                                                                    nationalities={
+                                                                                        program.nationalities ||
+                                                                                        []
+                                                                                    }
+                                                                                    compact
+                                                                                />
+                                                                            </div>
+                                                                            {program.majors &&
+                                                                                program
+                                                                                    .majors
+                                                                                    .length >
+                                                                                    0 &&
+                                                                                program.majors.some(
+                                                                                    (
+                                                                                        m,
+                                                                                    ) =>
+                                                                                        m.name !==
+                                                                                        'N/A',
+                                                                                ) && (
+                                                                                    <div className="ml-4 space-y-1.5 border-l-2 border-muted pl-3">
+                                                                                        {program.majors
+                                                                                            .filter(
+                                                                                                (
+                                                                                                    m,
+                                                                                                ) =>
+                                                                                                    m.name !==
+                                                                                                    'N/A',
+                                                                                            )
+                                                                                            .map(
+                                                                                                (
+                                                                                                    major,
+                                                                                                    majorIndex,
+                                                                                                ) => (
+                                                                                                    <div
+                                                                                                        key={
+                                                                                                            majorIndex
+                                                                                                        }
+                                                                                                        className="flex items-center justify-between py-1"
+                                                                                                    >
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <div className="h-1 w-1 rounded-full bg-green-500" />
+                                                                                                            <span className="text-xs text-muted-foreground">
+                                                                                                                {
+                                                                                                                    major.name
+                                                                                                                }
+                                                                                                            </span>
+                                                                                                            <Badge
+                                                                                                                variant="outline"
+                                                                                                                className="text-xs"
+                                                                                                            >
+                                                                                                                Total:{' '}
+                                                                                                                {
+                                                                                                                    major.total
+                                                                                                                }
+                                                                                                            </Badge>
+                                                                                                        </div>
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <span className="text-xs text-green-600">
+                                                                                                                Attending:{' '}
+                                                                                                                {major
+                                                                                                                    .attendance
+                                                                                                                    ?.attending ||
+                                                                                                                    0}
+                                                                                                            </span>
+                                                                                                            <span className="text-xs text-red-600">
+                                                                                                                Not
+                                                                                                                Attending:{' '}
+                                                                                                                {major
+                                                                                                                    .attendance
+                                                                                                                    ?.not_attending ||
+                                                                                                                    0}
+                                                                                                            </span>
+                                                                                                            <NationalitySummary
+                                                                                                                nationalities={
+                                                                                                                    major.nationalities ||
+                                                                                                                    []
+                                                                                                                }
+                                                                                                                inline
+                                                                                                            />
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ),
+                                                                                            )}
+                                                                                    </div>
+                                                                                )}
+                                                                        </div>
+                                                                    ),
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                </div>
+                                            ),
+                                        )}
                                     </div>
-                                )}
-                                {/* Fallback: Program Totals */}
-                                {(safeStats.programs || []).length > 0 && (
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
-                                            Programs/Courses
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {(safeStats.programs || []).map(
-                                                (program) => (
-                                                    <div
-                                                        key={program.code}
-                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-2 w-2 rounded-full bg-purple-500" />
-                                                            <span className="text-sm font-medium">
-                                                                {program.code} -{' '}
-                                                                {program.name}
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Fallback: Department Totals */}
+                                        {(safeStats.departments || []).length >
+                                            0 && (
+                                            <div>
+                                                <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                                    Departments
+                                                </h3>
+                                                <div className="space-y-2">
+                                                    {(
+                                                        safeStats.departments ||
+                                                        []
+                                                    ).map((dept) => (
+                                                        <div
+                                                            key={dept.code}
+                                                            className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                                                <span className="text-sm font-medium">
+                                                                    {dept.code ||
+                                                                        dept.name}
+                                                                </span>
+                                                            </div>
+                                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                                {dept.total}
                                                             </span>
                                                         </div>
-                                                        <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                                                            {program.total}
-                                                        </span>
-                                                    </div>
-                                                ),
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                                {/* Fallback: Major Totals */}
-                                {(safeStats.majors || []).length > 0 && (
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-semibold text-foreground">
-                                            Majors
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {(safeStats.majors || []).map(
-                                                (major) => (
-                                                    <div
-                                                        key={major.code}
-                                                        className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-2 w-2 rounded-full bg-green-500" />
-                                                            <span className="text-sm font-medium">
-                                                                {major.code} -{' '}
-                                                                {major.name}
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Fallback: Program Totals */}
+                                        {(safeStats.programs || []).length >
+                                            0 && (
+                                            <div>
+                                                <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                                    Programs/Courses
+                                                </h3>
+                                                <div className="space-y-2">
+                                                    {(
+                                                        safeStats.programs || []
+                                                    ).map((program) => (
+                                                        <div
+                                                            key={program.code}
+                                                            className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="h-2 w-2 rounded-full bg-purple-500" />
+                                                                <span className="text-sm font-medium">
+                                                                    {
+                                                                        program.code
+                                                                    }{' '}
+                                                                    -{' '}
+                                                                    {
+                                                                        program.name
+                                                                    }
+                                                                </span>
+                                                            </div>
+                                                            <span className="rounded-full bg-purple-100 px-3 py-1 text-sm font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                                                {program.total}
                                                             </span>
                                                         </div>
-                                                        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                            {major.total}
-                                                        </span>
-                                                    </div>
-                                                ),
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Fallback: Major Totals */}
+                                        {(safeStats.majors || []).length >
+                                            0 && (
+                                            <div>
+                                                <h3 className="mb-3 text-sm font-semibold text-foreground">
+                                                    Majors
+                                                </h3>
+                                                <div className="space-y-2">
+                                                    {(
+                                                        safeStats.majors || []
+                                                    ).map((major) => (
+                                                        <div
+                                                            key={major.code}
+                                                            className="flex items-center justify-between rounded-md border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="h-2 w-2 rounded-full bg-green-500" />
+                                                                <span className="text-sm font-medium">
+                                                                    {major.code}{' '}
+                                                                    -{' '}
+                                                                    {major.name}
+                                                                </span>
+                                                            </div>
+                                                            <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                                {major.total}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {!safeStats.departments?.length &&
+                                            !safeStats.programs?.length &&
+                                            !safeStats.majors?.length && (
+                                                <p className="py-8 text-center text-sm text-muted-foreground">
+                                                    No data available.
+                                                </p>
                                             )}
-                                        </div>
                                     </div>
                                 )}
-                                {!safeStats.departments?.length &&
-                                    !safeStats.programs?.length &&
-                                    !safeStats.majors?.length && (
-                                        <p className="py-8 text-center text-sm text-muted-foreground">
-                                            No data available.
-                                        </p>
-                                    )}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            </CardContent>
+                        </Card>
                     </div>
                 </WindowApplicationReviewTabs>
             </div>

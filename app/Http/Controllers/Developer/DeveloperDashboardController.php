@@ -40,8 +40,6 @@ class DeveloperDashboardController extends Controller
     public function windows(Request $request): Response
     {
         $search = trim($request->string('search')->toString());
-        $now = now()->toDateTimeString();
-
         $windows = ApplicationWindow::query()
             ->withCount('applications')
             ->when($search !== '', function ($query) use ($search): void {
@@ -50,11 +48,7 @@ class DeveloperDashboardController extends Controller
                         ->orWhere('description', 'like', "%{$search}%");
                 });
             })
-            ->orderByRaw(
-                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
-                [$now, $now, $now]
-            )
-            ->orderBy('start_date', 'desc')
+            ->orderedForSelection()
             ->paginate(20)
             ->withQueryString();
 

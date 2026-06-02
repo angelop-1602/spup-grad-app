@@ -59,7 +59,7 @@ class StudentController extends Controller
         return Inertia::render('admin/students/create');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SystemEventLogger $logger): RedirectResponse
     {
         $validated = $request->validate([
             'student_id' => ['required', 'string', 'max:255', 'unique:users,student_id'],
@@ -74,6 +74,17 @@ class StudentController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
         ]);
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.student.created',
+            message: 'Admin created a student account.',
+            subject: $student,
+            meta: [
+                'student_id' => $student->student_id,
+                'email' => $student->email,
+            ],
+        );
 
         return redirect()->route('admin.students.show', $student)
             ->with('success', 'Student created successfully.');
@@ -108,7 +119,7 @@ class StudentController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $student): RedirectResponse
+    public function update(Request $request, User $student, SystemEventLogger $logger): RedirectResponse
     {
         $validated = $request->validate([
             'student_id' => [
@@ -138,7 +149,20 @@ class StudentController extends Controller
             $updates['password'] = Hash::make($validated['password']);
         }
 
+        $before = $student->only(['student_id', 'name', 'email']);
         $student->forceFill($updates)->save();
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.student.updated',
+            message: 'Admin updated a student account.',
+            subject: $student,
+            meta: [
+                'before' => $before,
+                'after' => $student->only(['student_id', 'name', 'email']),
+                'password_changed' => ! empty($validated['password']),
+            ],
+        );
 
         return redirect()->route('admin.students.show', $student)
             ->with('success', 'Student updated successfully.');
@@ -201,8 +225,18 @@ class StudentController extends Controller
     /**
      * Remove the specified student from storage.
      */
-    public function destroy(User $student): RedirectResponse
+    public function destroy(User $student, SystemEventLogger $logger): RedirectResponse
     {
+        $studentPayload = $student->only(['id', 'student_id', 'name', 'email']);
+
+        $logger->log(
+            module: 'graduation_application',
+            action: 'admin.student.deleted',
+            message: 'Admin deleted a student account.',
+            subject: $student,
+            meta: $studentPayload,
+        );
+
         if ($student->profile) {
             $photoPath = ProfilePhoto::storagePath($student->profile->photo_path);
             if ($photoPath && Storage::disk('public')->exists($photoPath)) {
@@ -220,7 +254,7 @@ class StudentController extends Controller
     /**
      * Manually reset the student's password entered by the admin.
      */
-    public function resetPassword(Request $request, User $student): RedirectResponse
+    public function resetPassword(Request $request, User $student, SystemEventLogger $logger): RedirectResponse
     {
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:8', 'confirmed'],
@@ -229,6 +263,14 @@ class StudentController extends Controller
         $student->forceFill([
             'password' => Hash::make($validated['password']),
         ])->save();
+
+        $logger->log(
+            module: 'security',
+            action: 'admin.student.password_reset',
+            message: 'Admin reset a student password.',
+            subject: $student,
+            meta: ['student_id' => $student->student_id],
+        );
 
         return redirect()->back()->with('success', 'Password updated successfully for '.$student->student_id.'.');
     }

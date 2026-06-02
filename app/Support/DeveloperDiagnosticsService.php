@@ -111,10 +111,10 @@ class DeveloperDiagnosticsService
 
             return ApplicationWindow::query()->whereKey($windowId)->exists()
                 ? $windowId
-                : ApplicationWindow::current()?->id;
+                : ApplicationWindow::currentOrLatest()?->id;
         }
 
-        return ApplicationWindow::current()?->id;
+        return ApplicationWindow::currentOrLatest()?->id;
     }
 
     /**
@@ -329,15 +329,9 @@ class DeveloperDiagnosticsService
      */
     private function applicationWindowOptions(): array
     {
-        $now = now()->toDateTimeString();
-
         return ApplicationWindow::query()
             ->withCount('applications')
-            ->orderByRaw(
-                'CASE WHEN start_date <= ? AND end_date >= ? THEN 0 WHEN start_date > ? THEN 1 ELSE 2 END',
-                [$now, $now, $now]
-            )
-            ->orderBy('start_date', 'desc')
+            ->orderedForSelection()
             ->get()
             ->map(fn (ApplicationWindow $window) => [
                 'id' => $window->id,

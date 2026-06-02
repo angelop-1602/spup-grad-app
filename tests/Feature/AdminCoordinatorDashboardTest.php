@@ -93,7 +93,7 @@ function dashboardApplication(
     ]);
 }
 
-test('admin dashboard exposes applicant overview and audit trail page filters application events', function () {
+test('admin dashboard exposes applicant overview and audit trail page includes operational events', function () {
     [$window, $department, $course] = dashboardCatalog();
     $application = dashboardApplication($window, $department, $course, 'admin.dashboard.student@example.com', '2026-0201');
 
@@ -117,7 +117,7 @@ test('admin dashboard exposes applicant overview and audit trail page filters ap
         'severity' => 'info',
         'actor_guard' => 'admin',
         'actor_label' => 'Dashboard Admin',
-        'message' => 'Email event should not appear in the application audit trail.',
+        'message' => 'Email event should appear in the broader audit trail.',
         'created_at' => now()->addSecond(),
     ]);
 
@@ -140,8 +140,9 @@ test('admin dashboard exposes applicant overview and audit trail page filters ap
         ->assertInertia(fn (Assert $page) => $page
             ->component('audit-trail/index')
             ->where('viewer', 'admin')
-            ->has('events.data', 1)
-            ->where('events.data.0.subject_label', $application->application_number)
+            ->has('events.data', 2)
+            ->where('events.data.0.module', 'email')
+            ->where('events.data.1.subject_label', $application->application_number)
         );
 });
 

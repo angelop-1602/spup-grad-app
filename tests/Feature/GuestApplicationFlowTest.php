@@ -141,6 +141,56 @@ function guestApplicationDocxXml(Application $application): string
     }
 }
 
+function freeConvertJobPayload(string $jobId): array
+{
+    return [
+        'id' => $jobId,
+        'status' => 'created',
+        'tasks' => [
+            [
+                'name' => 'import-docx',
+                'operation' => 'import/upload',
+                'result' => [
+                    'form' => [
+                        'url' => "https://upload.freeconvert.test/api/upload/{$jobId}",
+                        'parameters' => [
+                            'signature' => 'signed-upload',
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'convert-pdf',
+                'operation' => 'convert',
+                'status' => 'processing',
+            ],
+            [
+                'name' => 'export-pdf',
+                'operation' => 'export/url',
+                'status' => 'processing',
+            ],
+        ],
+    ];
+}
+
+function freeConvertCompletedJobPayload(string $jobId): array
+{
+    return [
+        'id' => $jobId,
+        'status' => 'completed',
+        'tasks' => [
+            [
+                'name' => 'export-pdf',
+                'operation' => 'export/url',
+                'status' => 'completed',
+                'result' => [
+                    'url' => "https://download.freeconvert.test/{$jobId}/result.pdf",
+                ],
+            ],
+        ],
+    ];
+}
+
 test('guest submit stores a draft and sends verification without creating real applications', function () {
     Notification::fake();
 
@@ -585,44 +635,18 @@ test('verifying a guest draft creates the real records and exposes the guest han
 test('guest portal downloads the generated application as a pdf', function () {
     Notification::fake();
     config([
-        'services.freeconvert.api_key' => 'test-freeconvert-key',
-        'services.freeconvert.api_keys' => '',
+        'services.freeconvert.api_keys' => ['test-freeconvert-key'],
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 1,
+        'services.freeconvert.retry_delay_ms' => 1,
     ]);
     Http::fake(function ($request) {
         $url = (string) $request->url();
 
         if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
-            return Http::response([
-                'id' => 'job-123',
-                'status' => 'created',
-                'tasks' => [
-                    [
-                        'name' => 'import-docx',
-                        'operation' => 'import/upload',
-                        'result' => [
-                            'form' => [
-                                'url' => 'https://upload.freeconvert.test/api/upload/job-123',
-                                'parameters' => [
-                                    'signature' => 'signed-upload',
-                                ],
-                            ],
-                        ],
-                    ],
-                    [
-                        'name' => 'convert-pdf',
-                        'operation' => 'convert',
-                        'status' => 'processing',
-                    ],
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'processing',
-                    ],
-                ],
-            ], 201);
+            return Http::response(freeConvertJobPayload('job-123'), 201);
         }
 
         if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-123') {
@@ -630,20 +654,7 @@ test('guest portal downloads the generated application as a pdf', function () {
         }
 
         if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-123') {
-            return Http::response([
-                'id' => 'job-123',
-                'status' => 'completed',
-                'tasks' => [
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'completed',
-                        'result' => [
-                            'url' => 'https://download.freeconvert.test/job-123/result.pdf',
-                        ],
-                    ],
-                ],
-            ]);
+            return Http::response(freeConvertCompletedJobPayload('job-123'));
         }
 
         if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-123/result.pdf') {
@@ -687,15 +698,75 @@ test('guest portal downloads the generated application as a pdf', function () {
     $response = $this->get(route('apply.portal.download', $application->application_number));
     $response->assertDownload('GraduationApplication_Andrea_L_Santos_Jr.pdf');
     expect($response->headers->get('content-type'))->toContain('application/pdf');
+    expect(str_starts_with((string) file_get_contents($response->baseResponse->getFile()->getPathname()), '%PDF'))->toBeTrue();
+});
+
+test('application pdf export retries transient freeconvert failures before succeeding', function () {
+    config([
+        'services.freeconvert.api_keys' => ['retry-freeconvert-key'],
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 2,
+        'services.freeconvert.retry_delay_ms' => 1,
+    ]);
+
+    $jobCreationTokens = [];
+
+    Http::fake(function ($request) use (&$jobCreationTokens) {
+        $url = (string) $request->url();
+
+        if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
+            $jobCreationTokens[] = $request->header('Authorization')[0] ?? '';
+
+            if (count($jobCreationTokens) === 1) {
+                return Http::response(['message' => 'temporary upstream failure'], 503);
+            }
+
+            return Http::response(freeConvertJobPayload('job-retry'), 201);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-retry') {
+            return Http::response(['ok' => true]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-retry') {
+            return Http::response(freeConvertCompletedJobPayload('job-retry'));
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-retry/result.pdf') {
+            return Http::response('%PDF-1.4 retry pdf body', 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        if ($request->method() === 'DELETE' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-retry') {
+            return Http::response([], 204);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $application = guestApplicationForDocx();
+    $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
+    $pdfPath = $response->getFile()->getPathname();
+
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+    expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 retry pdf body'))->toBeTrue();
+    expect($jobCreationTokens)->toBe([
+        'Bearer retry-freeconvert-key',
+        'Bearer retry-freeconvert-key',
+    ]);
 });
 
 test('application export rotates through configured freeconvert api keys', function () {
     config([
-        'services.freeconvert.api_key' => '',
         'services.freeconvert.api_keys' => ['first-freeconvert-key', 'second-freeconvert-key'],
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 1,
+        'services.freeconvert.retry_delay_ms' => 1,
     ]);
 
     $jobCreationTokens = [];
@@ -712,32 +783,7 @@ test('application export rotates through configured freeconvert api keys', funct
                 ], 429);
             }
 
-            return Http::response([
-                'id' => 'job-rotated',
-                'status' => 'created',
-                'tasks' => [
-                    [
-                        'name' => 'import-docx',
-                        'operation' => 'import/upload',
-                        'result' => [
-                            'form' => [
-                                'url' => 'https://upload.freeconvert.test/api/upload/job-rotated',
-                                'parameters' => ['signature' => 'signed-upload'],
-                            ],
-                        ],
-                    ],
-                    [
-                        'name' => 'convert-pdf',
-                        'operation' => 'convert',
-                        'status' => 'processing',
-                    ],
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'processing',
-                    ],
-                ],
-            ], 201);
+            return Http::response(freeConvertJobPayload('job-rotated'), 201);
         }
 
         if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-rotated') {
@@ -745,20 +791,7 @@ test('application export rotates through configured freeconvert api keys', funct
         }
 
         if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-rotated') {
-            return Http::response([
-                'id' => 'job-rotated',
-                'status' => 'completed',
-                'tasks' => [
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'completed',
-                        'result' => [
-                            'url' => 'https://download.freeconvert.test/job-rotated/result.pdf',
-                        ],
-                    ],
-                ],
-            ]);
+            return Http::response(freeConvertCompletedJobPayload('job-rotated'));
         }
 
         if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-rotated/result.pdf') {
@@ -778,25 +811,40 @@ test('application export rotates through configured freeconvert api keys', funct
     $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
     $pdfPath = $response->getFile()->getPathname();
 
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+    expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 rotated freeconvert pdf body'))->toBeTrue();
+    expect($jobCreationTokens)->toBe([
+        'Bearer first-freeconvert-key',
+        'Bearer second-freeconvert-key',
+    ]);
+});
+
+test('freeconvert timeout is capped below php max execution time for shared hosting', function () {
+    config([
+        'services.freeconvert.timeout' => 60,
+    ]);
+
+    $method = new ReflectionMethod(\App\Http\Controllers\ApplicationController::class, 'freeConvertTimeout');
+    $method->setAccessible(true);
+    $previousMaxExecutionTime = ini_get('max_execution_time');
+
     try {
-        expect($response->headers->get('content-type'))->toContain('application/pdf');
-        expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 rotated freeconvert pdf body'))->toBeTrue();
-        expect($jobCreationTokens)->toBe([
-            'Bearer first-freeconvert-key',
-            'Bearer second-freeconvert-key',
-        ]);
+        ini_set('max_execution_time', '30');
+
+        expect($method->invoke(null))->toBe(25);
     } finally {
-        @unlink($pdfPath);
+        ini_set('max_execution_time', (string) $previousMaxExecutionTime);
     }
 });
 
 test('application pdf export reuses cached conversion until application data changes', function () {
     config([
-        'services.freeconvert.api_key' => 'cache-freeconvert-key',
-        'services.freeconvert.api_keys' => '',
+        'services.freeconvert.api_keys' => ['cache-freeconvert-key'],
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 1,
+        'services.freeconvert.retry_delay_ms' => 1,
     ]);
 
     $conversionRequests = 0;
@@ -807,32 +855,7 @@ test('application pdf export reuses cached conversion until application data cha
         if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
             $conversionRequests++;
 
-            return Http::response([
-                'id' => 'job-'.$conversionRequests,
-                'status' => 'created',
-                'tasks' => [
-                    [
-                        'name' => 'import-docx',
-                        'operation' => 'import/upload',
-                        'result' => [
-                            'form' => [
-                                'url' => 'https://upload.freeconvert.test/api/upload/job-'.$conversionRequests,
-                                'parameters' => ['signature' => 'signed-upload'],
-                            ],
-                        ],
-                    ],
-                    [
-                        'name' => 'convert-pdf',
-                        'operation' => 'convert',
-                        'status' => 'processing',
-                    ],
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'processing',
-                    ],
-                ],
-            ], 201);
+            return Http::response(freeConvertJobPayload('job-'.$conversionRequests), 201);
         }
 
         if ($request->method() === 'POST' && str_starts_with($url, 'https://upload.freeconvert.test/api/upload/job-')) {
@@ -840,20 +863,7 @@ test('application pdf export reuses cached conversion until application data cha
         }
 
         if ($request->method() === 'GET' && preg_match('/^https:\/\/api\.freeconvert\.test\/v1\/process\/jobs\/job-(\d+)$/', $url, $matches) === 1) {
-            return Http::response([
-                'id' => 'job-'.$matches[1],
-                'status' => 'completed',
-                'tasks' => [
-                    [
-                        'name' => 'export-pdf',
-                        'operation' => 'export/url',
-                        'status' => 'completed',
-                        'result' => [
-                            'url' => 'https://download.freeconvert.test/job-'.$matches[1].'/result.pdf',
-                        ],
-                    ],
-                ],
-            ]);
+            return Http::response(freeConvertCompletedJobPayload('job-'.$matches[1]));
         }
 
         if ($request->method() === 'GET' && preg_match('/^https:\/\/download\.freeconvert\.test\/job-(\d+)\/result\.pdf$/', $url, $matches) === 1) {
@@ -885,14 +895,15 @@ test('application pdf export reuses cached conversion until application data cha
     expect((string) file_get_contents($third->getFile()->getPathname()))->toContain('cached pdf body 2');
 });
 
-test('guest portal falls back to docx when pdf conversion fails', function () {
+test('guest portal falls back to docx when freeconvert conversion fails', function () {
     Notification::fake();
     config([
-        'services.freeconvert.api_key' => 'test-freeconvert-key',
-        'services.freeconvert.api_keys' => '',
+        'services.freeconvert.api_keys' => ['test-freeconvert-key'],
         'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
         'services.freeconvert.timeout' => 30,
         'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 1,
+        'services.freeconvert.retry_delay_ms' => 1,
     ]);
     Http::fake([
         'https://api.freeconvert.test/v1/process/jobs' => Http::response([

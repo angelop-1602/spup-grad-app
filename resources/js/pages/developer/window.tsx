@@ -1,14 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, ExternalLink, MailWarning } from 'lucide-react';
+import { ArrowLeft, MailWarning } from 'lucide-react';
 import { useState } from 'react';
 import { formatDate, headline, statusClass } from './console-utils';
 
@@ -75,7 +70,9 @@ function recordProgram(record: ApplicationRecord) {
 }
 
 function recordIdentifier(record: ApplicationRecord) {
-    return record.application_number ?? record.tracking_code ?? record.record_label;
+    return (
+        record.application_number ?? record.tracking_code ?? record.record_label
+    );
 }
 
 function recordTypeLabel(record: ApplicationRecord) {
@@ -99,14 +96,40 @@ function ApplicationTable({
                         <th className="px-3 py-2 font-medium">Program</th>
                         <th className="px-3 py-2 font-medium">Status</th>
                         <th className="px-3 py-2 font-medium">Created</th>
-                        <th className="px-3 py-2 text-right font-medium">
-                            Action
-                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     {records.map((record) => (
-                        <tr key={record.key} className="border-t align-top">
+                        <tr
+                            key={record.key}
+                            className={
+                                record.developer_url
+                                    ? 'cursor-pointer border-t align-top hover:bg-muted/40'
+                                    : 'border-t align-top'
+                            }
+                            role={record.developer_url ? 'link' : undefined}
+                            tabIndex={record.developer_url ? 0 : undefined}
+                            onClick={
+                                record.developer_url
+                                    ? () => router.visit(record.developer_url!)
+                                    : undefined
+                            }
+                            onKeyDown={
+                                record.developer_url
+                                    ? (event) => {
+                                          if (
+                                              event.key === 'Enter' ||
+                                              event.key === ' '
+                                          ) {
+                                              event.preventDefault();
+                                              router.visit(
+                                                  record.developer_url!,
+                                              );
+                                          }
+                                      }
+                                    : undefined
+                            }
+                        >
                             <td className="px-3 py-3">
                                 <p className="font-medium">
                                     {record.applicant_name}
@@ -114,7 +137,7 @@ function ApplicationTable({
                                 <p className="text-xs text-muted-foreground">
                                     {record.student_id ?? '-'}
                                 </p>
-                                <p className="break-all text-xs text-muted-foreground">
+                                <p className="text-xs break-all text-muted-foreground">
                                     {record.email ?? '-'}
                                 </p>
                             </td>
@@ -145,26 +168,12 @@ function ApplicationTable({
                             <td className="px-3 py-3 text-xs text-muted-foreground">
                                 {formatDate(record.created_at)}
                             </td>
-                            <td className="px-3 py-3 text-right">
-                                {record.developer_url ? (
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={record.developer_url}>
-                                            <ExternalLink className="size-4" />
-                                            Open
-                                        </Link>
-                                    </Button>
-                                ) : (
-                                    <span className="text-xs text-muted-foreground">
-                                        -
-                                    </span>
-                                )}
-                            </td>
                         </tr>
                     ))}
                     {records.length === 0 && (
                         <tr>
                             <td
-                                colSpan={6}
+                                colSpan={5}
                                 className="px-3 py-10 text-center text-muted-foreground"
                             >
                                 {emptyMessage}
@@ -333,7 +342,7 @@ export default function DeveloperWindow({
                                                                     record,
                                                                 )}
                                                             </p>
-                                                            <p className="break-all text-xs text-muted-foreground">
+                                                            <p className="text-xs break-all text-muted-foreground">
                                                                 {record.email ??
                                                                     '-'}
                                                             </p>

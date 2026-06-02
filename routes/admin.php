@@ -41,7 +41,7 @@ Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(funct
         \App\Support\DashboardOverview $overview,
         \App\Support\NotificationCenter $notificationCenter
     ) {
-        $currentWindow = \App\Models\ApplicationWindow::current();
+        $currentWindow = \App\Models\ApplicationWindow::currentOrLatest();
         $applicationsScope = \App\Models\Application::query()
             ->when($currentWindow, fn ($query) => $query->where('window_id', $currentWindow->id));
 

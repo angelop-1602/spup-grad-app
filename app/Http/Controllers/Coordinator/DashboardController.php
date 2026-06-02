@@ -24,8 +24,8 @@ class DashboardController extends Controller
         // Get coordinator's assigned departments
         $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
 
-        // Get current active window
-        $currentWindow = ApplicationWindow::current();
+        // Use the current active window, or the latest window when none is active.
+        $currentWindow = ApplicationWindow::currentOrLatest();
         $assignedApplicationsQuery = Application::query()
             ->whereIn('department_id', $departmentIds)
             ->when($currentWindow, fn ($query) => $query->where('window_id', $currentWindow->id));

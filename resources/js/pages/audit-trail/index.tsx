@@ -7,22 +7,30 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { Activity } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Activity, Search } from 'lucide-react';
+import { FormEvent, useState } from 'react';
 
 interface AuditEvent {
     id: number;
     action_label: string;
     status: string;
     severity: string;
+    module: string;
+    actor_id: number | null;
     actor_label: string | null;
     actor_guard: string | null;
     message: string | null;
     created_at: string | null;
+    subject_type: string | null;
+    subject_id: number | null;
     subject_label: string | null;
     subject_url: string | null;
+    ip_address: string | null;
+    user_agent: string | null;
 }
 
 interface PaginatedEvents {
@@ -38,9 +46,17 @@ interface PaginatedEvents {
 interface AuditTrailProps {
     viewer: 'admin' | 'coordinator';
     events: PaginatedEvents;
+    filters?: {
+        search?: string;
+    };
 }
 
-export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
+export default function AuditTrailIndex({
+    viewer,
+    events,
+    filters,
+}: AuditTrailProps) {
+    const [search, setSearch] = useState(filters?.search ?? '');
     const dashboardHref =
         viewer === 'admin' ? '/admin/dashboard' : '/coordinator/dashboard';
     const auditHref =
@@ -79,6 +95,19 @@ export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
         return <Badge variant="outline">{event.status}</Badge>;
     };
 
+    const applySearch = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        router.get(
+            auditHref,
+            { search: search || undefined },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                replace: true,
+            },
+        );
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Audit Trail" />
@@ -88,20 +117,42 @@ export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
                         Audit Trail
                     </h1>
                     <p className="text-muted-foreground">
-                        Graduation application activity only
+                        Security, application, support, and notification
+                        activity
                     </p>
                 </div>
 
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Activity className="h-5 w-5" />
-                            Application Audit
-                        </CardTitle>
-                        <CardDescription>
-                            {events.total} recorded application event
-                            {events.total === 1 ? '' : 's'}
-                        </CardDescription>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Activity className="h-5 w-5" />
+                                    Activity Audit
+                                </CardTitle>
+                                <CardDescription>
+                                    {events.total} recorded event
+                                    {events.total === 1 ? '' : 's'}
+                                </CardDescription>
+                            </div>
+                            <form
+                                onSubmit={applySearch}
+                                className="flex w-full gap-2 lg:w-96"
+                            >
+                                <div className="relative flex-1">
+                                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        value={search}
+                                        onChange={(event) =>
+                                            setSearch(event.target.value)
+                                        }
+                                        placeholder="Search logs..."
+                                        className="pl-9"
+                                    />
+                                </div>
+                                <Button type="submit">Search</Button>
+                            </form>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {events.data.length > 0 ? (
@@ -114,10 +165,13 @@ export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
                                                     Action
                                                 </th>
                                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                                    Module
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                                     Actor
                                                 </th>
                                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                                                    Application
+                                                    Affected Record
                                                 </th>
                                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                                     Status
@@ -144,17 +198,29 @@ export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3">
+                                                        <Badge variant="secondary">
+                                                            {event.module}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-4 py-3">
                                                         <p className="text-sm">
                                                             {event.actor_label ??
                                                                 'System'}
                                                         </p>
-                                                        {event.actor_guard && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {event.actor_guard ??
+                                                                'system'}
+                                                            {event.actor_id
+                                                                ? ` #${event.actor_id}`
+                                                                : ''}
+                                                        </p>
+                                                        {event.ip_address ? (
                                                             <p className="text-xs text-muted-foreground">
                                                                 {
-                                                                    event.actor_guard
+                                                                    event.ip_address
                                                                 }
                                                             </p>
-                                                        )}
+                                                        ) : null}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {event.subject_url &&
@@ -171,9 +237,20 @@ export default function AuditTrailIndex({ viewer, events }: AuditTrailProps) {
                                                             </Link>
                                                         ) : (
                                                             <span className="text-sm text-muted-foreground">
-                                                                Not linked
+                                                                {event.subject_label ??
+                                                                    'Not linked'}
                                                             </span>
                                                         )}
+                                                        {event.subject_type ? (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {
+                                                                    event.subject_type
+                                                                }
+                                                                {event.subject_id
+                                                                    ? ` #${event.subject_id}`
+                                                                    : ''}
+                                                            </p>
+                                                        ) : null}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {eventBadge(event)}

@@ -1,3 +1,7 @@
+import {
+    ManualVerificationTable,
+    type ManualVerificationRecord,
+} from '@/components/manual-verification-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,13 +15,12 @@ import { useToast } from '@/contexts/toast-context';
 import { cn } from '@/lib/utils';
 import { router } from '@inertiajs/react';
 import {
-    CheckCircle2,
     FileText,
     MailWarning,
     ShieldQuestion,
     UsersRound,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 type ReviewSection = 'applications' | 'unverified' | 'duplicates';
 
@@ -40,6 +43,7 @@ export type WindowApplicationReviewRecord = {
     status: string;
     application_number: string | null;
     tracking_code: string | null;
+    tracking_pin?: string | null;
     verification_status: string;
     created_at: string | null;
     verified_at: string | null;
@@ -102,7 +106,9 @@ function formatDate(value: string | null | undefined) {
 }
 
 function recordIdentifier(record: WindowApplicationReviewRecord) {
-    return record.application_number ?? record.tracking_code ?? record.record_label;
+    return (
+        record.application_number ?? record.tracking_code ?? record.record_label
+    );
 }
 
 function departmentLabel(record: WindowApplicationReviewRecord) {
@@ -127,7 +133,8 @@ function recordStatusClass(status: string) {
             'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
         incomplete:
             'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
-        rejected: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+        rejected:
+            'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
     };
 
     return classes[status] ?? '';
@@ -189,7 +196,8 @@ export function WindowApplicationReviewTabs({
                     addToast({
                         variant: 'success',
                         title: 'Duplicate alert sent',
-                        description: 'The applicant was emailed a secure review link.',
+                        description:
+                            'The applicant was emailed a secure review link.',
                         duration: 5000,
                     }),
             },
@@ -276,97 +284,20 @@ function UnverifiedApplicationsPanel({
             <CardHeader>
                 <CardTitle>Unverified Applications</CardTitle>
                 <CardDescription>
-                    Guest drafts in this application window that still need email
-                    or manual verification.
+                    Guest drafts in this application window that still need
+                    email or manual verification.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {records.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[920px] text-sm">
-                            <thead>
-                                <tr className="border-b">
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                        Applicant
-                                    </th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                        Tracking
-                                    </th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                        Department
-                                    </th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                        Course
-                                    </th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                        Created
-                                    </th>
-                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
-                                        Verify
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {records.map((record) => (
-                                    <tr
-                                        key={record.key}
-                                        className="border-b align-top transition-colors hover:bg-muted/50"
-                                    >
-                                        <td className="px-3 py-3">
-                                            <p className="font-medium">
-                                                {record.applicant_name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {record.student_id ?? '-'}
-                                            </p>
-                                            <p className="break-all text-xs text-muted-foreground">
-                                                {record.email ?? '-'}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-3 font-mono text-xs">
-                                            {record.tracking_code ?? '-'}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {departmentLabel(record)}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {courseLabel(record)}
-                                        </td>
-                                        <td className="px-3 py-3 text-muted-foreground">
-                                            {formatDate(record.created_at)}
-                                        </td>
-                                        <td className="px-3 py-3 text-right">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                onClick={() => onVerify(record)}
-                                                disabled={
-                                                    verifyingDraftId === record.id
-                                                }
-                                            >
-                                                <CheckCircle2 className="size-4" />
-                                                {verifyingDraftId === record.id
-                                                    ? 'Verifying'
-                                                    : 'Verify'}
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <div className="py-12 text-center">
-                        <ShieldQuestion className="mx-auto h-10 w-10 text-muted-foreground" />
-                        <h3 className="mt-4 text-base font-semibold">
-                            No unverified applications
-                        </h3>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            This window has no guest drafts waiting for
-                            verification.
-                        </p>
-                    </div>
-                )}
+                <ManualVerificationTable
+                    records={records as ManualVerificationRecord[]}
+                    verifyingId={verifyingDraftId}
+                    onVerify={(record) =>
+                        onVerify(record as WindowApplicationReviewRecord)
+                    }
+                    showProgram
+                    emptyMessage="This window has no guest drafts waiting for verification."
+                />
             </CardContent>
         </Card>
     );
@@ -487,7 +418,7 @@ function DuplicateRecordCell({
                 <p className="text-xs text-muted-foreground">
                     {recordIdentifier(record)}
                 </p>
-                <p className="break-all text-xs text-muted-foreground">
+                <p className="text-xs break-all text-muted-foreground">
                     {record.email ?? '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">
