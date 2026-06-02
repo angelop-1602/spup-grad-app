@@ -24,6 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import adminRoutes from '@/routes/admin';
 import applicationRoutes from '@/routes/applications/index';
+import applyRoutes from '@/routes/apply';
 import coordinatorRoutes from '@/routes/coordinator';
 import {
     CheckCircle2,
@@ -80,6 +81,7 @@ interface RequirementsListProps {
     requirements: ApplicationRequirement[];
     requirementsData?: RequirementData[]; // For coordinator/admin - current state
     mode: 'student' | 'coordinator' | 'admin';
+    portalMode?: 'student' | 'guest';
     onStatusChange?: (
         requirementId: number,
         status: ApplicationRequirement['status'],
@@ -123,6 +125,7 @@ export function RequirementsList({
     requirements,
     requirementsData,
     mode,
+    portalMode = 'student',
     onStatusChange,
     onNotesChange,
     onFileUpload,
@@ -168,6 +171,7 @@ export function RequirementsList({
     const [previewFile, setPreviewFile] = useState<{
         path: string;
         name: string;
+        url: string;
     } | null>(null);
     const fileInputRefs = useRef<Record<number, HTMLInputElement>>({});
     // Store selected files before upload (for student mode)
@@ -189,9 +193,48 @@ export function RequirementsList({
         return isImageFile(filePath) || isPdfFile(filePath);
     };
 
+    const fileName = (filePath: string): string => {
+        return filePath.split('/').pop() || 'Document';
+    };
+
+    const requirementFileUrl = (
+        requirementId: number,
+        options?: { download?: boolean },
+    ): string | null => {
+        if (!applicationNumber) {
+            return null;
+        }
+
+        const args = {
+            application: applicationNumber,
+            requirement: requirementId,
+        };
+        const routeOptions = options?.download
+            ? { query: { download: 1 } }
+            : undefined;
+
+        if (mode === 'admin') {
+            return adminRoutes.applications.requirements.file(
+                args,
+                routeOptions,
+            ).url;
+        }
+
+        if (mode === 'coordinator') {
+            return coordinatorRoutes.applications.requirements.file(
+                args,
+                routeOptions,
+            ).url;
+        }
+
+        if (portalMode === 'guest') {
+            return applyRoutes.portal.requirements.file(args, routeOptions).url;
+        }
+
+        return applicationRoutes.requirements.file(args, routeOptions).url;
+    };
+
     const isStudent = mode === 'student';
-    const isCoordinator = mode === 'coordinator';
-    const isAdmin = mode === 'admin';
 
     // Check if there are any required requirements (for showing note in header)
     const hasRequiredRequirements = useMemo(() => {
@@ -245,6 +288,14 @@ export function RequirementsList({
                             requirement.file_path ||
                             (children.length > 0 &&
                                 children.some((child) => child.file_path));
+                        const requirementPreviewUrl = requirement.file_path
+                            ? requirementFileUrl(requirement.id)
+                            : null;
+                        const requirementDownloadUrl = requirement.file_path
+                            ? requirementFileUrl(requirement.id, {
+                                  download: true,
+                              })
+                            : null;
 
                         return (
                             <div key={requirement.id} className="space-y-2">
@@ -332,63 +383,64 @@ export function RequirementsList({
                                                                         .pop()}
                                                                 </span>
                                                             </div>
-                                                            {!isStudent && (
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger
-                                                                        asChild
-                                                                    >
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-6 w-6 shrink-0 p-0 md:h-7 md:w-7"
-                                                                        >
-                                                                            <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
-                                                                        </Button>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end">
-                                                                        {canPreview(
-                                                                            requirement.file_path,
-                                                                        ) && (
-                                                                            <DropdownMenuItem
-                                                                                onClick={() => {
-                                                                                    if (
-                                                                                        requirement.file_path
-                                                                                    ) {
-                                                                                        setPreviewFile(
-                                                                                            {
-                                                                                                path: requirement.file_path,
-                                                                                                name:
-                                                                                                    requirement.file_path
-                                                                                                        .split(
-                                                                                                            '/',
-                                                                                                        )
-                                                                                                        .pop() ||
-                                                                                                    'Document',
-                                                                                            },
-                                                                                        );
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <Eye className="mr-2 h-4 w-4" />
-                                                                                Preview
-                                                                            </DropdownMenuItem>
-                                                                        )}
-                                                                        <DropdownMenuItem
+                                                            {!isStudent &&
+                                                                requirementDownloadUrl && (
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger
                                                                             asChild
                                                                         >
-                                                                            <a
-                                                                                href={`/storage/${requirement.file_path}`}
-                                                                                download
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="h-6 w-6 shrink-0 p-0 md:h-7 md:w-7"
                                                                             >
-                                                                                <Download className="mr-2 h-4 w-4" />
-                                                                                Download
-                                                                            </a>
-                                                                        </DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
-                                                            )}
+                                                                                <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end">
+                                                                            {requirementPreviewUrl &&
+                                                                                canPreview(
+                                                                                    requirement.file_path,
+                                                                                ) && (
+                                                                                    <DropdownMenuItem
+                                                                                        onClick={() => {
+                                                                                            if (
+                                                                                                requirement.file_path
+                                                                                            ) {
+                                                                                                setPreviewFile(
+                                                                                                    {
+                                                                                                        path: requirement.file_path,
+                                                                                                        name: fileName(
+                                                                                                            requirement.file_path,
+                                                                                                        ),
+                                                                                                        url: requirementPreviewUrl,
+                                                                                                    },
+                                                                                                );
+                                                                                            }
+                                                                                        }}
+                                                                                    >
+                                                                                        <Eye className="mr-2 h-4 w-4" />
+                                                                                        Preview
+                                                                                    </DropdownMenuItem>
+                                                                                )}
+                                                                            <DropdownMenuItem
+                                                                                asChild
+                                                                            >
+                                                                                <a
+                                                                                    href={
+                                                                                        requirementDownloadUrl
+                                                                                    }
+                                                                                    download
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                >
+                                                                                    <Download className="mr-2 h-4 w-4" />
+                                                                                    Download
+                                                                                </a>
+                                                                            </DropdownMenuItem>
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                )}
                                                         </div>
                                                     )}
                                                     {isStudent &&
@@ -576,6 +628,21 @@ export function RequirementsList({
                                                 childStatusInfo.icon;
                                             const shouldShowChildNotesInput =
                                                 childStatus === 'required';
+                                            const childPreviewUrl =
+                                                child.file_path
+                                                    ? requirementFileUrl(
+                                                          child.id,
+                                                      )
+                                                    : null;
+                                            const childDownloadUrl =
+                                                child.file_path
+                                                    ? requirementFileUrl(
+                                                          child.id,
+                                                          {
+                                                              download: true,
+                                                          },
+                                                      )
+                                                    : null;
 
                                             return (
                                                 <div
@@ -663,64 +730,65 @@ export function RequirementsList({
                                                                                 .pop()}
                                                                         </span>
                                                                     </div>
-                                                                    {!isStudent && (
-                                                                        <DropdownMenu>
-                                                                            <DropdownMenuTrigger
-                                                                                asChild
-                                                                            >
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="sm"
-                                                                                    className="h-6 w-6 shrink-0 p-0 md:h-7 md:w-7"
-                                                                                >
-                                                                                    <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
-                                                                                </Button>
-                                                                            </DropdownMenuTrigger>
-                                                                            <DropdownMenuContent align="end">
-                                                                                {child.file_path &&
-                                                                                    canPreview(
-                                                                                        child.file_path,
-                                                                                    ) && (
-                                                                                        <DropdownMenuItem
-                                                                                            onClick={() => {
-                                                                                                if (
-                                                                                                    child.file_path
-                                                                                                ) {
-                                                                                                    setPreviewFile(
-                                                                                                        {
-                                                                                                            path: child.file_path,
-                                                                                                            name:
-                                                                                                                child.file_path
-                                                                                                                    .split(
-                                                                                                                        '/',
-                                                                                                                    )
-                                                                                                                    .pop() ||
-                                                                                                                'Document',
-                                                                                                        },
-                                                                                                    );
-                                                                                                }
-                                                                                            }}
-                                                                                        >
-                                                                                            <Eye className="mr-2 h-4 w-4" />
-                                                                                            Preview
-                                                                                        </DropdownMenuItem>
-                                                                                    )}
-                                                                                <DropdownMenuItem
+                                                                    {!isStudent &&
+                                                                        childDownloadUrl && (
+                                                                            <DropdownMenu>
+                                                                                <DropdownMenuTrigger
                                                                                     asChild
                                                                                 >
-                                                                                    <a
-                                                                                        href={`/storage/${child.file_path}`}
-                                                                                        download
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="sm"
+                                                                                        className="h-6 w-6 shrink-0 p-0 md:h-7 md:w-7"
                                                                                     >
-                                                                                        <Download className="mr-2 h-4 w-4" />
-                                                                                        Download
-                                                                                    </a>
-                                                                                </DropdownMenuItem>
-                                                                            </DropdownMenuContent>
-                                                                        </DropdownMenu>
-                                                                    )}
+                                                                                        <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
+                                                                                    </Button>
+                                                                                </DropdownMenuTrigger>
+                                                                                <DropdownMenuContent align="end">
+                                                                                    {childPreviewUrl &&
+                                                                                        child.file_path &&
+                                                                                        canPreview(
+                                                                                            child.file_path,
+                                                                                        ) && (
+                                                                                            <DropdownMenuItem
+                                                                                                onClick={() => {
+                                                                                                    if (
+                                                                                                        child.file_path
+                                                                                                    ) {
+                                                                                                        setPreviewFile(
+                                                                                                            {
+                                                                                                                path: child.file_path,
+                                                                                                                name: fileName(
+                                                                                                                    child.file_path,
+                                                                                                                ),
+                                                                                                                url: childPreviewUrl,
+                                                                                                            },
+                                                                                                        );
+                                                                                                    }
+                                                                                                }}
+                                                                                            >
+                                                                                                <Eye className="mr-2 h-4 w-4" />
+                                                                                                Preview
+                                                                                            </DropdownMenuItem>
+                                                                                        )}
+                                                                                    <DropdownMenuItem
+                                                                                        asChild
+                                                                                    >
+                                                                                        <a
+                                                                                            href={
+                                                                                                childDownloadUrl
+                                                                                            }
+                                                                                            download
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                        >
+                                                                                            <Download className="mr-2 h-4 w-4" />
+                                                                                            Download
+                                                                                        </a>
+                                                                                    </DropdownMenuItem>
+                                                                                </DropdownMenuContent>
+                                                                            </DropdownMenu>
+                                                                        )}
                                                                 </div>
                                                             )}
                                                             {isStudent &&
@@ -1025,14 +1093,14 @@ export function RequirementsList({
                             <>
                                 {isPdfFile(previewFile.path) ? (
                                     <iframe
-                                        src={`/storage/${previewFile.path}`}
+                                        src={previewFile.url}
                                         className="h-full w-full rounded border"
                                         title={previewFile.name}
                                     />
                                 ) : isImageFile(previewFile.path) ? (
                                     <div className="flex h-full items-center justify-center">
                                         <img
-                                            src={`/storage/${previewFile.path}`}
+                                            src={previewFile.url}
                                             alt={previewFile.name}
                                             className="max-h-full max-w-full rounded object-contain"
                                         />

@@ -33,7 +33,7 @@ Route::get('/setup/storage-link', function () {
     }
 
     // Create subdirectories
-    $subdirectories = ['profile-photos', 'requirement-files'];
+    $subdirectories = ['profile-photos'];
     foreach ($subdirectories as $subdir) {
         $subdirPath = $target.'/'.$subdir;
         if (! \File::exists($subdirPath)) {
@@ -78,6 +78,12 @@ Route::get('/setup/storage-link', function () {
 // Serve storage files directly (fallback if symlink doesn't work on cPanel)
 // This route must be before other routes to catch /storage/* requests
 Route::get('storage/{path}', function (string $path) {
+    $normalizedPath = ltrim(str_replace('\\', '/', $path), '/');
+
+    if (\Illuminate\Support\Str::startsWith($normalizedPath, 'requirement-files/')) {
+        abort(404);
+    }
+
     $filePath = storage_path('app/public/'.$path);
 
     if (! file_exists($filePath) || ! is_file($filePath)) {
@@ -145,6 +151,8 @@ Route::middleware(RedirectIfStaffAuthenticated::class)->group(function () {
             ->name('apply.portal.download');
         Route::get('/apply/application/{application:application_number}/photo/download', [App\Http\Controllers\GuestApplicationController::class, 'downloadPhoto'])
             ->name('apply.portal.photo.download');
+        Route::get('/apply/application/{application:application_number}/requirements/{requirement}/file', [App\Http\Controllers\GuestApplicationController::class, 'requirementFile'])
+            ->name('apply.portal.requirements.file');
         Route::get('/apply/application/{application:application_number}/edit', [App\Http\Controllers\GuestApplicationController::class, 'edit'])
             ->name('apply.portal.edit');
         Route::put('/apply/application/{application:application_number}', [App\Http\Controllers\GuestApplicationController::class, 'update'])
@@ -175,6 +183,8 @@ Route::middleware([EnsureRoleAccess::class.':web', 'auth'])->group(function () {
             ->name('applications.download');
         Route::get('applications/{application:application_number}/photo/download', [App\Http\Controllers\ApplicationController::class, 'downloadPhoto'])
             ->name('applications.photo.download');
+        Route::get('applications/{application:application_number}/requirements/{requirement}/file', [App\Http\Controllers\ApplicationController::class, 'requirementFile'])
+            ->name('applications.requirements.file');
         Route::post('applications/{application:application_number}/requirements/{requirement}/upload', [App\Http\Controllers\ApplicationController::class, 'uploadRequirement'])
             ->name('applications.requirements.upload');
     });

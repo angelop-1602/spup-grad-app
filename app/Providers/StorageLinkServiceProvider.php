@@ -37,7 +37,7 @@ class StorageLinkServiceProvider extends ServiceProvider
             }
 
             // Create subdirectories if they don't exist
-            $subdirectories = ['profile-photos', 'requirement-files'];
+            $subdirectories = ['profile-photos'];
             foreach ($subdirectories as $subdir) {
                 $subdirPath = $target.'/'.$subdir;
                 if (! File::exists($subdirPath)) {

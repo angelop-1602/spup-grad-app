@@ -62,6 +62,7 @@ Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])-
     Route::put('coordinator/applications/{application:application_number}/requirements', [ApplicationController::class, 'updateRequirements'])->name('coordinator.applications.update-requirements');
     Route::get('coordinator/applications/{application:application_number}/download', [ApplicationController::class, 'download'])->name('coordinator.applications.download');
     Route::get('coordinator/applications/{application:application_number}/photo/download', [ApplicationController::class, 'downloadPhoto'])->name('coordinator.applications.photo.download');
+    Route::get('coordinator/applications/{application:application_number}/requirements/{requirement}/file', [ApplicationController::class, 'requirementFile'])->name('coordinator.applications.requirements.file');
     Route::get('coordinator/notifications', [NotificationController::class, 'index'])->name('coordinator.notifications.index');
     Route::post('coordinator/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('coordinator.notifications.mark-all-as-read');
     Route::post('coordinator/notifications/{notification}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('coordinator.notifications.mark-as-read');

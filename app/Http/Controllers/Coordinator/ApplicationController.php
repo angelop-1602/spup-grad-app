@@ -15,6 +15,7 @@ use App\Support\GraduateExportData;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
 use App\Support\PossibleDuplicateApplications;
+use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -954,6 +955,34 @@ class ApplicationController extends Controller
         );
 
         return \App\Http\Controllers\ApplicationController::generateProfilePhotoDownload($application);
+    }
+
+    public function requirementFile(
+        Request $request,
+        Application $application,
+        \App\Models\ApplicationRequirement $requirement,
+        RequirementFileStorage $files,
+    ): BinaryFileResponse {
+        $coordinator = Auth::guard('coordinator')->user();
+        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
+
+        if (! in_array($application->department_id, $departmentIds, true)) {
+            abort(403, 'Unauthorized access to this application.');
+        }
+
+        if ($requirement->application_id !== $application->id) {
+            abort(403);
+        }
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'coordinator.requirement_file.viewed',
+            message: 'Coordinator viewed a requirement file.',
+            subject: $requirement,
+            meta: ['application_number' => $application->application_number],
+        );
+
+        return $files->response($requirement, $request);
     }
 
     /**

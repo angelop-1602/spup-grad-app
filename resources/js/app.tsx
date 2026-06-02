@@ -4,8 +4,9 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { initializeTheme } from './hooks/use-appearance';
+import { EmbeddedBrowserNotice } from './components/embedded-browser-notice';
 import { ToastProvider } from './contexts/toast-context';
+import { initializeTheme } from './hooks/use-appearance';
 
 const appName = import.meta.env.VITE_APP_NAME || 'SPUP Graduation Application';
 
@@ -22,6 +23,7 @@ createInertiaApp({
         root.render(
             <StrictMode>
                 <ToastProvider>
+                    <EmbeddedBrowserNotice />
                     <App {...props} />
                 </ToastProvider>
             </StrictMode>,

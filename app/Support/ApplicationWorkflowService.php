@@ -252,11 +252,9 @@ class ApplicationWorkflowService
 
     public function storeRequirementFile(Application $application, ApplicationRequirement $requirement, UploadedFile $file): ApplicationRequirement
     {
-        if ($requirement->file_path && Storage::disk('public')->exists($requirement->file_path)) {
-            Storage::disk('public')->delete($requirement->file_path);
-        }
+        app(RequirementFileStorage::class)->delete($requirement->file_path);
 
-        $filePath = $file->store('requirement-files', 'public');
+        $filePath = app(RequirementFileStorage::class)->store($file);
 
         $updateData = ['file_path' => $filePath];
         if ($requirement->status === 'required') {
@@ -265,7 +263,7 @@ class ApplicationWorkflowService
 
         $requirement->update($updateData);
 
-        $this->syncIdPictureToProfilePhoto($application, $requirement, $file, $filePath);
+        $this->syncIdPictureToProfilePhoto($application, $requirement, $file);
 
         $application->load(['requirements.children']);
 
@@ -393,7 +391,6 @@ class ApplicationWorkflowService
         Application $application,
         ApplicationRequirement $requirement,
         UploadedFile $file,
-        string $filePath,
     ): void {
         if ($requirement->requirement_key !== 'id_picture') {
             return;
@@ -409,8 +406,21 @@ class ApplicationWorkflowService
             return;
         }
 
+        $profile = $application->user->profile;
+        $profilePhotoPath = $this->storeProfilePhoto(
+            $file,
+            [
+                'first_name' => $profile?->first_name,
+                'middle_name' => $profile?->middle_name,
+                'last_name' => $profile?->last_name,
+                'suffix' => $profile?->suffix,
+            ],
+            (string) ($application->user->student_id ?? 'unknown'),
+            $profile?->photo_path,
+        );
+
         $application->user->profile()->updateOrCreate([], [
-            'photo_path' => $filePath,
+            'photo_path' => $profilePhotoPath,
         ]);
     }
 

@@ -12,7 +12,7 @@ import applicationRoutes from '@/routes/applications/index';
 import applyRoutes from '@/routes/apply';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Download, Edit, Trash2 } from 'lucide-react';
+import { Download, Edit, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -492,7 +492,11 @@ export default function ShowApplication({
                                         {profilePhotoUrl(profile) ? (
                                             <div className="space-y-3">
                                                 <img
-                                                    src={profilePhotoUrl(profile) ?? ''}
+                                                    src={
+                                                        profilePhotoUrl(
+                                                            profile,
+                                                        ) ?? ''
+                                                    }
                                                     alt={`${profileDisplayName} profile`}
                                                     className="h-44 w-full max-w-[180px] rounded-lg border object-cover"
                                                 />
@@ -976,6 +980,7 @@ export default function ShowApplication({
                                 <RequirementsList
                                     requirements={application.requirements}
                                     mode="student"
+                                    portalMode={portalMode}
                                     onFileUpload={(requirementId, file) => {
                                         const maxBytes = 10 * 1024 * 1024;
                                         if (file.size > maxBytes) {

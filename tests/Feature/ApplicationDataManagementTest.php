@@ -244,6 +244,7 @@ test('admin can update application data and student id with validation', functio
 
 test('uploaded 2x2 requirement image becomes the profile photo', function () {
     Storage::fake('public');
+    Storage::fake('local');
 
     [$window, $department, $course] = dataManagementCatalog();
     $user = User::factory()->create(['student_id' => '2026-4001']);
@@ -263,8 +264,85 @@ test('uploaded 2x2 requirement image becomes the profile photo', function () {
         ->assertRedirect(route('applications.show', $application, absolute: false));
 
     $requirement->refresh();
+    $profile = $user->profile->fresh();
 
     expect($requirement->file_path)->not->toBeNull();
-    expect($user->profile->fresh()->photo_path)->toBe($requirement->file_path);
-    Storage::disk('public')->assertExists($requirement->file_path);
+    expect($profile->photo_path)->not->toBeNull();
+    expect($profile->photo_path)->not->toBe($requirement->file_path);
+    Storage::disk('local')->assertExists($requirement->file_path);
+    Storage::disk('public')->assertExists($profile->photo_path);
+});
+
+test('student can view own private requirement file but another student cannot', function () {
+    Storage::fake('local');
+
+    [$window, $department, $course] = dataManagementCatalog();
+    $owner = User::factory()->create(['student_id' => '2026-4101']);
+    $other = User::factory()->create(['student_id' => '2026-4102']);
+    dataManagementProfile($owner);
+    dataManagementProfile($other);
+    $application = dataManagementApplication($window, $department, $course, $owner);
+    $requirement = ApplicationRequirement::create([
+        'application_id' => $application->id,
+        'requirement_key' => 'private_file',
+        'requirement_label' => 'Private Requirement File',
+        'status' => 'pending',
+        'file_path' => 'requirement-files/private-test.pdf',
+    ]);
+
+    Storage::disk('local')->put($requirement->file_path, '%PDF-1.4 private file');
+
+    $this->actingAs($owner)
+        ->get(route('applications.requirements.file', [$application, $requirement]))
+        ->assertOk();
+
+    $this->actingAs($other)
+        ->get(route('applications.requirements.file', [$application, $requirement]))
+        ->assertForbidden();
+});
+
+test('public storage fallback refuses requirement files', function () {
+    Storage::fake('public');
+    Storage::disk('public')->put('requirement-files/legacy.pdf', 'legacy file');
+
+    $this->get('/storage/requirement-files/legacy.pdf')
+        ->assertNotFound();
+});
+
+test('coordinator cannot view private requirement files outside assigned departments', function () {
+    Storage::fake('local');
+
+    [$window, $assignedDepartment, $assignedCourse] = dataManagementCatalog();
+    $otherDepartment = Department::create([
+        'name' => 'College of Other Data Tests',
+        'code' => 'ODT',
+        'description' => 'Other testing department',
+        'is_active' => true,
+    ]);
+    $otherCourse = Course::create([
+        'department_id' => $otherDepartment->id,
+        'name' => 'Bachelor of Other Data Management',
+        'code' => 'BODM',
+        'description' => 'Other testing course',
+        'is_active' => true,
+    ]);
+    $coordinator = Coordinator::factory()->create();
+    $coordinator->departments()->attach($assignedDepartment);
+    $user = User::factory()->create(['student_id' => '2026-4201']);
+    $application = dataManagementApplication($window, $otherDepartment, $otherCourse, $user);
+    $requirement = ApplicationRequirement::create([
+        'application_id' => $application->id,
+        'requirement_key' => 'outside_department_file',
+        'requirement_label' => 'Outside Department File',
+        'status' => 'pending',
+        'file_path' => 'requirement-files/outside-department.pdf',
+    ]);
+
+    Storage::disk('local')->put($requirement->file_path, '%PDF-1.4 private file');
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.applications.requirements.file', [$application, $requirement]))
+        ->assertForbidden();
+
+    expect($assignedCourse->id)->not->toBe($otherCourse->id);
 });

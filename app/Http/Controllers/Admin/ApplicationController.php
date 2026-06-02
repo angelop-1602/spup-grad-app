@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\Department;
 use App\Support\ApplicationWorkflowService;
 use App\Support\PossibleDuplicateApplications;
+use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -366,6 +367,27 @@ class ApplicationController extends Controller
         );
 
         return StudentApplicationController::generateProfilePhotoDownload($application);
+    }
+
+    public function requirementFile(
+        Request $request,
+        Application $application,
+        \App\Models\ApplicationRequirement $requirement,
+        RequirementFileStorage $files,
+    ): BinaryFileResponse {
+        if ($requirement->application_id !== $application->id) {
+            abort(403);
+        }
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'admin.requirement_file.viewed',
+            message: 'Admin viewed a requirement file.',
+            subject: $requirement,
+            meta: ['application_number' => $application->application_number],
+        );
+
+        return $files->response($requirement, $request);
     }
 
     /**

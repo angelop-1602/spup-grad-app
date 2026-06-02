@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Download, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type DownloadRoute = (params: { application: string }) => { url: string };
 
@@ -42,86 +42,32 @@ function getDownloadUrl(
     return null;
 }
 
-function getFilenameFromDisposition(disposition: string | null): string | null {
-    if (!disposition) {
-        return null;
-    }
-
-    const encodedMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-
-    if (encodedMatch?.[1]) {
-        return decodeURIComponent(encodedMatch[1].replace(/["']/g, ''));
-    }
-
-    const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
-
-    return filenameMatch?.[1] ?? null;
-}
-
-function fallbackFilename(contentType: string | null): string {
-    if (contentType?.includes('pdf')) {
-        return 'GraduationApplication.pdf';
-    }
-
-    if (contentType?.includes('wordprocessingml')) {
-        return 'GraduationApplication.docx';
-    }
-
-    return 'GraduationApplication';
-}
-
-function useBackgroundDownload(downloadUrl: string | null) {
+function useDownloadNavigation() {
     const [isDownloading, setIsDownloading] = useState(false);
+    const resetTimer = useRef<number | null>(null);
 
-    const download = async () => {
-        if (!downloadUrl || isDownloading) {
-            return;
+    useEffect(() => {
+        return () => {
+            if (resetTimer.current) {
+                window.clearTimeout(resetTimer.current);
+            }
+        };
+    }, []);
+
+    const beginDownload = () => {
+        if (resetTimer.current) {
+            window.clearTimeout(resetTimer.current);
         }
 
         setIsDownloading(true);
 
-        try {
-            const response = await fetch(downloadUrl, {
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document, */*',
-                },
-            });
-            const disposition = response.headers.get('content-disposition');
-            const contentType = response.headers.get('content-type');
-            const isDownloadResponse =
-                Boolean(disposition) ||
-                Boolean(contentType?.includes('pdf')) ||
-                Boolean(contentType?.includes('wordprocessingml'));
-
-            if (!response.ok || !isDownloadResponse) {
-                throw new Error(
-                    'The application form could not be downloaded.',
-                );
-            }
-
-            const blob = await response.blob();
-            const objectUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = objectUrl;
-            link.download =
-                getFilenameFromDisposition(disposition) ??
-                fallbackFilename(contentType);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(objectUrl);
-        } catch (error) {
-            console.error(error);
-            window.alert(
-                'The application form could not be downloaded. Please try again.',
-            );
-        } finally {
+        resetTimer.current = window.setTimeout(() => {
             setIsDownloading(false);
-        }
+            resetTimer.current = null;
+        }, 1800);
     };
 
-    return { download, isDownloading };
+    return { beginDownload, isDownloading };
 }
 
 export function DownloadFormButton({
@@ -137,17 +83,9 @@ export function DownloadFormButton({
     children,
 }: DownloadFormButtonProps) {
     const downloadUrl = getDownloadUrl(applicationNumber, route, href);
-    const { download, isDownloading } = useBackgroundDownload(downloadUrl);
-
-    return (
-        <Button
-            type="button"
-            size={size}
-            variant={variant}
-            className={className}
-            disabled={!downloadUrl || isDownloading}
-            onClick={() => void download()}
-        >
+    const { beginDownload, isDownloading } = useDownloadNavigation();
+    const content = (
+        <>
             {children && !isDownloading ? (
                 children
             ) : (
@@ -160,11 +98,45 @@ export function DownloadFormButton({
                         ))}
                     {showText && (
                         <span className="hidden md:inline">
-                            {isDownloading ? 'Preparing...' : label}
+                            {isDownloading ? 'Opening...' : label}
                         </span>
                     )}
                 </>
             )}
+        </>
+    );
+
+    if (!downloadUrl) {
+        return (
+            <Button
+                type="button"
+                size={size}
+                variant={variant}
+                className={className}
+                disabled
+            >
+                {content}
+            </Button>
+        );
+    }
+
+    return (
+        <Button asChild size={size} variant={variant} className={className}>
+            <a
+                href={downloadUrl}
+                aria-busy={isDownloading}
+                aria-disabled={isDownloading}
+                onClick={(event) => {
+                    if (isDownloading) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    beginDownload();
+                }}
+            >
+                {content}
+            </a>
         </Button>
     );
 }
@@ -177,23 +149,30 @@ export function DownloadFormMenuItem({
     children,
 }: DownloadFormMenuItemProps) {
     const downloadUrl = getDownloadUrl(applicationNumber, route, href);
-    const { download, isDownloading } = useBackgroundDownload(downloadUrl);
+    const { beginDownload, isDownloading } = useDownloadNavigation();
+
+    if (!downloadUrl || isDownloading) {
+        return (
+            <DropdownMenuItem
+                className={className}
+                disabled={!downloadUrl || isDownloading}
+            >
+                {isDownloading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                )}
+                {isDownloading ? 'Opening...' : (children ?? 'Download PDF')}
+            </DropdownMenuItem>
+        );
+    }
 
     return (
-        <DropdownMenuItem
-            className={className}
-            disabled={!downloadUrl || isDownloading}
-            onSelect={(event) => {
-                event.preventDefault();
-                void download();
-            }}
-        >
-            {isDownloading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
+        <DropdownMenuItem asChild className={className}>
+            <a href={downloadUrl} onClick={beginDownload}>
                 <Download className="mr-2 h-4 w-4" />
-            )}
-            {isDownloading ? 'Preparing...' : (children ?? 'Download PDF')}
+                {children ?? 'Download PDF'}
+            </a>
         </DropdownMenuItem>
     );
 }

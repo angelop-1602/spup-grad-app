@@ -10,6 +10,7 @@ use App\Models\ApplicationWindow;
 use App\Models\SystemHealthCheck;
 use App\Support\ApplicationWorkflowService;
 use App\Support\ProfilePhoto;
+use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -1397,6 +1398,23 @@ class ApplicationController extends Controller
         }
 
         return self::generateProfilePhotoDownload($application);
+    }
+
+    public function requirementFile(
+        Request $request,
+        Application $application,
+        ApplicationRequirement $requirement,
+        RequirementFileStorage $files,
+    ): BinaryFileResponse {
+        if ($application->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($requirement->application_id !== $application->id) {
+            abort(403);
+        }
+
+        return $files->response($requirement, $request);
     }
 
     /**

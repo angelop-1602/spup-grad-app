@@ -171,6 +171,7 @@ Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(funct
     Route::put('admin/applications/{application:application_number}/requirements', [ApplicationController::class, 'updateRequirements'])->name('admin.applications.update-requirements');
     Route::get('admin/applications/{application:application_number}/download', [ApplicationController::class, 'download'])->name('admin.applications.download');
     Route::get('admin/applications/{application:application_number}/photo/download', [ApplicationController::class, 'downloadPhoto'])->name('admin.applications.photo.download');
+    Route::get('admin/applications/{application:application_number}/requirements/{requirement}/file', [ApplicationController::class, 'requirementFile'])->name('admin.applications.requirements.file');
     Route::get('admin/notifications', [NotificationController::class, 'index'])->name('admin.notifications.index');
     Route::post('admin/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('admin.notifications.mark-all-as-read');
     Route::post('admin/notifications/{notification}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('admin.notifications.mark-as-read');

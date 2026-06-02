@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use App\Support\ApplicationWorkflowService;
+use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
 use App\Support\VerificationLinks;
 use Illuminate\Http\RedirectResponse;
@@ -420,6 +421,21 @@ class GuestApplicationController extends Controller
         $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.photo.downloaded', 'Guest downloaded the profile photo.');
 
         return ApplicationController::generateProfilePhotoDownload($application);
+    }
+
+    public function requirementFile(
+        Request $request,
+        Application $application,
+        ApplicationRequirement $requirement,
+        RequirementFileStorage $files,
+    ): BinaryFileResponse {
+        if ($requirement->application_id !== $application->id) {
+            abort(403);
+        }
+
+        $this->logApplicationGuestEvent($application, 'graduation_application', 'guest.requirement_file.viewed', 'Guest viewed a requirement file.', subject: $requirement);
+
+        return $files->response($requirement, $request);
     }
 
     public function edit(Application $application): Response
