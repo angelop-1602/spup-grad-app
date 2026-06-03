@@ -1,8 +1,12 @@
-import type { ApplicationRequirement } from '@/components/requirements-list';
+import {
+    ApplicationTrackingCard,
+    type ApplicationTracking,
+} from '@/components/application-tracking-card';
 import {
     PossibleDuplicateApplications,
     type PossibleDuplicateApplication,
 } from '@/components/possible-duplicate-applications';
+import type { ApplicationRequirement } from '@/components/requirements-list';
 import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
@@ -136,6 +140,7 @@ interface Application {
 
 interface ShowApplicationProps {
     application: Application;
+    tracking?: ApplicationTracking | null;
     possibleDuplicates: PossibleDuplicateApplication[];
 }
 
@@ -163,6 +168,7 @@ function flattenRequirements(requirements: ApplicationRequirement[]) {
 
 export default function CoordinatorShowApplication({
     application,
+    tracking,
     possibleDuplicates,
 }: ShowApplicationProps) {
     const { addToast } = useToast();
@@ -347,7 +353,11 @@ export default function CoordinatorShowApplication({
                     </div>
                 </div>
 
-                <PossibleDuplicateApplications duplicates={possibleDuplicates} />
+                <PossibleDuplicateApplications
+                    duplicates={possibleDuplicates}
+                />
+
+                <ApplicationTrackingCard tracking={tracking} />
 
                 {/* Main Content Grid */}
                 <div className="grid gap-4 md:gap-6 lg:grid-cols-3 lg:gap-8">

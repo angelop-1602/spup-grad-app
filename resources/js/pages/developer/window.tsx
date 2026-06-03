@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, MailWarning } from 'lucide-react';
+import { ArrowLeft, MailWarning, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatDate, headline, statusClass } from './console-utils';
 
@@ -46,9 +46,11 @@ type DuplicatePair = {
     left: ApplicationRecord;
     right: ApplicationRecord;
     match: {
+        matched_on?: string | null;
         first_name: string;
         last_name: string;
         student_id: string;
+        email?: string | null;
     };
 };
 
@@ -193,6 +195,9 @@ export default function DeveloperWindow({
     duplicatePairs,
 }: DeveloperWindowProps) {
     const [sendingPairId, setSendingPairId] = useState<string | null>(null);
+    const [deletingRecordKey, setDeletingRecordKey] = useState<string | null>(
+        null,
+    );
 
     const sendDuplicateAlert = (pair: DuplicatePair) => {
         setSendingPairId(pair.id);
@@ -207,6 +212,30 @@ export default function DeveloperWindow({
                 onFinish: () => setSendingPairId(null),
             },
         );
+    };
+
+    const deleteDuplicateRecord = (
+        pair: DuplicatePair,
+        record: ApplicationRecord,
+    ) => {
+        const confirmed = globalThis.confirm(
+            `Delete duplicate record ${recordIdentifier(record)} for ${record.applicant_name}? This cannot be undone.`,
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingRecordKey(record.key);
+        router.delete(`/developer/windows/${window.id}/duplicates`, {
+            data: {
+                left: pair.left.key,
+                right: pair.right.key,
+                selected_record: record.key,
+            },
+            preserveScroll: true,
+            onFinish: () => setDeletingRecordKey(null),
+        });
     };
 
     return (
@@ -310,6 +339,13 @@ export default function DeveloperWindow({
                                             className="border-t align-top"
                                         >
                                             <td className="px-3 py-3">
+                                                <Badge
+                                                    variant="outline"
+                                                    className="mb-2"
+                                                >
+                                                    {pair.match.matched_on ??
+                                                        'Identity details'}
+                                                </Badge>
                                                 <p className="font-medium">
                                                     {pair.match.first_name}{' '}
                                                     {pair.match.last_name}
@@ -317,6 +353,11 @@ export default function DeveloperWindow({
                                                 <p className="text-xs text-muted-foreground">
                                                     {pair.match.student_id}
                                                 </p>
+                                                {pair.match.email ? (
+                                                    <p className="text-xs break-all text-muted-foreground">
+                                                        {pair.match.email}
+                                                    </p>
+                                                ) : null}
                                             </td>
                                             {[pair.left, pair.right].map(
                                                 (record) => (
@@ -359,6 +400,28 @@ export default function DeveloperWindow({
                                                                     record.status,
                                                                 )}
                                                             </Badge>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                className="mt-2 w-fit"
+                                                                onClick={() =>
+                                                                    deleteDuplicateRecord(
+                                                                        pair,
+                                                                        record,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    deletingRecordKey ===
+                                                                    record.key
+                                                                }
+                                                            >
+                                                                <Trash2 className="size-4" />
+                                                                {deletingRecordKey ===
+                                                                record.key
+                                                                    ? 'Deleting'
+                                                                    : 'Delete'}
+                                                            </Button>
                                                         </div>
                                                     </td>
                                                 ),

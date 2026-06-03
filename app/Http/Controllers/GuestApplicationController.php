@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Notifications\GuestApplicationVerificationNotification;
 use App\Support\ApplicationWorkflowService;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
 use App\Support\VerificationLinks;
@@ -372,7 +373,12 @@ class GuestApplicationController extends Controller
         return redirect()->route('apply.portal.show', $draft->application);
     }
 
-    public function show(Request $request, Application $application, ApplicationWorkflowService $workflow): Response
+    public function show(
+        Request $request,
+        Application $application,
+        ApplicationWorkflowService $workflow,
+        GuestApplicationDraftDetails $draftDetails,
+    ): Response
     {
         $application->load([
             'window',
@@ -406,6 +412,7 @@ class GuestApplicationController extends Controller
             'application' => $application,
             'profile' => $application->user->profile,
             'portalMode' => 'guest',
+            'tracking' => $draftDetails->trackingForDraft($draft),
         ]);
     }
 

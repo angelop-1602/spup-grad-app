@@ -217,6 +217,7 @@ class DeveloperDiagnosticsService
                 'application_edit_url' => $draft->application
                     ? route('developer.applications.edit', $draft->application->application_number, false)
                     : null,
+                'detail_url' => route('developer.drafts.show', $draft, false),
                 'verification_status' => $this->draftVerificationStatus($draft),
                 'created_at' => $draft->created_at?->toIso8601String(),
                 'verified_at' => $draft->verified_at?->toIso8601String(),

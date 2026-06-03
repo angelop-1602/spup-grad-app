@@ -41,6 +41,10 @@ const typeIcon = {
 };
 
 function resultLabel(type: GlobalSearchResult['type']) {
+    if (type === 'draft') {
+        return 'Manual verification';
+    }
+
     return type.charAt(0).toUpperCase() + type.slice(1);
 }
 

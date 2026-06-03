@@ -11,8 +11,8 @@ use App\Models\ApplicationWindow;
 use App\Models\SystemHealthCheck;
 use App\Notifications\DuplicateApplicationDetected;
 use App\Support\DuplicateApplicationRecords;
-use App\Support\HistoricalWindowDataBuilder;
 use App\Support\GraduateExportData;
+use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
 use App\Support\SystemEventLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -66,7 +66,7 @@ class ApplicationWindowController extends Controller
      */
     public function historical(Request $request, string $batch): Response
     {
-        $builder = new HistoricalWindowDataBuilder();
+        $builder = new HistoricalWindowDataBuilder;
 
         return Inertia::render('admin/windows/show', $builder->build($request, $batch, 'admin'));
     }
@@ -147,12 +147,7 @@ class ApplicationWindowController extends Controller
                 });
             })
             ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
-                if ($statusFilter === 'pending') {
-                    // Pending includes both 'pending' and 'submitted' statuses
-                    $query->whereIn('status', ['pending', 'submitted']);
-                } else {
-                    $query->where('status', $statusFilter);
-                }
+                $query->where('status', $statusFilter);
             });
 
         // Paginate applications
@@ -393,7 +388,8 @@ class ApplicationWindowController extends Controller
                 'hierarchical' => $byDepartment ?: [], // For hierarchical display
                 'status_counts' => [
                     'all' => $allApplications->count(),
-                    'pending' => (int) (($statusCounts['pending'] ?? 0) + ($statusCounts['submitted'] ?? 0)),
+                    'submitted' => (int) ($statusCounts['submitted'] ?? 0),
+                    'pending' => (int) ($statusCounts['pending'] ?? 0),
                     'approved' => (int) ($statusCounts['approved'] ?? 0),
                     'incomplete' => (int) ($statusCounts['incomplete'] ?? 0),
                 ],
@@ -456,6 +452,72 @@ class ApplicationWindowController extends Controller
         );
 
         return $this->sendDuplicateAlertEmail($left, $right, $notification, $duplicates);
+    }
+
+    public function deleteDuplicate(
+        Request $request,
+        ApplicationWindow $window,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'left' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/'],
+            'right' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::notIn([$request->input('left')])],
+            'selected_record' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::in([$request->input('left'), $request->input('right')])],
+        ]);
+
+        [$left, $right] = [
+            $duplicates->resolve($validated['left']),
+            $duplicates->resolve($validated['right']),
+        ];
+
+        if (! $left || ! $right) {
+            return back()->withErrors([
+                'duplicate' => 'One of the duplicate records no longer exists.',
+            ]);
+        }
+
+        if ((int) $left['window_id'] !== $window->id || (int) $right['window_id'] !== $window->id) {
+            return back()->withErrors([
+                'duplicate' => 'Both duplicate records must belong to the selected application window.',
+            ]);
+        }
+
+        if (! $duplicates->recordsMatch($left, $right)) {
+            return back()->withErrors([
+                'duplicate' => 'These records no longer match on the same identity details.',
+            ]);
+        }
+
+        $selectedRecord = $validated['selected_record'] === $validated['left']
+            ? $left
+            : $right;
+        $remainingRecord = $validated['selected_record'] === $validated['left']
+            ? $right
+            : $left;
+        $subject = ($selectedRecord['model'] ?? null) instanceof \Illuminate\Database\Eloquent\Model
+            ? $selectedRecord['model']
+            : null;
+
+        $duplicates->deleteRecord($selectedRecord);
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'admin.duplicate_application.record_deleted',
+            message: 'Admin deleted a duplicate graduation application record from the application window review.',
+            subject: $subject,
+            meta: [
+                'window_id' => $window->id,
+                'left_record' => $left['key'],
+                'right_record' => $right['key'],
+                'selected_record' => $selectedRecord['key'],
+                'remaining_record' => $remainingRecord['key'],
+                'selected_type' => $selectedRecord['type'],
+                'selected_application_number' => $selectedRecord['application_number'],
+                'selected_tracking_code' => $selectedRecord['tracking_code'],
+            ],
+        );
+
+        return back()->with('success', 'Selected duplicate record deleted.');
     }
 
     /**
@@ -645,8 +707,7 @@ class ApplicationWindowController extends Controller
         UpdateApplicationWindowRequest $request,
         ApplicationWindow $window,
         SystemEventLogger $logger,
-    ): RedirectResponse
-    {
+    ): RedirectResponse {
         $before = $window->only(['title', 'description', 'start_date', 'end_date']);
         $window->update($request->validated());
 

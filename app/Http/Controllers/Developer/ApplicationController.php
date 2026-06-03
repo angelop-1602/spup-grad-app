@@ -7,6 +7,7 @@ use App\Http\Requests\Application\StaffUpdateApplicationRequest;
 use App\Models\Application;
 use App\Models\Department;
 use App\Support\ApplicationWorkflowService;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\PossibleDuplicateApplications;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
@@ -15,8 +16,11 @@ use Inertia\Response;
 
 class ApplicationController extends Controller
 {
-    public function edit(Application $application, PossibleDuplicateApplications $duplicates): Response
-    {
+    public function edit(
+        Application $application,
+        PossibleDuplicateApplications $duplicates,
+        GuestApplicationDraftDetails $draftDetails,
+    ): Response {
         $this->loadApplicationForEditing($application);
 
         return Inertia::render('developer/applications/edit', [
@@ -26,6 +30,7 @@ class ApplicationController extends Controller
             'isApproved' => $application->status === 'approved',
             'updateUrl' => route('developer.applications.update', $application->application_number, false),
             'cancelHref' => route('developer.manual-verification', ['search' => $application->application_number], false),
+            'tracking' => $draftDetails->trackingForApplication($application),
             'possibleDuplicates' => $duplicates->forApplication(
                 $application,
                 'developer.applications.edit',

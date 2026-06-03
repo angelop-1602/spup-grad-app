@@ -9,6 +9,7 @@ use App\Models\ApplicationRequirement;
 use App\Models\ApplicationWindow;
 use App\Models\SystemHealthCheck;
 use App\Support\ApplicationWorkflowService;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\ProfilePhoto;
 use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
@@ -184,7 +185,12 @@ class ApplicationController extends Controller
     /**
      * Display the specified application.
      */
-    public function show(Request $request, Application $application, ApplicationWorkflowService $workflow): Response
+    public function show(
+        Request $request,
+        Application $application,
+        ApplicationWorkflowService $workflow,
+        GuestApplicationDraftDetails $draftDetails,
+    ): Response
     {
         // Ensure the application belongs to the user
         if ($application->user_id !== $request->user()->id) {
@@ -205,6 +211,7 @@ class ApplicationController extends Controller
         return Inertia::render('applications/show', [
             'application' => $application,
             'profile' => $request->user()->profile,
+            'tracking' => $draftDetails->trackingForApplication($application),
         ]);
     }
 

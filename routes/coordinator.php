@@ -46,6 +46,7 @@ Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])-
     Route::get('coordinator/audit-trail', [AuditTrailController::class, 'index'])->name('coordinator.audit-trail.index');
     Route::get('coordinator/global-search', [StaffGlobalSearchController::class, 'index'])->name('coordinator.global-search');
     Route::get('coordinator/manual-verification', [ManualVerificationController::class, 'index'])->name('coordinator.manual-verification.index');
+    Route::get('coordinator/manual-verification/{draft}', [ManualVerificationController::class, 'show'])->name('coordinator.manual-verification.show');
     Route::post('coordinator/manual-verification/{draft}/verify', [ManualVerificationController::class, 'verify'])->name('coordinator.manual-verification.verify');
 
     // Applications / Windows
@@ -54,6 +55,7 @@ Route::middleware([EnsureRoleAccess::class.':coordinator', 'auth:coordinator'])-
         ->name('coordinator.windows.historical');
     Route::get('coordinator/windows/{window}', [ApplicationController::class, 'window'])->name('coordinator.windows.show');
     Route::post('coordinator/windows/{window}/duplicates/alert', [ApplicationController::class, 'sendDuplicateAlert'])->name('coordinator.windows.duplicates.alert');
+    Route::delete('coordinator/windows/{window}/duplicates', [ApplicationController::class, 'deleteDuplicate'])->name('coordinator.windows.duplicates.destroy');
     // Export route must come before parameterized routes to avoid route conflicts
     Route::get('coordinator/applications/export', [ApplicationController::class, 'export'])->name('coordinator.applications.export');
     Route::get('coordinator/windows/{window}/export-statistics-pdf', [ApplicationController::class, 'exportStatisticsPdf'])->name('coordinator.windows.export-statistics-pdf');

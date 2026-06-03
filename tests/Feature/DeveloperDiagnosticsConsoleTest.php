@@ -365,6 +365,22 @@ test('developer can review window applications and send duplicate alerts', funct
         DuplicateApplicationDetected::class,
         fn (DuplicateApplicationDetected $notification) => str_contains($notification->reviewUrl(), "/duplicate-applications/{$leftKey}/{$rightKey}")
     );
+
+    $this->actingAs($developer, 'developer')
+        ->withSession(['developer.two_factor_passed' => true])
+        ->delete(route('developer.windows.duplicates.destroy', $window), [
+            'left' => $leftKey,
+            'right' => $rightKey,
+            'selected_record' => $rightKey,
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('applications', ['id' => $application->id]);
+    $this->assertDatabaseMissing('guest_application_drafts', ['id' => $draft->id]);
+    $this->assertDatabaseHas('system_events', [
+        'action' => 'developer.duplicate_application.record_deleted',
+        'subject_id' => $draft->id,
+    ]);
 });
 
 test('signed duplicate resolution deletes only one selected record', function () {

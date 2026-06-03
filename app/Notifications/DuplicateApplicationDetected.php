@@ -15,8 +15,7 @@ class DuplicateApplicationDetected extends Notification
         private readonly array $left,
         private readonly array $right,
         private readonly string $reviewUrl,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<int, string>
@@ -31,7 +30,7 @@ class DuplicateApplicationDetected extends Notification
         return (new MailMessage)
             ->subject('Duplicate Graduation Applications Need Review')
             ->greeting('Duplicate application review needed')
-            ->line('We found two graduation application records with the same first name, last name, and student ID.')
+            ->line('We found two graduation application records with matching applicant identity details.')
             ->line('Record A: '.$this->recordLine($this->left))
             ->line('Record B: '.$this->recordLine($this->right))
             ->line('Open the secure link below to review both records and delete only the duplicate record you choose.')

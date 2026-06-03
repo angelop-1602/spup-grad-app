@@ -6,7 +6,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Link } from '@inertiajs/react';
-import { CheckCircle2, Pencil } from 'lucide-react';
+import { CheckCircle2, Eye, Pencil } from 'lucide-react';
 
 export type ManualVerificationRecord = {
     id: number;
@@ -23,6 +23,7 @@ export type ManualVerificationRecord = {
     course_name?: string | null;
     application_number: string | null;
     application_edit_url?: string | null;
+    detail_url?: string | null;
     verification_status: string;
     status?: string;
     created_at: string | null;
@@ -132,6 +133,20 @@ export function ManualVerificationTable({
                             </td>
                             <td className="px-3 py-3 text-right">
                                 <div className="flex flex-wrap justify-end gap-2">
+                                    {record.detail_url ? (
+                                        <Button
+                                            asChild
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 px-2 text-xs"
+                                        >
+                                            <Link href={record.detail_url}>
+                                                <Eye className="size-3.5" />
+                                                Review
+                                            </Link>
+                                        </Button>
+                                    ) : null}
                                     {record.application_edit_url ? (
                                         <Button
                                             asChild

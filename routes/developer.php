@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\Developer\ApplicationController;
 use App\Http\Controllers\Developer\Auth\DeveloperLoginController;
 use App\Http\Controllers\Developer\Auth\DeveloperTwoFactorChallengeController;
 use App\Http\Controllers\Developer\Auth\DeveloperTwoFactorSetupController;
-use App\Http\Controllers\Developer\ApplicationController;
 use App\Http\Controllers\Developer\DeveloperDashboardController;
 use App\Http\Controllers\Developer\SupportTicketController;
 use App\Http\Controllers\StaffGlobalSearchController;
@@ -39,12 +39,14 @@ Route::prefix('developer')->name('developer.')->group(function () {
             Route::get('windows', [DeveloperDashboardController::class, 'windows'])->name('windows');
             Route::get('windows/{window}', [DeveloperDashboardController::class, 'window'])->name('windows.show');
             Route::post('windows/{window}/duplicates/alert', [DeveloperDashboardController::class, 'sendDuplicateAlert'])->name('windows.duplicates.alert');
+            Route::delete('windows/{window}/duplicates', [DeveloperDashboardController::class, 'deleteDuplicate'])->name('windows.duplicates.destroy');
             Route::get('manual-verification', [DeveloperDashboardController::class, 'manualVerification'])->name('manual-verification');
             Route::get('applications/{application:application_number}/edit', [ApplicationController::class, 'edit'])->name('applications.edit');
             Route::put('applications/{application:application_number}', [ApplicationController::class, 'update'])->name('applications.update');
             Route::delete('applications/{application:application_number}', [ApplicationController::class, 'destroy'])->name('applications.destroy');
             Route::get('events', [DeveloperDashboardController::class, 'events'])->name('events');
             Route::get('health', [DeveloperDashboardController::class, 'health'])->name('health');
+            Route::get('drafts/{draft}', [DeveloperDashboardController::class, 'showDraft'])->name('drafts.show');
             Route::post('drafts/{draft}/verify', [DeveloperDashboardController::class, 'verifyDraft'])->name('drafts.verify');
             Route::get('tickets', [SupportTicketController::class, 'index'])->name('tickets.index');
             Route::get('tickets/{ticket}', [SupportTicketController::class, 'show'])->name('tickets.show');

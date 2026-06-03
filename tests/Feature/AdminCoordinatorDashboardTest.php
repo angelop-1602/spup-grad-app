@@ -231,7 +231,56 @@ test('admin can view unverified guest applications on a dedicated page', functio
             ->where('drafts.data.0.id', $draft->id)
             ->where('drafts.data.0.email', 'unverified.applicant@example.com')
             ->where('drafts.data.0.student_id', '2026-0301')
+            ->where('drafts.data.0.detail_url', route('admin.unverified-applications.show', $draft, absolute: false))
         );
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.unverified.show@example.com']), 'admin')
+        ->get(route('admin.unverified-applications.show', $draft))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('staff/draft-application-show')
+            ->where('draft.id', $draft->id)
+            ->where('tracking.tracking_code', $draft->tracking_code)
+            ->where('tracking.tracking_pin', $draft->tracking_pin)
+            ->where('profile.first_name', 'Unverified')
+            ->where('profile.last_name', 'Applicant')
+            ->missing('application.requirements')
+        );
+});
+
+test('admin global search links unverified draft applications to manual verification', function () {
+    [$window, $department, $course] = dashboardCatalog('GSV');
+    $application = dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'global.search.unverified@example.com',
+        '2026-0311',
+    );
+    $draft = GuestApplicationDraft::create([
+        'window_id' => $window->id,
+        'email' => 'global.search.unverified@example.com',
+        'student_id' => '2026-0311',
+        'application_id' => $application->id,
+        'payload' => [
+            'first_name' => 'Global',
+            'last_name' => 'Search',
+            'department_id' => $department->id,
+            'course_id' => $course->id,
+        ],
+    ]);
+
+    $response = $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.global-search@example.com']), 'admin')
+        ->getJson(route('admin.global-search', ['search' => $application->application_number]));
+
+    $response->assertOk();
+
+    $result = collect($response->json('results'))->firstWhere('id', 'draft-'.$draft->id);
+
+    expect($result)->not->toBeNull()
+        ->and($result['type'])->toBe('draft')
+        ->and($result['title'])->toBe('Global Search')
+        ->and($result['url'])->toBe(route('admin.unverified-applications.show', $draft, false));
 });
 
 test('admin window shows unverified and duplicate checks with department codes', function () {
@@ -282,6 +331,165 @@ test('admin window shows unverified and duplicate checks with department codes',
 
     Notification::assertSentTo($application->user->fresh(), DuplicateApplicationDetected::class);
     Notification::assertSentTo($draft->fresh(), DuplicateApplicationDetected::class);
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.window-delete-duplicate@example.com']), 'admin')
+        ->delete(route('admin.windows.duplicates.destroy', $window), [
+            'left' => 'application-'.$application->id,
+            'right' => 'draft-'.$draft->id,
+            'selected_record' => 'draft-'.$draft->id,
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('applications', ['id' => $application->id]);
+    $this->assertDatabaseMissing('guest_application_drafts', ['id' => $draft->id]);
+    $this->assertDatabaseHas('system_events', [
+        'action' => 'admin.duplicate_application.record_deleted',
+        'subject_id' => $draft->id,
+    ]);
+});
+
+test('window duplicate checks catch matching student ids even when submitted names differ', function () {
+    [$window, $department, $course] = dashboardCatalog('DIDS');
+    $application = dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'duplicate.student-id.application@example.com',
+        '2026-0801',
+    );
+
+    $draft = GuestApplicationDraft::create([
+        'window_id' => $window->id,
+        'email' => 'duplicate.student-id.draft@example.com',
+        'student_id' => '2026-0801',
+        'payload' => [
+            'first_name' => 'Corrected',
+            'last_name' => 'Name',
+            'date_of_birth' => '1999-05-15',
+            'department_id' => $department->id,
+            'course_id' => $course->id,
+        ],
+    ]);
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.student-id-duplicate@example.com']), 'admin')
+        ->get(route('admin.windows.show', $window))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/windows/show')
+            ->has('duplicatePairs', 1)
+            ->where('duplicatePairs.0.left.key', 'application-'.$application->id)
+            ->where('duplicatePairs.0.right.key', 'draft-'.$draft->id)
+            ->where('duplicatePairs.0.match.matched_on', 'Student ID')
+            ->where('duplicatePairs.0.match.student_id', '2026-0801')
+        );
+});
+
+test('application window status tabs separate submitted from pending records', function () {
+    [$window, $department, $course] = dashboardCatalog('SUBT');
+
+    $submitted = dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'submitted.window.tab@example.com',
+        '2026-0701',
+        'submitted',
+    );
+    $pending = dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'pending.window.tab@example.com',
+        '2026-0702',
+        'pending',
+    );
+    dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'approved.window.tab@example.com',
+        '2026-0703',
+        'approved',
+    );
+    dashboardApplication(
+        $window,
+        $department,
+        $course,
+        'incomplete.window.tab@example.com',
+        '2026-0704',
+        'incomplete',
+    );
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.submitted-tabs@example.com']), 'admin')
+        ->get(route('admin.windows.show', $window))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/windows/show')
+            ->where('stats.status_counts.all', 4)
+            ->where('stats.status_counts.submitted', 1)
+            ->where('stats.status_counts.pending', 1)
+            ->where('stats.status_counts.approved', 1)
+            ->where('stats.status_counts.incomplete', 1)
+        );
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.submitted-filter@example.com']), 'admin')
+        ->get(route('admin.windows.show', ['window' => $window, 'status' => 'submitted']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/windows/show')
+            ->where('filters.status', 'submitted')
+            ->where('applications.total', 1)
+            ->where('applications.data.0.id', $submitted->id)
+            ->where('applications.data.0.status', 'submitted')
+        );
+
+    $this->actingAs(dashboardAdmin(['email' => 'dashboard.admin.pending-filter@example.com']), 'admin')
+        ->get(route('admin.windows.show', ['window' => $window, 'status' => 'pending']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('admin/windows/show')
+            ->where('filters.status', 'pending')
+            ->where('applications.total', 1)
+            ->where('applications.data.0.id', $pending->id)
+            ->where('applications.data.0.status', 'pending')
+        );
+
+    $coordinator = Coordinator::factory()->create([
+        'email' => 'dashboard.coordinator.submitted-tabs@example.com',
+    ]);
+    $coordinator->departments()->attach($department);
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.windows.show', $window))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('coordinator/applications/window')
+            ->where('stats.status_counts.all', 4)
+            ->where('stats.status_counts.submitted', 1)
+            ->where('stats.status_counts.pending', 1)
+        );
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.windows.show', ['window' => $window, 'status' => 'submitted']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('coordinator/applications/window')
+            ->where('filters.status', 'submitted')
+            ->where('applications.total', 1)
+            ->where('applications.data.0.id', $submitted->id)
+            ->where('applications.data.0.status', 'submitted')
+        );
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.windows.show', ['window' => $window, 'status' => 'pending']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('coordinator/applications/window')
+            ->where('filters.status', 'pending')
+            ->where('applications.total', 1)
+            ->where('applications.data.0.id', $pending->id)
+            ->where('applications.data.0.status', 'pending')
+        );
 });
 
 test('coordinator can manually verify guest drafts for assigned departments only', function () {
@@ -375,7 +583,23 @@ test('coordinator can manually verify guest drafts for assigned departments only
         ->assertInertia(fn (Assert $page) => $page
             ->component('coordinator/manual-verification/index')
             ->where('drafts.data.0.id', $assignedDraft->id)
+            ->where('drafts.data.0.detail_url', route('coordinator.manual-verification.show', $assignedDraft, absolute: false))
             ->where('drafts.total', 1)
+        );
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.manual-verification.show', $otherDraft))
+        ->assertForbidden();
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->get(route('coordinator.manual-verification.show', $assignedDraft))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('staff/draft-application-show')
+            ->where('draft.id', $assignedDraft->id)
+            ->where('tracking.tracking_code', $assignedDraft->tracking_code)
+            ->where('tracking.tracking_pin', $assignedDraft->tracking_pin)
+            ->where('profile.first_name', 'Assigned')
         );
 
     $this->actingAs($coordinator, 'coordinator')
@@ -486,9 +710,32 @@ test('coordinator window duplicate checks are limited to assigned department cod
     Notification::assertSentTo($assignedDraft->fresh(), DuplicateApplicationDetected::class);
 
     $this->actingAs($coordinator, 'coordinator')
+        ->delete(route('coordinator.windows.duplicates.destroy', $window), [
+            'left' => 'application-'.$assignedApplication->id,
+            'right' => 'draft-'.$assignedDraft->id,
+            'selected_record' => 'draft-'.$assignedDraft->id,
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('applications', ['id' => $assignedApplication->id]);
+    $this->assertDatabaseMissing('guest_application_drafts', ['id' => $assignedDraft->id]);
+    $this->assertDatabaseHas('system_events', [
+        'action' => 'coordinator.duplicate_application.record_deleted',
+        'subject_id' => $assignedDraft->id,
+    ]);
+
+    $this->actingAs($coordinator, 'coordinator')
         ->post(route('coordinator.windows.duplicates.alert', $window), [
             'left' => 'application-'.$otherApplication->id,
             'right' => 'draft-'.$otherDraft->id,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($coordinator, 'coordinator')
+        ->delete(route('coordinator.windows.duplicates.destroy', $window), [
+            'left' => 'application-'.$otherApplication->id,
+            'right' => 'draft-'.$otherDraft->id,
+            'selected_record' => 'draft-'.$otherDraft->id,
         ])
         ->assertForbidden();
 });

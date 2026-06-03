@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicationWindow;
 use App\Models\GuestApplicationDraft;
+use App\Support\GuestApplicationDraftDetails;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -56,6 +57,7 @@ class UnverifiedApplicationController extends Controller
                 'application_edit_url' => $draft->application
                     ? route('admin.applications.edit', $draft->application->application_number, false)
                     : null,
+                'detail_url' => route('admin.unverified-applications.show', $draft, false),
                 'verification_status' => $this->draftVerificationStatus($draft),
                 'created_at' => $draft->created_at?->toIso8601String(),
                 'verified_at' => $draft->verified_at?->toIso8601String(),
@@ -72,6 +74,20 @@ class UnverifiedApplicationController extends Controller
                 'search' => $search,
                 'window_id' => $selectedWindowId ? (string) $selectedWindowId : 'all',
             ],
+        ]);
+    }
+
+    public function show(GuestApplicationDraft $draft, GuestApplicationDraftDetails $details): Response
+    {
+        return Inertia::render('staff/draft-application-show', [
+            ...$details->draftPayload($draft, 'admin'),
+            'viewerRole' => 'admin',
+            'title' => 'Manual Verification',
+            'backUrl' => route('admin.unverified-applications.index', [
+                'search' => $draft->ensureTrackingCode(),
+                'window_id' => 'all',
+            ], false),
+            'verifyUrl' => route('admin.students.drafts.verify', $draft, false),
         ]);
     }
 

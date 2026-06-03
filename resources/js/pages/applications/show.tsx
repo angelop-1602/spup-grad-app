@@ -1,4 +1,8 @@
 import { ApplicationStatusBadge } from '@/components/application-status-badge';
+import {
+    ApplicationTrackingCard,
+    type ApplicationTracking,
+} from '@/components/application-tracking-card';
 import { DownloadFormButton } from '@/components/download-form-button';
 import { RequirementsList } from '@/components/requirements-list';
 import { Button } from '@/components/ui/button';
@@ -143,12 +147,14 @@ interface ShowApplicationProps {
         grad_doctoral_year?: number | null;
     } | null;
     portalMode?: 'student' | 'guest';
+    tracking?: ApplicationTracking | null;
 }
 
 export default function ShowApplication({
     application,
     profile,
     portalMode = 'student',
+    tracking,
 }: ShowApplicationProps) {
     const [uploadingRequirement, setUploadingRequirement] = useState<
         number | null
@@ -473,6 +479,8 @@ export default function ShowApplication({
                             </div>
                         </div>
                     </div>
+
+                    <ApplicationTrackingCard tracking={tracking} />
                 </div>
 
                 <div className="grid gap-4 md:gap-8 lg:grid-cols-3">

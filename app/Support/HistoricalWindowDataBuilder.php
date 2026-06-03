@@ -34,7 +34,7 @@ class HistoricalWindowDataBuilder
             ->through(fn (HistoricalGraduationApplication $record) => $this->mapRecord($record, $viewer));
 
         $allRecords = (clone $query)->get();
-        $stats = $this->buildStats($allRecords, $viewer);
+        $stats = $this->buildStats($allRecords);
 
         return [
             'window' => [
@@ -185,7 +185,7 @@ class HistoricalWindowDataBuilder
     /**
      * @return array<string, mixed>
      */
-    private function buildStats(Collection $records, string $viewer): array
+    private function buildStats(Collection $records): array
     {
         $attendanceStats = $records
             ->groupBy('attendance')
@@ -227,13 +227,11 @@ class HistoricalWindowDataBuilder
 
         $statusCounts = [
             'all' => $records->count(),
+            'submitted' => (int) ($statusCountsRaw['submitted'] ?? 0),
+            'pending' => $pendingCount,
             'approved' => (int) ($statusCountsRaw['approved'] ?? 0),
             'incomplete' => (int) ($statusCountsRaw['incomplete'] ?? 0),
         ];
-
-        if ($viewer === 'admin') {
-            $statusCounts['pending'] = $pendingCount;
-        }
 
         return [
             'attendance' => $attendance,

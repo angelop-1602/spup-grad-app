@@ -1,4 +1,8 @@
 import { ApplicationStatusBadge } from '@/components/application-status-badge';
+import {
+    ApplicationTrackingCard,
+    type ApplicationTracking,
+} from '@/components/application-tracking-card';
 import { DownloadFormButton } from '@/components/download-form-button';
 import {
     PossibleDuplicateApplications,
@@ -148,6 +152,7 @@ interface Application {
 
 interface ShowApplicationProps {
     application: Application;
+    tracking?: ApplicationTracking | null;
     possibleDuplicates: PossibleDuplicateApplication[];
 }
 
@@ -175,6 +180,7 @@ function flattenRequirements(requirements: ApplicationRequirement[]) {
 
 export default function AdminShowApplication({
     application,
+    tracking,
     possibleDuplicates,
 }: ShowApplicationProps) {
     const { addToast } = useToast();
@@ -373,6 +379,8 @@ export default function AdminShowApplication({
                     duplicates={possibleDuplicates}
                     canDelete
                 />
+
+                <ApplicationTrackingCard tracking={tracking} />
 
                 {/* Main Content Grid */}
                 <div className="grid gap-8 lg:grid-cols-3">

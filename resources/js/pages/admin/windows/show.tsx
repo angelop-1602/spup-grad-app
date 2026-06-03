@@ -170,6 +170,7 @@ interface WindowStats {
     }>;
     status_counts?: {
         all: number;
+        submitted: number;
         pending: number;
         approved: number;
         incomplete: number;
@@ -229,7 +230,13 @@ export default function ShowWindow({
         majors: [],
         nationalities: [],
         hierarchical: [],
-        status_counts: { all: 0, pending: 0, approved: 0, incomplete: 0 },
+        status_counts: {
+            all: 0,
+            submitted: 0,
+            pending: 0,
+            approved: 0,
+            incomplete: 0,
+        },
     };
 
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
@@ -335,11 +342,13 @@ export default function ShowWindow({
 
     const totalApplications =
         safeStats.status_counts?.all ?? safeApplications.total;
+    const submittedApplications =
+        safeStats.status_counts?.submitted ??
+        safeApplications.data.filter((app) => app.status === 'submitted')
+            .length;
     const pendingApplications =
         safeStats.status_counts?.pending ??
-        safeApplications.data.filter(
-            (app) => app.status === 'pending' || app.status === 'submitted',
-        ).length;
+        safeApplications.data.filter((app) => app.status === 'pending').length;
     const approvedApplications =
         safeStats.status_counts?.approved ??
         safeApplications.data.filter((app) => app.status === 'approved').length;
@@ -661,6 +670,7 @@ export default function ShowWindow({
                     unverifiedApplications={unverifiedApplications}
                     duplicatePairs={duplicatePairs}
                     duplicateAlertUrl={`/admin/windows/${window.id}/duplicates/alert`}
+                    duplicateDeleteUrl={`/admin/windows/${window.id}/duplicates`}
                     verifyDraftUrl={(draft) =>
                         `/admin/students/guest-drafts/${draft.id}/verify`
                     }
@@ -701,7 +711,10 @@ export default function ShowWindow({
                                     onValueChange={handleStatusChange}
                                     className="w-full"
                                 >
-                                    <TabsList className="grid w-full grid-cols-4">
+                                    <TabsList className="grid w-full grid-cols-5">
+                                        <TabsTrigger value="submitted">
+                                            Submitted ({submittedApplications})
+                                        </TabsTrigger>
                                         <TabsTrigger value="pending">
                                             Pending ({pendingApplications})
                                         </TabsTrigger>
@@ -717,6 +730,12 @@ export default function ShowWindow({
                                         </TabsTrigger>
                                     </TabsList>
 
+                                    <TabsContent
+                                        value="submitted"
+                                        className="mt-4"
+                                    >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
                                     <TabsContent
                                         value="pending"
                                         className="mt-4"

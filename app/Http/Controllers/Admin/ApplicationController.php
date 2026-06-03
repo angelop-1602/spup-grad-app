@@ -9,6 +9,7 @@ use App\Http\Requests\Application\StaffUpdateApplicationRequest;
 use App\Models\Application;
 use App\Models\Department;
 use App\Support\ApplicationWorkflowService;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\PossibleDuplicateApplications;
 use App\Support\RequirementFileStorage;
 use App\Support\SystemEventLogger;
@@ -24,7 +25,11 @@ class ApplicationController extends Controller
     /**
      * Display the specified application.
      */
-    public function show(Application $application, PossibleDuplicateApplications $duplicates): Response
+    public function show(
+        Application $application,
+        PossibleDuplicateApplications $duplicates,
+        GuestApplicationDraftDetails $draftDetails,
+    ): Response
     {
         $application->load([
             'user.profile',
@@ -121,6 +126,7 @@ class ApplicationController extends Controller
 
         return Inertia::render('admin/applications/show', [
             'application' => $application,
+            'tracking' => $draftDetails->trackingForApplication($application),
             'possibleDuplicates' => $duplicates->forApplication(
                 $application,
                 'admin.applications.show',

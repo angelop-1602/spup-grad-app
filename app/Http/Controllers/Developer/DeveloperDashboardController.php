@@ -12,6 +12,7 @@ use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\ApplicationWorkflowService;
 use App\Support\DeveloperDiagnosticsService;
 use App\Support\DuplicateApplicationRecords;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,20 @@ class DeveloperDashboardController extends Controller
     public function manualVerification(Request $request, DeveloperDiagnosticsService $diagnostics): Response
     {
         return Inertia::render('developer/manual-verification', $diagnostics->dashboardData($this->filters($request)));
+    }
+
+    public function showDraft(GuestApplicationDraft $draft, GuestApplicationDraftDetails $details): Response
+    {
+        return Inertia::render('staff/draft-application-show', [
+            ...$details->draftPayload($draft, 'developer'),
+            'viewerRole' => 'developer',
+            'title' => 'Manual Verification',
+            'backUrl' => route('developer.manual-verification', [
+                'search' => $draft->ensureTrackingCode(),
+                'window_id' => 'all',
+            ], false),
+            'verifyUrl' => route('developer.drafts.verify', $draft, false),
+        ]);
     }
 
     public function windows(Request $request): Response
@@ -133,6 +148,72 @@ class DeveloperDashboardController extends Controller
         );
 
         return $this->sendDuplicateAlertEmail($left, $right, $notification, $duplicates);
+    }
+
+    public function deleteDuplicate(
+        Request $request,
+        ApplicationWindow $window,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'left' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/'],
+            'right' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::notIn([$request->input('left')])],
+            'selected_record' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::in([$request->input('left'), $request->input('right')])],
+        ]);
+
+        [$left, $right] = [
+            $duplicates->resolve($validated['left']),
+            $duplicates->resolve($validated['right']),
+        ];
+
+        if (! $left || ! $right) {
+            return back()->withErrors([
+                'duplicate' => 'One of the duplicate records no longer exists.',
+            ]);
+        }
+
+        if ((int) $left['window_id'] !== $window->id || (int) $right['window_id'] !== $window->id) {
+            return back()->withErrors([
+                'duplicate' => 'Both duplicate records must belong to the selected application window.',
+            ]);
+        }
+
+        if (! $duplicates->recordsMatch($left, $right)) {
+            return back()->withErrors([
+                'duplicate' => 'These records no longer match on the same identity details.',
+            ]);
+        }
+
+        $selectedRecord = $validated['selected_record'] === $validated['left']
+            ? $left
+            : $right;
+        $remainingRecord = $validated['selected_record'] === $validated['left']
+            ? $right
+            : $left;
+        $subject = ($selectedRecord['model'] ?? null) instanceof \Illuminate\Database\Eloquent\Model
+            ? $selectedRecord['model']
+            : null;
+
+        $duplicates->deleteRecord($selectedRecord);
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'developer.duplicate_application.record_deleted',
+            message: 'Developer deleted a duplicate graduation application record from the application window review.',
+            subject: $subject,
+            meta: [
+                'window_id' => $window->id,
+                'left_record' => $left['key'],
+                'right_record' => $right['key'],
+                'selected_record' => $selectedRecord['key'],
+                'remaining_record' => $remainingRecord['key'],
+                'selected_type' => $selectedRecord['type'],
+                'selected_application_number' => $selectedRecord['application_number'],
+                'selected_tracking_code' => $selectedRecord['tracking_code'],
+            ],
+        );
+
+        return back()->with('success', 'Selected duplicate record deleted.');
     }
 
     public function events(Request $request, DeveloperDiagnosticsService $diagnostics): Response

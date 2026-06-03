@@ -18,6 +18,7 @@ import {
     FileText,
     MailWarning,
     ShieldQuestion,
+    Trash2,
     UsersRound,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -54,9 +55,11 @@ export type WindowApplicationDuplicatePair = {
     left: WindowApplicationReviewRecord;
     right: WindowApplicationReviewRecord;
     match: {
+        matched_on?: string | null;
         first_name: string;
         last_name: string;
         student_id: string;
+        email?: string | null;
     };
 };
 
@@ -65,6 +68,7 @@ type WindowApplicationReviewTabsProps = {
     unverifiedApplications: WindowApplicationReviewRecord[];
     duplicatePairs: WindowApplicationDuplicatePair[];
     duplicateAlertUrl: string;
+    duplicateDeleteUrl: string;
     verifyDraftUrl: (draft: WindowApplicationReviewRecord) => string;
     children: ReactNode;
 };
@@ -145,6 +149,7 @@ export function WindowApplicationReviewTabs({
     unverifiedApplications,
     duplicatePairs,
     duplicateAlertUrl,
+    duplicateDeleteUrl,
     verifyDraftUrl,
     children,
 }: WindowApplicationReviewTabsProps) {
@@ -155,6 +160,9 @@ export function WindowApplicationReviewTabs({
         null,
     );
     const [sendingPairId, setSendingPairId] = useState<string | null>(null);
+    const [deletingRecordKey, setDeletingRecordKey] = useState<string | null>(
+        null,
+    );
 
     const sectionCounts: Record<ReviewSection, number> = {
         applications: applicationsCount,
@@ -202,6 +210,37 @@ export function WindowApplicationReviewTabs({
                     }),
             },
         );
+    };
+
+    const deleteDuplicateRecord = (
+        pair: WindowApplicationDuplicatePair,
+        record: WindowApplicationReviewRecord,
+    ) => {
+        const confirmed = globalThis.confirm(
+            `Delete duplicate record ${recordIdentifier(record)} for ${record.applicant_name}? This cannot be undone.`,
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingRecordKey(record.key);
+        router.delete(duplicateDeleteUrl, {
+            data: {
+                left: pair.left.key,
+                right: pair.right.key,
+                selected_record: record.key,
+            },
+            preserveScroll: true,
+            onFinish: () => setDeletingRecordKey(null),
+            onSuccess: () =>
+                addToast({
+                    variant: 'success',
+                    title: 'Duplicate deleted',
+                    description: `${record.applicant_name}'s selected duplicate record was deleted.`,
+                    duration: 5000,
+                }),
+        });
     };
 
     return (
@@ -262,7 +301,9 @@ export function WindowApplicationReviewTabs({
                     <DuplicateApplicationsPanel
                         pairs={duplicatePairs}
                         sendingPairId={sendingPairId}
+                        deletingRecordKey={deletingRecordKey}
                         onSendAlert={sendDuplicateAlert}
+                        onDeleteRecord={deleteDuplicateRecord}
                     />
                 ) : null}
             </div>
@@ -306,19 +347,26 @@ function UnverifiedApplicationsPanel({
 function DuplicateApplicationsPanel({
     pairs,
     sendingPairId,
+    deletingRecordKey,
     onSendAlert,
+    onDeleteRecord,
 }: {
     pairs: WindowApplicationDuplicatePair[];
     sendingPairId: string | null;
+    deletingRecordKey: string | null;
     onSendAlert: (pair: WindowApplicationDuplicatePair) => void;
+    onDeleteRecord: (
+        pair: WindowApplicationDuplicatePair,
+        record: WindowApplicationReviewRecord,
+    ) => void;
 }) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Possible Duplications</CardTitle>
                 <CardDescription>
-                    Records with matching first name, last name, and student ID
-                    inside this application window.
+                    Records with matching applicant account, student ID, email,
+                    or name and birth date inside this application window.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -348,6 +396,13 @@ function DuplicateApplicationsPanel({
                                         className="border-b align-top transition-colors hover:bg-muted/50"
                                     >
                                         <td className="px-3 py-3">
+                                            <Badge
+                                                variant="outline"
+                                                className="mb-2"
+                                            >
+                                                {pair.match.matched_on ??
+                                                    'Identity details'}
+                                            </Badge>
                                             <p className="font-medium">
                                                 {pair.match.first_name}{' '}
                                                 {pair.match.last_name}
@@ -355,12 +410,27 @@ function DuplicateApplicationsPanel({
                                             <p className="text-xs text-muted-foreground">
                                                 {pair.match.student_id}
                                             </p>
+                                            {pair.match.email ? (
+                                                <p className="text-xs break-all text-muted-foreground">
+                                                    {pair.match.email}
+                                                </p>
+                                            ) : null}
                                         </td>
                                         <DuplicateRecordCell
                                             record={pair.left}
+                                            pair={pair}
+                                            deletingRecordKey={
+                                                deletingRecordKey
+                                            }
+                                            onDelete={onDeleteRecord}
                                         />
                                         <DuplicateRecordCell
                                             record={pair.right}
+                                            pair={pair}
+                                            deletingRecordKey={
+                                                deletingRecordKey
+                                            }
+                                            onDelete={onDeleteRecord}
                                         />
                                         <td className="px-3 py-3 text-right">
                                             <Button
@@ -391,8 +461,8 @@ function DuplicateApplicationsPanel({
                             No duplicate records
                         </h3>
                         <p className="mt-2 text-sm text-muted-foreground">
-                            No records in this window match on first name, last
-                            name, and student ID.
+                            No records in this window match on account, student
+                            ID, email, or name and birth date.
                         </p>
                     </div>
                 )}
@@ -403,9 +473,20 @@ function DuplicateApplicationsPanel({
 
 function DuplicateRecordCell({
     record,
+    pair,
+    deletingRecordKey,
+    onDelete,
 }: {
     record: WindowApplicationReviewRecord;
+    pair: WindowApplicationDuplicatePair;
+    deletingRecordKey: string | null;
+    onDelete: (
+        pair: WindowApplicationDuplicatePair,
+        record: WindowApplicationReviewRecord,
+    ) => void;
 }) {
+    const isDeleting = deletingRecordKey === record.key;
+
     return (
         <td className="px-3 py-3">
             <div className="flex flex-col gap-1">
@@ -430,6 +511,17 @@ function DuplicateRecordCell({
                 >
                     {headline(record.status)}
                 </Badge>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    className="mt-2 w-fit"
+                    onClick={() => onDelete(pair, record)}
+                    disabled={isDeleting}
+                >
+                    <Trash2 className="size-4" />
+                    {isDeleting ? 'Deleting' : 'Delete'}
+                </Button>
             </div>
         </td>
     );

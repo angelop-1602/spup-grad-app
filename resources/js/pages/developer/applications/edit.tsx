@@ -1,4 +1,8 @@
 import {
+    ApplicationTrackingCard,
+    type ApplicationTracking,
+} from '@/components/application-tracking-card';
+import {
     ApplicationWizard,
     type ApplicationWindow,
     type Department,
@@ -19,6 +23,7 @@ interface DeveloperEditApplicationPageProps {
     isApproved?: boolean;
     updateUrl: string;
     cancelHref: string;
+    tracking?: ApplicationTracking | null;
     possibleDuplicates: PossibleDuplicateApplication[];
 }
 
@@ -29,6 +34,7 @@ export default function DeveloperEditApplicationPage({
     isApproved = false,
     updateUrl,
     cancelHref,
+    tracking,
     possibleDuplicates,
 }: DeveloperEditApplicationPageProps) {
     return (
@@ -42,6 +48,7 @@ export default function DeveloperEditApplicationPage({
                     duplicates={possibleDuplicates}
                     canDelete
                 />
+                <ApplicationTrackingCard tracking={tracking} />
                 <ApplicationWizard
                     mode="edit"
                     window={application.window}

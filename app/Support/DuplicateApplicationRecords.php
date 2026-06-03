@@ -7,6 +7,7 @@ use App\Models\ApplicationWindow;
 use App\Models\Course;
 use App\Models\Department;
 use App\Models\GuestApplicationDraft;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -61,11 +62,11 @@ class DuplicateApplicationRecords
      */
     public function duplicatePairsForWindow(ApplicationWindow $window, ?array $departmentIds = null): array
     {
-        return $this->duplicateRecordsForWindow($window, $departmentIds)
-            ->filter(fn (array $record) => $this->matchKey($record) !== null)
-            ->groupBy(fn (array $record) => $this->matchKey($record))
+        $seenPairs = [];
+
+        return $this->recordsGroupedByMatchKey($this->duplicateRecordsForWindow($window, $departmentIds))
             ->filter(fn (Collection $group) => $group->count() > 1)
-            ->flatMap(function (Collection $group): array {
+            ->flatMap(function (Collection $group, string $matchKey) use (&$seenPairs): array {
                 $records = $group->values();
                 $pairs = [];
 
@@ -73,16 +74,21 @@ class DuplicateApplicationRecords
                     for ($rightIndex = $leftIndex + 1; $rightIndex < $records->count(); $rightIndex++) {
                         $left = $records->get($leftIndex);
                         $right = $records->get($rightIndex);
+                        $pairKey = collect([$left['key'], $right['key']])
+                            ->sort()
+                            ->implode('__');
+
+                        if (isset($seenPairs[$pairKey])) {
+                            continue;
+                        }
+
+                        $seenPairs[$pairKey] = true;
 
                         $pairs[] = [
                             'id' => $left['key'].'__'.$right['key'],
                             'left' => $this->publicPayload($left, true),
                             'right' => $this->publicPayload($right, true),
-                            'match' => [
-                                'first_name' => $left['first_name'] ?: $right['first_name'],
-                                'last_name' => $left['last_name'] ?: $right['last_name'],
-                                'student_id' => $left['student_id'] ?: $right['student_id'],
-                            ],
+                            'match' => $this->matchPayload($left, $right, $matchKey),
                         ];
                     }
                 }
@@ -125,9 +131,7 @@ class DuplicateApplicationRecords
      */
     public function recordsMatch(array $left, array $right): bool
     {
-        $leftKey = $this->matchKey($left);
-
-        return $leftKey !== null && $leftKey === $this->matchKey($right);
+        return count(array_intersect($this->matchKeys($left), $this->matchKeys($right))) > 0;
     }
 
     /**
@@ -252,7 +256,7 @@ class DuplicateApplicationRecords
     {
         return [
             'user:id,name,email,student_id',
-            'user.profile:id,user_id,first_name,middle_name,last_name,suffix',
+            'user.profile:id,user_id,first_name,middle_name,last_name,suffix,date_of_birth',
             'window:id,title',
             'department:id,name,code',
             'course:id,name,code,department_id',
@@ -268,7 +272,7 @@ class DuplicateApplicationRecords
             'window:id,title',
             'application:id,application_number,user_id,window_id,department_id,course_id,status,created_at',
             'application.user:id,name,email,student_id',
-            'application.user.profile:id,user_id,first_name,middle_name,last_name,suffix',
+            'application.user.profile:id,user_id,first_name,middle_name,last_name,suffix,date_of_birth',
             'application.department:id,name,code',
             'application.course:id,name,code,department_id',
         ];
@@ -284,11 +288,13 @@ class DuplicateApplicationRecords
         $profile = $application->user?->profile;
         $firstName = trim((string) ($profile?->first_name ?? ''));
         $lastName = trim((string) ($profile?->last_name ?? ''));
+        $dateOfBirth = $this->normalizeDate($profile?->date_of_birth);
 
         return [
             'key' => 'application-'.$application->getKey(),
             'type' => 'application',
             'id' => $application->getKey(),
+            'user_id' => $application->user_id,
             'model' => $application,
             'record_label' => $application->application_number,
             'applicant_name' => $this->applicationApplicantName($application),
@@ -311,9 +317,12 @@ class DuplicateApplicationRecords
             'created_at' => $application->created_at?->toIso8601String(),
             'verified_at' => $application->created_at?->toIso8601String(),
             'normalized' => [
+                'user_id' => $this->normalizeNumericId($application->user_id),
                 'first_name' => $this->normalizeName($firstName),
                 'last_name' => $this->normalizeName($lastName),
                 'student_id' => $this->normalizeStudentId($application->user?->student_id),
+                'email' => $this->normalizeEmail($application->user?->email),
+                'date_of_birth' => $dateOfBirth,
             ],
             'developer_url' => route('developer.applications.edit', $application, false),
         ];
@@ -329,6 +338,7 @@ class DuplicateApplicationRecords
         $payload = $draft->payload ?? [];
         $firstName = trim((string) ($payload['first_name'] ?? ''));
         $lastName = trim((string) ($payload['last_name'] ?? ''));
+        $dateOfBirth = $this->normalizeDate($payload['date_of_birth'] ?? null);
         $departmentId = (int) ($payload['department_id'] ?? 0);
         $courseId = (int) ($payload['course_id'] ?? 0);
         $department = $draft->application?->department ?? $this->departmentFromPayload($departmentId);
@@ -338,6 +348,7 @@ class DuplicateApplicationRecords
             'key' => 'draft-'.$draft->getKey(),
             'type' => 'draft',
             'id' => $draft->getKey(),
+            'user_id' => $draft->application?->user_id,
             'model' => $draft,
             'record_label' => $draft->ensureTrackingCode(),
             'applicant_name' => $this->draftApplicantName($payload),
@@ -360,9 +371,12 @@ class DuplicateApplicationRecords
             'created_at' => $draft->created_at?->toIso8601String(),
             'verified_at' => $draft->verified_at?->toIso8601String(),
             'normalized' => [
+                'user_id' => $this->normalizeNumericId($draft->application?->user_id),
                 'first_name' => $this->normalizeName($firstName),
                 'last_name' => $this->normalizeName($lastName),
                 'student_id' => $this->normalizeStudentId($draft->student_id),
+                'email' => $this->normalizeEmail($draft->email),
+                'date_of_birth' => $dateOfBirth,
             ],
             'developer_url' => route('developer.manual-verification', ['search' => $draft->ensureTrackingCode(), 'window_id' => $draft->window_id], false),
         ];
@@ -399,20 +413,83 @@ class DuplicateApplicationRecords
     }
 
     /**
-     * @param  array<string, mixed>  $record
+     * @param  Collection<int, array<string, mixed>>  $records
+     * @return Collection<string, Collection<int, array<string, mixed>>>
      */
-    private function matchKey(array $record): ?string
+    private function recordsGroupedByMatchKey(Collection $records): Collection
+    {
+        return $records
+            ->flatMap(function (array $record): array {
+                return collect($this->matchKeys($record))
+                    ->map(fn (string $matchKey) => [
+                        'match_key' => $matchKey,
+                        'record' => $record,
+                    ])
+                    ->all();
+            })
+            ->groupBy('match_key')
+            ->map(fn (Collection $group) => $group->pluck('record')->unique('key')->values());
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     * @return array<int, string>
+     */
+    private function matchKeys(array $record): array
     {
         $normalized = $record['normalized'] ?? [];
         $firstName = $normalized['first_name'] ?? '';
         $lastName = $normalized['last_name'] ?? '';
         $studentId = $normalized['student_id'] ?? '';
+        $email = $normalized['email'] ?? '';
+        $dateOfBirth = $normalized['date_of_birth'] ?? '';
+        $userId = $normalized['user_id'] ?? '';
+        $keys = [];
 
-        if ($firstName === '' || $lastName === '' || $studentId === '') {
-            return null;
+        if ($userId !== '') {
+            $keys[] = 'user:'.$userId;
         }
 
-        return implode('|', [$firstName, $lastName, $studentId]);
+        if ($studentId !== '') {
+            $keys[] = 'student_id:'.$studentId;
+        }
+
+        if ($email !== '') {
+            $keys[] = 'email:'.$email;
+        }
+
+        if ($firstName !== '' && $lastName !== '' && $dateOfBirth !== '') {
+            $keys[] = implode(':', ['name_dob', $firstName, $lastName, $dateOfBirth]);
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     * @return array<string, string|null>
+     */
+    private function matchPayload(array $left, array $right, string $matchKey): array
+    {
+        return [
+            'matched_on' => $this->matchLabel($matchKey),
+            'first_name' => $left['first_name'] ?: $right['first_name'],
+            'last_name' => $left['last_name'] ?: $right['last_name'],
+            'student_id' => $left['student_id'] ?: $right['student_id'],
+            'email' => $left['email'] ?: $right['email'],
+        ];
+    }
+
+    private function matchLabel(string $matchKey): string
+    {
+        return match (Str::before($matchKey, ':')) {
+            'user' => 'Applicant account',
+            'student_id' => 'Student ID',
+            'email' => 'Email address',
+            'name_dob' => 'Name and birth date',
+            default => 'Identity details',
+        };
     }
 
     private function normalizeName(?string $value): string
@@ -425,10 +502,50 @@ class DuplicateApplicationRecords
 
     private function normalizeStudentId(?string $value): string
     {
-        return Str::of((string) $value)
+        return $this->normalizeIdentityValue($value);
+    }
+
+    private function normalizeEmail(?string $value): string
+    {
+        $email = $this->normalizeIdentityValue($value);
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+
+    private function normalizeNumericId(int|string|null $value): string
+    {
+        $id = (int) $value;
+
+        return $id > 0 ? (string) $id : '';
+    }
+
+    private function normalizeDate(mixed $value): string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        $date = trim((string) $value);
+
+        if ($date === '') {
+            return '';
+        }
+
+        $timestamp = strtotime($date);
+
+        return $timestamp ? date('Y-m-d', $timestamp) : '';
+    }
+
+    private function normalizeIdentityValue(?string $value): string
+    {
+        $normalized = Str::of((string) $value)
             ->squish()
             ->lower()
             ->toString();
+
+        return in_array($normalized, ['n/a', 'na', 'none', 'null', 'not applicable', '-', '--'], true)
+            ? ''
+            : $normalized;
     }
 
     private function notifiableEmail(object $notifiable): ?string

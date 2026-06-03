@@ -170,6 +170,8 @@ interface WindowStats {
     }>;
     status_counts?: {
         all: number;
+        submitted: number;
+        pending: number;
         approved: number;
         incomplete: number;
     };
@@ -227,7 +229,13 @@ export default function CoordinatorWindowShow({
         majors: [],
         nationalities: [],
         hierarchical: [],
-        status_counts: { all: 0, approved: 0, incomplete: 0 },
+        status_counts: {
+            all: 0,
+            submitted: 0,
+            pending: 0,
+            approved: 0,
+            incomplete: 0,
+        },
     };
 
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
@@ -333,6 +341,13 @@ export default function CoordinatorWindowShow({
 
     const totalApplications =
         safeStats.status_counts?.all ?? safeApplications.total;
+    const submittedApplications =
+        safeStats.status_counts?.submitted ??
+        safeApplications.data.filter((app) => app.status === 'submitted')
+            .length;
+    const pendingApplications =
+        safeStats.status_counts?.pending ??
+        safeApplications.data.filter((app) => app.status === 'pending').length;
     const approvedApplications =
         safeStats.status_counts?.approved ??
         safeApplications.data.filter((app) => app.status === 'approved').length;
@@ -647,6 +662,7 @@ export default function CoordinatorWindowShow({
                     unverifiedApplications={unverifiedApplications}
                     duplicatePairs={duplicatePairs}
                     duplicateAlertUrl={`/coordinator/windows/${window.id}/duplicates/alert`}
+                    duplicateDeleteUrl={`/coordinator/windows/${window.id}/duplicates`}
                     verifyDraftUrl={(draft) =>
                         `/coordinator/manual-verification/${draft.id}/verify`
                     }
@@ -690,9 +706,12 @@ export default function CoordinatorWindowShow({
                                     onValueChange={handleStatusChange}
                                     className="w-full"
                                 >
-                                    <TabsList className="grid w-full grid-cols-3">
-                                        <TabsTrigger value="all">
-                                            All ({totalApplications})
+                                    <TabsList className="grid w-full grid-cols-5">
+                                        <TabsTrigger value="submitted">
+                                            Submitted ({submittedApplications})
+                                        </TabsTrigger>
+                                        <TabsTrigger value="pending">
+                                            Pending ({pendingApplications})
                                         </TabsTrigger>
                                         <TabsTrigger value="approved">
                                             Approved ({approvedApplications})
@@ -701,9 +720,21 @@ export default function CoordinatorWindowShow({
                                             Incomplete ({incompleteApplications}
                                             )
                                         </TabsTrigger>
+                                        <TabsTrigger value="all">
+                                            All ({totalApplications})
+                                        </TabsTrigger>
                                     </TabsList>
 
-                                    <TabsContent value="all" className="mt-4">
+                                    <TabsContent
+                                        value="submitted"
+                                        className="mt-4"
+                                    >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                    <TabsContent
+                                        value="pending"
+                                        className="mt-4"
+                                    >
                                         {renderApplicationsTable()}
                                     </TabsContent>
                                     <TabsContent
@@ -716,6 +747,9 @@ export default function CoordinatorWindowShow({
                                         value="incomplete"
                                         className="mt-4"
                                     >
+                                        {renderApplicationsTable()}
+                                    </TabsContent>
+                                    <TabsContent value="all" className="mt-4">
                                         {renderApplicationsTable()}
                                     </TabsContent>
                                 </Tabs>

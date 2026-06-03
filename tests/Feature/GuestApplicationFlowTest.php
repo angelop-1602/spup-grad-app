@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 use Maatwebsite\Excel\Excel as ExcelFormat;
 use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
     Storage::disk('local')->deleteDirectory('application-pdf-cache');
@@ -340,9 +341,80 @@ test('window graduate export groups records and normalizes text for reuse', func
     expect($graduate['thesis_title'])->toBe('The Impact of Testing on Learning');
     expect($graduate['thesis_adviser'])->toBe('Dr. Jane Doe');
 
+    $secondDepartment = Department::create([
+        'name' => 'College of Information Technology',
+        'code' => 'CIT',
+        'description' => 'Testing department',
+        'is_active' => true,
+    ]);
+    $secondCourse = Course::create([
+        'department_id' => $secondDepartment->id,
+        'name' => 'Bachelor of Science in Information Technology',
+        'code' => 'BSIT',
+        'description' => 'Testing course',
+        'is_active' => true,
+    ]);
+    $secondPayload = guestApplicationPayload($application->window, $secondDepartment, $secondCourse, [
+        'email' => 'second.export.student@example.com',
+        'student_id' => '2020-0002',
+        'last_name' => 'Reyes',
+        'first_name' => 'Marco',
+        'middle_name' => null,
+        'date_of_birth' => '1998-08-20',
+        'nationality' => 'American',
+        'department_id' => $secondDepartment->id,
+        'course_id' => $secondCourse->id,
+        'degree_title' => $secondCourse->name,
+        'presence' => 'not attending',
+    ]);
+    $secondUser = User::factory()->create([
+        'email' => $secondPayload['email'],
+        'student_id' => $secondPayload['student_id'],
+    ]);
+    app(\App\Support\ApplicationWorkflowService::class)
+        ->createApplicationForUser($secondUser, $secondPayload);
+
     $xlsx = Excel::raw(new WindowApplicationsExport($application->window_id), ExcelFormat::XLSX);
+    $tempFile = tempnam(sys_get_temp_dir(), 'graduate-export-');
+    file_put_contents($tempFile, $xlsx);
+    $spreadsheet = IOFactory::load($tempFile);
 
     expect(strlen($xlsx))->toBeGreaterThan(1000);
+
+    try {
+        expect($spreadsheet->getSheetNames())->toContain('Application Summary', 'COED', 'CIT');
+
+        $summary = $spreadsheet->getSheetByName('Application Summary');
+        expect($summary->getCell('A7')->getValue())->toBe('Level');
+
+        $summaryDepartments = [];
+        for ($row = 8; $row <= $summary->getHighestRow(); $row++) {
+            if ($summary->getCell("A{$row}")->getValue() === 'Department') {
+                $summaryDepartments[] = $summary->getCell("B{$row}")->getValue();
+            }
+        }
+        expect($summaryDepartments)->toContain('COED', 'CIT');
+
+        $coedSheet = $spreadsheet->getSheetByName('COED');
+        $headerRow = null;
+        for ($row = 1; $row <= $coedSheet->getHighestRow(); $row++) {
+            if ($coedSheet->getCell("A{$row}")->getValue() === 'No.') {
+                $headerRow = $row;
+
+                break;
+            }
+        }
+
+        expect($headerRow)->not->toBeNull()
+            ->and($coedSheet->getCell("E{$headerRow}")->getValue())->toBe('Birthday')
+            ->and($coedSheet->getCell("F{$headerRow}")->getValue())->toBe('Nationality')
+            ->and($coedSheet->getCell("N{$headerRow}")->getValue())->toBe('Application Status')
+            ->and($coedSheet->getCell('E'.($headerRow + 1))->getValue())->toBe('1999-05-15')
+            ->and($coedSheet->getCell('F'.($headerRow + 1))->getValue())->toBe('Philippines')
+            ->and($coedSheet->getCell('N'.($headerRow + 1))->getValue())->not->toBe('');
+    } finally {
+        @unlink($tempFile);
+    }
 });
 
 test('guest submit rejects college export fields beyond the fixed space limit', function () {
@@ -629,7 +701,12 @@ test('verifying a guest draft creates the real records and exposes the guest han
         ->assertRedirect(route('apply.portal.show', $application->application_number, absolute: false));
 
     $this->get(route('apply.portal.show', $application->application_number))
-        ->assertOk();
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('applications/show')
+            ->where('tracking.tracking_code', $draft->tracking_code)
+            ->where('tracking.tracking_pin', $draft->tracking_pin)
+        );
 });
 
 test('guest portal downloads the generated application as a pdf', function () {

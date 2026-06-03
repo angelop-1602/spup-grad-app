@@ -120,13 +120,26 @@ class StaffGlobalSearchController extends Controller
     private function draftResults(Request $request, string $role, string $search): array
     {
         $query = GuestApplicationDraft::query()
-            ->with(['window:id,title'])
+            ->with([
+                'window:id,title',
+                'application:id,application_number',
+            ])
+            ->where(function (Builder $query): void {
+                $query->whereNull('verified_at')
+                    ->orWhereNull('application_id');
+            })
             ->where(function (Builder $query) use ($search): void {
                 $query->where('email', 'like', "%{$search}%")
                     ->orWhere('student_id', 'like', "%{$search}%")
                     ->orWhere('tracking_code', 'like', "%{$search}%")
                     ->orWhere('tracking_pin', 'like', "%{$search}%")
-                    ->orWhere('payload', 'like', "%{$search}%");
+                    ->orWhere('payload->first_name', 'like', "%{$search}%")
+                    ->orWhere('payload->middle_name', 'like', "%{$search}%")
+                    ->orWhere('payload->last_name', 'like', "%{$search}%")
+                    ->orWhere('payload', 'like', "%{$search}%")
+                    ->orWhereHas('application', function (Builder $applicationQuery) use ($search): void {
+                        $applicationQuery->where('application_number', 'like', "%{$search}%");
+                    });
             });
 
         if ($role === 'coordinator') {
@@ -146,11 +159,14 @@ class StaffGlobalSearchController extends Controller
                 'type' => 'draft',
                 'title' => $this->draftApplicantName($draft->payload ?? []),
                 'subtitle' => trim(implode(' - ', array_filter([
+                    $this->draftVerificationStatus($draft),
+                    $draft->application?->application_number,
+                    $draft->ensureTrackingCode(),
                     $draft->student_id,
                     $draft->email,
                     $draft->window?->title,
                 ]))),
-                'url' => $this->draftUrl($role, $search),
+                'url' => $this->draftUrl($role, $draft),
             ])
             ->values()
             ->all();
@@ -257,12 +273,12 @@ class StaffGlobalSearchController extends Controller
         };
     }
 
-    private function draftUrl(string $role, string $search): string
+    private function draftUrl(string $role, GuestApplicationDraft $draft): string
     {
         return match ($role) {
-            'admin' => route('admin.unverified-applications.index', ['search' => $search], false),
-            'coordinator' => route('coordinator.manual-verification.index', ['search' => $search], false),
-            default => route('developer.manual-verification', ['search' => $search], false),
+            'admin' => route('admin.unverified-applications.show', $draft, false),
+            'coordinator' => route('coordinator.manual-verification.show', $draft, false),
+            default => route('developer.drafts.show', $draft, false),
         };
     }
 
@@ -306,5 +322,14 @@ class StaffGlobalSearchController extends Controller
         ])));
 
         return $name !== '' ? $name : 'Guest Applicant';
+    }
+
+    private function draftVerificationStatus(GuestApplicationDraft $draft): string
+    {
+        if ($draft->verified_at && ! $draft->application_id) {
+            return 'Needs application';
+        }
+
+        return 'Needs verification';
     }
 }

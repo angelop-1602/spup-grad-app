@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Application;
 use App\Models\ApplicationWindow;
+use DateTimeInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -22,7 +23,7 @@ class GraduateExportData
         $query = $window->applications()
             ->with([
                 'user:id,name,email,student_id',
-                'user.profile:id,user_id,first_name,last_name,middle_name,suffix',
+                'user.profile:id,user_id,first_name,last_name,middle_name,suffix,date_of_birth,nationality',
                 'department:id,name,code',
                 'course:id,name,code,department_id',
                 'subjectEnrollments:id,application_id,subject_name,units,order',
@@ -85,8 +86,8 @@ class GraduateExportData
             ->values();
 
         $departments = $graduates
-            ->groupBy('department')
-            ->map(function (Collection $departmentRows, string $department) {
+            ->groupBy('department_code')
+            ->map(function (Collection $departmentRows, string $departmentCode) {
                 $programs = $departmentRows
                     ->groupBy('degree')
                     ->map(function (Collection $programRows, string $degree) {
@@ -109,6 +110,8 @@ class GraduateExportData
                                 return [
                                     'name' => $major,
                                     'total' => $majorRows->count(),
+                                    'attendance' => self::attendanceCounts($majorRows),
+                                    'nationalities' => self::nationalityCounts($majorRows),
                                     'thesis_groups' => $thesisGroups,
                                 ];
                             })
@@ -118,15 +121,22 @@ class GraduateExportData
                         return [
                             'name' => $degree,
                             'total' => $programRows->count(),
+                            'attendance' => self::attendanceCounts($programRows),
+                            'nationalities' => self::nationalityCounts($programRows),
                             'majors' => $majors,
                         ];
                     })
                     ->values()
                     ->all();
 
+                $first = $departmentRows->first();
+
                 return [
-                    'name' => $department,
+                    'code' => $departmentCode,
+                    'name' => $first['department_name'] ?? $departmentCode,
                     'total' => $departmentRows->count(),
+                    'attendance' => self::attendanceCounts($departmentRows),
+                    'nationalities' => self::nationalityCounts($departmentRows),
                     'programs' => $programs,
                 ];
             })
@@ -198,16 +208,26 @@ class GraduateExportData
     {
         $profile = $application->user?->profile;
         $department = $application->department?->code ?: self::titleCase($application->department?->name, 'No Department');
+        $departmentName = self::titleCase($application->department?->name, $department);
         $degree = self::titleCase($application->course?->name ?: $application->degree_title, 'No Degree');
         $major = self::titleCase($application->major, 'No Major');
         $thesisType = self::thesisType($application);
+        $nationality = NationalityNormalizer::normalize($profile?->nationality) ?? '';
+        $birthday = self::dateValue($profile?->date_of_birth);
 
         return [
+            'application_number' => (string) ($application->application_number ?? ''),
             'student_id' => (string) ($application->user?->student_id ?? ''),
             'name' => self::studentName($application),
+            'birthday' => $birthday,
+            'nationality' => $nationality,
             'department' => $department,
+            'department_code' => $department,
+            'department_name' => $departmentName,
             'degree' => $degree,
             'major' => $major,
+            'presence' => (string) ($application->presence ?? ''),
+            'attendance' => self::titleCase($application->presence, 'N/A'),
             'thesis_type' => $thesisType,
             'thesis_type_sort' => $thesisType === 'With Thesis/Dissertation' ? 0 : 1,
             'thesis_title' => $thesisType === 'With Thesis/Dissertation'
@@ -216,6 +236,7 @@ class GraduateExportData
             'thesis_adviser' => $thesisType === 'With Thesis/Dissertation'
                 ? self::titleCase($application->thesis_dissertation_adviser)
                 : '',
+            'application_status' => self::titleCase(str_replace('_', ' ', (string) $application->status)),
             'status' => self::titleCase(str_replace('_', ' ', (string) $application->status)),
             'sort_name' => Str::lower(implode(' ', array_filter([
                 $profile?->last_name,
@@ -247,6 +268,47 @@ class GraduateExportData
         }
 
         return $lastName ?: ($firstMiddleSuffix ?: self::titleCase($application->user?->name, 'Unknown'));
+    }
+
+    private static function dateValue(mixed $value): string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        return trim((string) $value);
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array{attending: int, not_attending: int}
+     */
+    private static function attendanceCounts(Collection $rows): array
+    {
+        return [
+            'attending' => $rows->where('presence', 'attending')->count(),
+            'not_attending' => $rows->where('presence', 'not attending')->count(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<int, array{nationality: string, count: int}>
+     */
+    private static function nationalityCounts(Collection $rows): array
+    {
+        return $rows
+            ->pluck('nationality')
+            ->filter()
+            ->groupBy(fn (string $nationality) => $nationality)
+            ->map(fn (Collection $group, string $nationality) => [
+                'nationality' => $nationality,
+                'count' => $group->count(),
+            ])
+            ->values()
+            ->sortByDesc('count')
+            ->values()
+            ->all();
     }
 
     private static function thesisType(Application $application): string

@@ -12,6 +12,7 @@ use App\Models\SystemHealthCheck;
 use App\Notifications\DuplicateApplicationDetected;
 use App\Support\DuplicateApplicationRecords;
 use App\Support\GraduateExportData;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\HistoricalWindowDataBuilder;
 use App\Support\NationalityNormalizer;
 use App\Support\PossibleDuplicateApplications;
@@ -70,7 +71,7 @@ class ApplicationController extends Controller
      */
     public function historical(Request $request, string $batch): Response
     {
-        $builder = new HistoricalWindowDataBuilder();
+        $builder = new HistoricalWindowDataBuilder;
 
         return Inertia::render('coordinator/applications/window', $builder->build($request, $batch, 'coordinator'));
     }
@@ -304,12 +305,7 @@ class ApplicationController extends Controller
                 });
             })
             ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
-                if ($statusFilter === 'pending') {
-                    // Pending includes both 'pending' and 'submitted' statuses
-                    $query->whereIn('status', ['pending', 'submitted']);
-                } else {
-                    $query->where('status', $statusFilter);
-                }
+                $query->where('status', $statusFilter);
             });
 
         // Paginate applications
@@ -536,7 +532,8 @@ class ApplicationController extends Controller
                 'hierarchical' => $byDepartment ?: [],
                 'status_counts' => [
                     'all' => $allApplications->count(),
-                    'pending' => (int) (($statusCounts['pending'] ?? 0) + ($statusCounts['submitted'] ?? 0)),
+                    'submitted' => (int) ($statusCounts['submitted'] ?? 0),
+                    'pending' => (int) ($statusCounts['pending'] ?? 0),
                     'approved' => (int) ($statusCounts['approved'] ?? 0),
                     'incomplete' => (int) ($statusCounts['incomplete'] ?? 0),
                 ],
@@ -614,11 +611,93 @@ class ApplicationController extends Controller
         return $this->sendDuplicateAlertEmail($left, $right, $notification, $duplicates);
     }
 
+    public function deleteDuplicate(
+        Request $request,
+        ApplicationWindow $window,
+        DuplicateApplicationRecords $duplicates,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'left' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/'],
+            'right' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::notIn([$request->input('left')])],
+            'selected_record' => ['required', 'string', 'max:40', 'regex:/^(application|draft)-\d+$/', Rule::in([$request->input('left'), $request->input('right')])],
+        ]);
+
+        $coordinator = Auth::guard('coordinator')->user();
+        $departmentIds = $coordinator
+            ? $coordinator->departments()
+                ->pluck('departments.id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
+            : [];
+
+        [$left, $right] = [
+            $duplicates->resolve($validated['left']),
+            $duplicates->resolve($validated['right']),
+        ];
+
+        if (! $left || ! $right) {
+            return back()->withErrors([
+                'duplicate' => 'One of the duplicate records no longer exists.',
+            ]);
+        }
+
+        if ((int) $left['window_id'] !== $window->id || (int) $right['window_id'] !== $window->id) {
+            return back()->withErrors([
+                'duplicate' => 'Both duplicate records must belong to the selected application window.',
+            ]);
+        }
+
+        if (! in_array((int) ($left['department_id'] ?? 0), $departmentIds, true)
+            || ! in_array((int) ($right['department_id'] ?? 0), $departmentIds, true)) {
+            abort(403, 'Unauthorized access to duplicate records outside your assigned departments.');
+        }
+
+        if (! $duplicates->recordsMatch($left, $right)) {
+            return back()->withErrors([
+                'duplicate' => 'These records no longer match on the same identity details.',
+            ]);
+        }
+
+        $selectedRecord = $validated['selected_record'] === $validated['left']
+            ? $left
+            : $right;
+        $remainingRecord = $validated['selected_record'] === $validated['left']
+            ? $right
+            : $left;
+        $subject = ($selectedRecord['model'] ?? null) instanceof \Illuminate\Database\Eloquent\Model
+            ? $selectedRecord['model']
+            : null;
+
+        $duplicates->deleteRecord($selectedRecord);
+
+        app(SystemEventLogger::class)->log(
+            module: 'graduation_application',
+            action: 'coordinator.duplicate_application.record_deleted',
+            message: 'Coordinator deleted a duplicate graduation application record from the application window review.',
+            subject: $subject,
+            meta: [
+                'window_id' => $window->id,
+                'left_record' => $left['key'],
+                'right_record' => $right['key'],
+                'selected_record' => $selectedRecord['key'],
+                'remaining_record' => $remainingRecord['key'],
+                'selected_type' => $selectedRecord['type'],
+                'selected_application_number' => $selectedRecord['application_number'],
+                'selected_tracking_code' => $selectedRecord['tracking_code'],
+            ],
+        );
+
+        return back()->with('success', 'Selected duplicate record deleted.');
+    }
+
     /**
      * Display the specified application (read-only).
      */
-    public function show(Application $application, PossibleDuplicateApplications $duplicates): Response
-    {
+    public function show(
+        Application $application,
+        PossibleDuplicateApplications $duplicates,
+        GuestApplicationDraftDetails $draftDetails,
+    ): Response {
         $coordinator = Auth::guard('coordinator')->user();
 
         // Ensure application belongs to coordinator's department
@@ -723,6 +802,7 @@ class ApplicationController extends Controller
 
         return Inertia::render('coordinator/applications/show', [
             'application' => $application,
+            'tracking' => $draftDetails->trackingForApplication($application),
             'possibleDuplicates' => $duplicates->forApplication(
                 $application,
                 'coordinator.applications.show',
@@ -819,15 +899,15 @@ class ApplicationController extends Controller
         foreach ($validated['requirements'] as $reqData) {
             try {
                 $requirement = $application->requirements()->findOrFail($reqData['id']);
-                
+
                 // Ensure the requirement belongs to this application
                 if ($requirement->application_id !== $application->id) {
                     continue; // Skip if requirement doesn't belong to this application
                 }
-                
+
                 $updateData = [
                     'status' => $reqData['status'],
-                    'notes' => !empty($reqData['notes']) && trim($reqData['notes']) !== '' ? trim($reqData['notes']) : null,
+                    'notes' => ! empty($reqData['notes']) && trim($reqData['notes']) !== '' ? trim($reqData['notes']) : null,
                 ];
 
                 // Track who approved and when
@@ -849,6 +929,7 @@ class ApplicationController extends Controller
                     'application_id' => $application->id,
                     'error' => $e->getMessage(),
                 ]);
+
                 continue;
             }
         }

@@ -146,7 +146,9 @@ Route::middleware([EnsureRoleAccess::class.':admin', 'auth:admin'])->group(funct
     Route::get('admin/audit-trail', [AuditTrailController::class, 'index'])->name('admin.audit-trail.index');
     Route::get('admin/global-search', [StaffGlobalSearchController::class, 'index'])->name('admin.global-search');
     Route::get('admin/unverified-applications', [UnverifiedApplicationController::class, 'index'])->name('admin.unverified-applications.index');
+    Route::get('admin/unverified-applications/{draft}', [UnverifiedApplicationController::class, 'show'])->name('admin.unverified-applications.show');
     Route::post('admin/windows/{window}/duplicates/alert', [ApplicationWindowController::class, 'sendDuplicateAlert'])->name('admin.windows.duplicates.alert');
+    Route::delete('admin/windows/{window}/duplicates', [ApplicationWindowController::class, 'deleteDuplicate'])->name('admin.windows.duplicates.destroy');
 
     // Application Windows
     Route::get('admin/windows/all', [ApplicationWindowController::class, 'all'])->name('admin.windows.all');

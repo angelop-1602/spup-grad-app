@@ -8,6 +8,7 @@ use App\Models\GuestApplicationDraft;
 use App\Models\SystemHealthCheck;
 use App\Notifications\GuestApplicationAccessNotification;
 use App\Support\ApplicationWorkflowService;
+use App\Support\GuestApplicationDraftDetails;
 use App\Support\SystemEventLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -66,6 +67,7 @@ class ManualVerificationController extends Controller
                 'application_edit_url' => $draft->application
                     ? route('coordinator.applications.show', $draft->application->application_number, false)
                     : null,
+                'detail_url' => route('coordinator.manual-verification.show', $draft, false),
                 'verification_status' => $this->draftVerificationStatus($draft),
                 'created_at' => $draft->created_at?->toIso8601String(),
                 'verified_at' => $draft->verified_at?->toIso8601String(),
@@ -82,6 +84,22 @@ class ManualVerificationController extends Controller
                 'search' => $search,
                 'window_id' => $selectedWindowId ? (string) $selectedWindowId : 'all',
             ],
+        ]);
+    }
+
+    public function show(GuestApplicationDraft $draft, GuestApplicationDraftDetails $details): Response
+    {
+        $this->authorizeDraftDepartment($draft);
+
+        return Inertia::render('staff/draft-application-show', [
+            ...$details->draftPayload($draft, 'coordinator'),
+            'viewerRole' => 'coordinator',
+            'title' => 'Manual Verification',
+            'backUrl' => route('coordinator.manual-verification.index', [
+                'search' => $draft->ensureTrackingCode(),
+                'window_id' => 'all',
+            ], false),
+            'verifyUrl' => route('coordinator.manual-verification.verify', $draft, false),
         ]);
     }
 
