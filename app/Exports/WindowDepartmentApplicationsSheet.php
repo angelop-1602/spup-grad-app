@@ -14,7 +14,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 
 class WindowDepartmentApplicationsSheet implements FromArray, ShouldAutoSize, WithEvents, WithTitle
 {
-    private const LAST_COLUMN = 'N';
+    private const LAST_COLUMN = 'O';
 
     /**
      * @param  array<string, mixed>  $data
@@ -47,19 +47,20 @@ class WindowDepartmentApplicationsSheet implements FromArray, ShouldAutoSize, Wi
         ];
 
         foreach ($this->department['programs'] as $program) {
-            $rows[] = ["Program/Degree: {$program['name']}", '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$program['total']}"];
+            $rows[] = ["Program/Degree: {$program['name']}", '', '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$program['total']}"];
 
             foreach ($program['majors'] as $major) {
-                $rows[] = ["Major: {$major['name']}", '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$major['total']}"];
+                $rows[] = ["Major: {$major['name']}", '', '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$major['total']}"];
 
                 foreach ($major['thesis_groups'] as $thesisGroup) {
-                    $rows[] = ["Thesis Category: {$thesisGroup['type']}", '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$thesisGroup['total']}"];
+                    $rows[] = ["Thesis Category: {$thesisGroup['type']}", '', '', '', '', '', '', '', '', '', '', '', '', '', "Total: {$thesisGroup['total']}"];
                     $rows[] = [
                         'No.',
                         'Application No.',
                         'Student ID',
                         'Graduate Name',
                         'Birthday',
+                        'Gender',
                         'Nationality',
                         'Department',
                         'Program / Degree',
@@ -78,6 +79,7 @@ class WindowDepartmentApplicationsSheet implements FromArray, ShouldAutoSize, Wi
                             $graduate['student_id'],
                             $graduate['name'],
                             $graduate['birthday'],
+                            $graduate['gender'],
                             $graduate['nationality'],
                             $graduate['department_code'],
                             $graduate['degree'],

@@ -130,7 +130,12 @@ export default function Welcome({
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('track') === '1') {
+        const shouldOpenTracking =
+            window.location.hash === '#track' ||
+            params.get('tracking') === '1' ||
+            params.get('track') === '1';
+
+        if (shouldOpenTracking) {
             setIsTrackingDialogOpen(true);
         }
     }, []);

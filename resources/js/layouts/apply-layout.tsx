@@ -55,7 +55,7 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                 Home
                             </Link>
                             <Link
-                                href="/?track=1"
+                                href="/#track"
                                 className="rounded-md px-2 py-1 transition hover:bg-background/70 hover:text-foreground"
                             >
                                 Track application
@@ -115,7 +115,7 @@ export default function ApplyLayout({ children }: ApplyLayoutProps) {
                                             </SheetClose>
                                             <SheetClose asChild>
                                                 <Link
-                                                    href="/?track=1"
+                                                    href="/#track"
                                                     className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/30 px-3 py-3 text-sm font-medium transition hover:bg-muted/60"
                                                 >
                                                     <Search className="h-4 w-4 text-muted-foreground" />

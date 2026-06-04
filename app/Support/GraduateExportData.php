@@ -23,7 +23,7 @@ class GraduateExportData
         $query = $window->applications()
             ->with([
                 'user:id,name,email,student_id',
-                'user.profile:id,user_id,first_name,last_name,middle_name,suffix,date_of_birth,nationality',
+                'user.profile:id,user_id,first_name,last_name,middle_name,suffix,date_of_birth,sex,nationality',
                 'department:id,name,code',
                 'course:id,name,code,department_id',
                 'subjectEnrollments:id,application_id,subject_name,units,order',
@@ -214,12 +214,14 @@ class GraduateExportData
         $thesisType = self::thesisType($application);
         $nationality = NationalityNormalizer::normalize($profile?->nationality) ?? '';
         $birthday = self::dateValue($profile?->date_of_birth);
+        $gender = self::titleCase($profile?->sex);
 
         return [
             'application_number' => (string) ($application->application_number ?? ''),
             'student_id' => (string) ($application->user?->student_id ?? ''),
             'name' => self::studentName($application),
             'birthday' => $birthday,
+            'gender' => $gender,
             'nationality' => $nationality,
             'department' => $department,
             'department_code' => $department,
