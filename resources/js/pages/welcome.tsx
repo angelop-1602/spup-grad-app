@@ -129,15 +129,11 @@ export default function Welcome({
     }, [trackingForm.errors]);
 
     useEffect(() => {
-        if (windowStatus?.status !== 'active') {
-            return;
-        }
-
         const params = new URLSearchParams(window.location.search);
         if (params.get('track') === '1') {
             setIsTrackingDialogOpen(true);
         }
-    }, [windowStatus?.status]);
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -245,7 +241,6 @@ export default function Welcome({
     );
 
     const isApplicationOpen = windowStatus?.status === 'active';
-    const showApplicationActions = isApplicationOpen;
     const showCountdown =
         windowStatus?.status === 'upcoming' ||
         windowStatus?.status === 'active';
@@ -384,8 +379,8 @@ export default function Welcome({
                                         </div>
                                     </div>
 
-                                    {showApplicationActions ? (
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        {isApplicationOpen ? (
                                             <Button
                                                 asChild
                                                 size="lg"
@@ -396,166 +391,160 @@ export default function Welcome({
                                                     <ArrowRight className="ml-2 size-4" />
                                                 </Link>
                                             </Button>
-                                            <Dialog
-                                                open={isTrackingDialogOpen}
-                                                onOpenChange={
-                                                    setIsTrackingDialogOpen
-                                                }
-                                            >
-                                                <DialogTrigger asChild>
-                                                    <Button
-                                                        type="button"
-                                                        size="lg"
-                                                        variant="outline"
-                                                        className="w-full border-white/20 bg-white/8 text-white backdrop-blur hover:bg-white/15 sm:w-auto"
-                                                    >
-                                                        Track existing
+                                        ) : null}
+                                        <Dialog
+                                            open={isTrackingDialogOpen}
+                                            onOpenChange={
+                                                setIsTrackingDialogOpen
+                                            }
+                                        >
+                                            <DialogTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    size="lg"
+                                                    variant="outline"
+                                                    className="w-full border-white/20 bg-white/8 text-white backdrop-blur hover:bg-white/15 sm:w-auto"
+                                                >
+                                                    Track existing application
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="border-emerald-900/30 bg-[#0d3d24] text-white sm:max-w-lg">
+                                                <DialogHeader>
+                                                    <DialogTitle>
+                                                        Track an existing
                                                         application
-                                                    </Button>
-                                                </DialogTrigger>
-                                                <DialogContent className="border-emerald-900/30 bg-[#0d3d24] text-white sm:max-w-lg">
-                                                    <DialogHeader>
-                                                        <DialogTitle>
-                                                            Track an existing
-                                                            application
-                                                        </DialogTitle>
-                                                        <DialogDescription className="text-emerald-100/80">
-                                                            Enter the tracking
-                                                            code and 6-digit PIN
-                                                            from your email to
-                                                            reopen your
-                                                            application status.
-                                                        </DialogDescription>
-                                                    </DialogHeader>
+                                                    </DialogTitle>
+                                                    <DialogDescription className="text-emerald-100/80">
+                                                        Enter the tracking code
+                                                        and 6-digit PIN from
+                                                        your email to reopen
+                                                        your application status.
+                                                    </DialogDescription>
+                                                </DialogHeader>
 
-                                                    <div className="space-y-4">
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor="tracking_code"
-                                                                className="text-white/90"
-                                                            >
-                                                                Tracking code
-                                                            </Label>
-                                                            <Input
-                                                                id="tracking_code"
-                                                                value={
-                                                                    trackingForm
-                                                                        .data
-                                                                        .tracking_code
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    trackingForm.setData(
-                                                                        'tracking_code',
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                placeholder="TRK-MMMM-YYYY-ABC123"
-                                                                className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
-                                                            />
-                                                            <InputError
-                                                                message={
-                                                                    trackingForm
-                                                                        .errors
-                                                                        .tracking_code
-                                                                }
-                                                            />
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor="tracking_pin"
-                                                                className="text-white/90"
-                                                            >
-                                                                6-digit PIN
-                                                            </Label>
-                                                            <Input
-                                                                id="tracking_pin"
-                                                                inputMode="numeric"
-                                                                maxLength={6}
-                                                                value={
-                                                                    trackingForm
-                                                                        .data
-                                                                        .tracking_pin
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    trackingForm.setData(
-                                                                        'tracking_pin',
-                                                                        event.target.value
-                                                                            .replace(
-                                                                                /\D/g,
-                                                                                '',
-                                                                            )
-                                                                            .slice(
-                                                                                0,
-                                                                                6,
-                                                                            ),
-                                                                    )
-                                                                }
-                                                                placeholder="000000"
-                                                                className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
-                                                            />
-                                                            <InputError
-                                                                message={
-                                                                    trackingForm
-                                                                        .errors
-                                                                        .tracking_pin
-                                                                }
-                                                            />
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                                                            <Button
-                                                                type="button"
-                                                                variant="ghost"
-                                                                className="text-white hover:bg-white/10 hover:text-white"
-                                                                onClick={() =>
-                                                                    setIsTrackingDialogOpen(
-                                                                        false,
-                                                                    )
-                                                                }
-                                                            >
-                                                                Cancel
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    trackingForm.post(
-                                                                        '/apply/track',
-                                                                        {
-                                                                            preserveScroll: true,
-                                                                            onSuccess:
-                                                                                () =>
-                                                                                    setIsTrackingDialogOpen(
-                                                                                        false,
-                                                                                    ),
-                                                                            onError:
-                                                                                () =>
-                                                                                    setIsTrackingDialogOpen(
-                                                                                        true,
-                                                                                    ),
-                                                                        },
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    trackingForm.processing
-                                                                }
-                                                            >
-                                                                {trackingForm.processing
-                                                                    ? 'Checking...'
-                                                                    : 'Track application'}
-                                                            </Button>
-                                                        </div>
+                                                <div className="space-y-4">
+                                                    <div className="space-y-2">
+                                                        <Label
+                                                            htmlFor="tracking_code"
+                                                            className="text-white/90"
+                                                        >
+                                                            Tracking code
+                                                        </Label>
+                                                        <Input
+                                                            id="tracking_code"
+                                                            value={
+                                                                trackingForm
+                                                                    .data
+                                                                    .tracking_code
+                                                            }
+                                                            onChange={(event) =>
+                                                                trackingForm.setData(
+                                                                    'tracking_code',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="TRK-MMMM-YYYY-ABC123"
+                                                            className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                trackingForm
+                                                                    .errors
+                                                                    .tracking_code
+                                                            }
+                                                        />
                                                     </div>
-                                                </DialogContent>
-                                            </Dialog>
-                                        </div>
-                                    ) : null}
+
+                                                    <div className="space-y-2">
+                                                        <Label
+                                                            htmlFor="tracking_pin"
+                                                            className="text-white/90"
+                                                        >
+                                                            6-digit PIN
+                                                        </Label>
+                                                        <Input
+                                                            id="tracking_pin"
+                                                            inputMode="numeric"
+                                                            maxLength={6}
+                                                            value={
+                                                                trackingForm
+                                                                    .data
+                                                                    .tracking_pin
+                                                            }
+                                                            onChange={(event) =>
+                                                                trackingForm.setData(
+                                                                    'tracking_pin',
+                                                                    event.target.value
+                                                                        .replace(
+                                                                            /\D/g,
+                                                                            '',
+                                                                        )
+                                                                        .slice(
+                                                                            0,
+                                                                            6,
+                                                                        ),
+                                                                )
+                                                            }
+                                                            placeholder="000000"
+                                                            className="border-white/15 bg-black/20 text-white placeholder:text-emerald-100/40"
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                trackingForm
+                                                                    .errors
+                                                                    .tracking_pin
+                                                            }
+                                                        />
+                                                    </div>
+
+                                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className="text-white hover:bg-white/10 hover:text-white"
+                                                            onClick={() =>
+                                                                setIsTrackingDialogOpen(
+                                                                    false,
+                                                                )
+                                                            }
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                trackingForm.post(
+                                                                    '/apply/track',
+                                                                    {
+                                                                        preserveScroll:
+                                                                            true,
+                                                                        onSuccess:
+                                                                            () =>
+                                                                                setIsTrackingDialogOpen(
+                                                                                    false,
+                                                                                ),
+                                                                        onError:
+                                                                            () =>
+                                                                                setIsTrackingDialogOpen(
+                                                                                    true,
+                                                                                ),
+                                                                    },
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                trackingForm.processing
+                                                            }
+                                                        >
+                                                            {trackingForm.processing
+                                                                ? 'Checking...'
+                                                                : 'Track application'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+                                    </div>
                                 </div>
 
                                 {/* Countdown (GLASS) */}
