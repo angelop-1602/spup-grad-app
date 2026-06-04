@@ -44,7 +44,7 @@ return [
         'legacy_api_key' => env('FREECONVERT_API_KEY'),
         'legacy_api_keys' => env('FREECONVERT_API_KEYS'),
         'base_url' => env('FREECONVERT_BASE_URL', 'https://api.freeconvert.com/v1'),
-        'timeout' => (int) env('FREECONVERT_TIMEOUT', 25),
+        'timeout' => (int) env('FREECONVERT_TIMEOUT', 120),
         'poll_interval' => (int) env('FREECONVERT_POLL_INTERVAL', 2),
         'max_attempts' => (int) env('FREECONVERT_MAX_ATTEMPTS', 3),
         'retry_delay_ms' => (int) env('FREECONVERT_RETRY_DELAY_MS', 1000),

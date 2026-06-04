@@ -222,7 +222,7 @@ class ApplicationController extends Controller
      * user profile, and template have not changed. Data changes produce a new cache
      * key, so the next download regenerates the document.
      *
-     * Note: DOCX fallback downloads are not cached because they represent a failed
+     * DOCX fallback downloads are not cached because they represent a failed
      * conversion attempt and should be retried later.
      */
     public static function generatePdf(Application $application): BinaryFileResponse
@@ -236,6 +236,7 @@ class ApplicationController extends Controller
             return self::downloadStoredApplicationPdf($pdfCachePath, $fileName);
         }
 
+        self::extendPdfConversionTimeLimit();
         $docx = self::buildApplicationDocx($application);
 
         try {
@@ -280,6 +281,13 @@ class ApplicationController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
+    private static function downloadStoredApplicationPdf(string $storagePath, string $fileName): BinaryFileResponse
+    {
+        return response()->download(Storage::disk(self::APPLICATION_PDF_CACHE_DISK)->path($storagePath), $fileName, [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
     /**
      * @param  array{path: string, file_name: string}  $docx
      */
@@ -290,11 +298,14 @@ class ApplicationController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
-    private static function downloadStoredApplicationPdf(string $storagePath, string $fileName): BinaryFileResponse
+    private static function extendPdfConversionTimeLimit(): void
     {
-        return response()->download(Storage::disk(self::APPLICATION_PDF_CACHE_DISK)->path($storagePath), $fileName, [
-            'Content-Type' => 'application/pdf',
-        ]);
+        if (! function_exists('set_time_limit')) {
+            return;
+        }
+
+        $configuredTimeout = max(5, (int) config('services.freeconvert.timeout', 120));
+        @set_time_limit($configuredTimeout + 30);
     }
 
     private static function storeApplicationPdfCache(Application $application, string $pdfPath, string $cachePath): ?string
@@ -1133,30 +1144,12 @@ class ApplicationController extends Controller
                 throw new \RuntimeException('FreeConvert upload task did not include upload details.');
             }
 
-            $uploadResponse = self::freeConvertRequestWithRetry(
-                function () use ($apiKey, $docxPath, $timeout, $uploadParameters, $uploadUrl): HttpResponse {
-                    $fileHandle = fopen($docxPath, 'r');
-
-                    if ($fileHandle === false) {
-                        throw new \RuntimeException('Unable to open generated DOCX for FreeConvert upload.');
-                    }
-
-                    try {
-                        return Http::withToken($apiKey)
-                            ->timeout($timeout)
-                            ->withOptions(['allow_redirects' => true])
-                            ->attach(
-                                'file',
-                                $fileHandle,
-                                basename($docxPath),
-                                ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-                            )
-                            ->post($uploadUrl, $uploadParameters);
-                    } finally {
-                        fclose($fileHandle);
-                    }
-                },
-                'FreeConvert file upload failed',
+            $uploadResponse = self::uploadDocxToFreeConvert(
+                $docxPath,
+                $apiKey,
+                $uploadUrl,
+                $uploadParameters,
+                $timeout,
                 $maxAttempts,
                 $retryDelayMs
             );
@@ -1202,6 +1195,76 @@ class ApplicationController extends Controller
                     // Cleanup is best-effort; downloaded PDFs should still be returned.
                 }
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $uploadParameters
+     */
+    private static function uploadDocxToFreeConvert(
+        string $docxPath,
+        string $apiKey,
+        string $uploadUrl,
+        array $uploadParameters,
+        int $timeout,
+        int $maxAttempts,
+        int $retryDelayMs,
+    ): HttpResponse {
+        try {
+            return self::freeConvertRequestWithRetry(
+                fn () => self::postFreeConvertUpload($docxPath, $uploadUrl, $uploadParameters, $timeout),
+                'FreeConvert file upload failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
+        } catch (\Throwable $e) {
+            Log::warning('FreeConvert signed upload failed without bearer token; retrying with API token.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return self::freeConvertRequestWithRetry(
+                fn () => self::postFreeConvertUpload($docxPath, $uploadUrl, $uploadParameters, $timeout, $apiKey),
+                'FreeConvert authenticated file upload failed',
+                $maxAttempts,
+                $retryDelayMs
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $uploadParameters
+     */
+    private static function postFreeConvertUpload(
+        string $docxPath,
+        string $uploadUrl,
+        array $uploadParameters,
+        int $timeout,
+        ?string $apiKey = null,
+    ): HttpResponse {
+        $fileHandle = fopen($docxPath, 'r');
+
+        if ($fileHandle === false) {
+            throw new \RuntimeException('Unable to open generated DOCX for FreeConvert upload.');
+        }
+
+        try {
+            $request = Http::timeout($timeout)
+                ->withOptions(['allow_redirects' => true]);
+
+            if ($apiKey !== null && $apiKey !== '') {
+                $request = $request->withToken($apiKey);
+            }
+
+            return $request
+                ->attach(
+                    'file',
+                    $fileHandle,
+                    basename($docxPath),
+                    ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+                )
+                ->post($uploadUrl, $uploadParameters);
+        } finally {
+            fclose($fileHandle);
         }
     }
 

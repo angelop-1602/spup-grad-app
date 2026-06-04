@@ -719,7 +719,9 @@ test('guest portal downloads the generated application as a pdf', function () {
         'services.freeconvert.max_attempts' => 1,
         'services.freeconvert.retry_delay_ms' => 1,
     ]);
-    Http::fake(function ($request) {
+    $uploadAuthorization = null;
+
+    Http::fake(function ($request) use (&$uploadAuthorization) {
         $url = (string) $request->url();
 
         if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
@@ -727,6 +729,8 @@ test('guest portal downloads the generated application as a pdf', function () {
         }
 
         if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-123') {
+            $uploadAuthorization = $request->header('Authorization');
+
             return Http::response(['ok' => true]);
         }
 
@@ -776,6 +780,7 @@ test('guest portal downloads the generated application as a pdf', function () {
     $response->assertDownload('GraduationApplication_Andrea_L_Santos_Jr.pdf');
     expect($response->headers->get('content-type'))->toContain('application/pdf');
     expect(str_starts_with((string) file_get_contents($response->baseResponse->getFile()->getPathname()), '%PDF'))->toBeTrue();
+    expect($uploadAuthorization)->toBe([]);
 });
 
 test('application pdf export retries transient freeconvert failures before succeeding', function () {
@@ -833,6 +838,64 @@ test('application pdf export retries transient freeconvert failures before succe
     expect($jobCreationTokens)->toBe([
         'Bearer retry-freeconvert-key',
         'Bearer retry-freeconvert-key',
+    ]);
+});
+
+test('application pdf export retries the upload with an api token when signed upload is rejected', function () {
+    config([
+        'services.freeconvert.api_keys' => ['upload-freeconvert-key'],
+        'services.freeconvert.base_url' => 'https://api.freeconvert.test/v1',
+        'services.freeconvert.timeout' => 30,
+        'services.freeconvert.poll_interval' => 1,
+        'services.freeconvert.max_attempts' => 1,
+        'services.freeconvert.retry_delay_ms' => 1,
+    ]);
+
+    $uploadTokens = [];
+
+    Http::fake(function ($request) use (&$uploadTokens) {
+        $url = (string) $request->url();
+
+        if ($request->method() === 'POST' && $url === 'https://api.freeconvert.test/v1/process/jobs') {
+            return Http::response(freeConvertJobPayload('job-upload-auth'), 201);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://upload.freeconvert.test/api/upload/job-upload-auth') {
+            $uploadTokens[] = $request->header('Authorization')[0] ?? '';
+
+            if (count($uploadTokens) === 1) {
+                return Http::response(['message' => 'upload requires authentication'], 403);
+            }
+
+            return Http::response(['ok' => true]);
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-upload-auth') {
+            return Http::response(freeConvertCompletedJobPayload('job-upload-auth'));
+        }
+
+        if ($request->method() === 'GET' && $url === 'https://download.freeconvert.test/job-upload-auth/result.pdf') {
+            return Http::response('%PDF-1.4 authenticated upload pdf body', 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
+        if ($request->method() === 'DELETE' && $url === 'https://api.freeconvert.test/v1/process/jobs/job-upload-auth') {
+            return Http::response([], 204);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $application = guestApplicationForDocx();
+    $response = \App\Http\Controllers\ApplicationController::generatePdf($application);
+    $pdfPath = $response->getFile()->getPathname();
+
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+    expect(str_starts_with((string) file_get_contents($pdfPath), '%PDF-1.4 authenticated upload pdf body'))->toBeTrue();
+    expect($uploadTokens)->toBe([
+        '',
+        'Bearer upload-freeconvert-key',
     ]);
 });
 
