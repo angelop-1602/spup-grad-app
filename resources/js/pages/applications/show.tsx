@@ -162,9 +162,6 @@ export default function ShowApplication({
     const uploadingToastIdRef = useRef<string | null>(null);
     const { addToast, removeToast } = useToast();
     const isGuestPortal = portalMode === 'guest';
-    const backHref = isGuestPortal
-        ? applyRoutes.index().url
-        : applicationRoutes.index().url;
     const editHref = isGuestPortal
         ? applyRoutes.portal.edit(application.application_number).url
         : applicationRoutes.edit(application.application_number).url;
@@ -260,16 +257,6 @@ export default function ShowApplication({
                 <div className="space-y-6 pb-6">
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
-                            {/* <Button
-                                asChild
-                                variant="ghost"
-                                size="icon"
-                                className="hidden md:flex"
-                            >
-                                <Link href={backHref}>
-                                    <ArrowLeft className="h-4 w-4" />
-                                </Link>
-                            </Button> */}
                             <div className="min-w-0 flex-1">
                                 <h1 className="text-xl font-bold tracking-tight md:text-3xl">
                                     Application Details

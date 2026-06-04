@@ -409,7 +409,7 @@ test('window graduate export groups records and normalizes text for reuse', func
             ->and($coedSheet->getCell("E{$headerRow}")->getValue())->toBe('Birthday')
             ->and($coedSheet->getCell("F{$headerRow}")->getValue())->toBe('Nationality')
             ->and($coedSheet->getCell("N{$headerRow}")->getValue())->toBe('Application Status')
-            ->and($coedSheet->getCell('E'.($headerRow + 1))->getValue())->toBe('1999-05-15')
+            ->and($coedSheet->getCell('E'.($headerRow + 1))->getValue())->toBe('May 15, 1999')
             ->and($coedSheet->getCell('F'.($headerRow + 1))->getValue())->toBe('Philippines')
             ->and($coedSheet->getCell('N'.($headerRow + 1))->getValue())->not->toBe('');
     } finally {

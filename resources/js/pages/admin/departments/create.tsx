@@ -1,4 +1,4 @@
-import adminRoutes from '@/routes/admin';
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
+import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft, School } from 'lucide-react';
+import { School } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -49,15 +50,20 @@ export default function CreateDepartment() {
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link href={adminRoutes.departments.index().url}>
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                        <HistoryBackButton
+                            variant="ghost"
+                            size="icon"
+                            iconOnly
+                            fallbackHref={adminRoutes.departments.index().url}
+                            label="Back to academic structure"
+                        />
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight">Create Department</h1>
+                            <h1 className="text-3xl font-bold tracking-tight">
+                                Create Department
+                            </h1>
                             <p className="text-muted-foreground">
-                                Define a new academic department for the university.
+                                Define a new academic department for the
+                                university.
                             </p>
                         </div>
                     </div>
@@ -81,12 +87,16 @@ export default function CreateDepartment() {
                                     <Input
                                         id="name"
                                         value={data.name}
-                                        onChange={(e) => setData('name', e.target.value)}
+                                        onChange={(e) =>
+                                            setData('name', e.target.value)
+                                        }
                                         placeholder="e.g., School of Information Technology and Engineering"
                                         required
                                     />
                                     {errors.name && (
-                                        <p className="text-sm text-red-600">{errors.name}</p>
+                                        <p className="text-sm text-red-600">
+                                            {errors.name}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
@@ -94,12 +104,16 @@ export default function CreateDepartment() {
                                     <Input
                                         id="code"
                                         value={data.code}
-                                        onChange={(e) => setData('code', e.target.value)}
+                                        onChange={(e) =>
+                                            setData('code', e.target.value)
+                                        }
                                         placeholder="e.g., SITE"
                                         required
                                     />
                                     {errors.code && (
-                                        <p className="text-sm text-red-600">{errors.code}</p>
+                                        <p className="text-sm text-red-600">
+                                            {errors.code}
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -109,21 +123,33 @@ export default function CreateDepartment() {
                                 <Textarea
                                     id="description"
                                     value={data.description}
-                                    onChange={(e) => setData('description', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('description', e.target.value)
+                                    }
                                     placeholder="Optional description for this department."
                                     rows={3}
                                 />
                                 {errors.description && (
-                                    <p className="text-sm text-red-600">{errors.description}</p>
+                                    <p className="text-sm text-red-600">
+                                        {errors.description}
+                                    </p>
                                 )}
                             </div>
 
                             <div className="flex gap-4">
                                 <Button type="submit" disabled={processing}>
-                                    {processing ? 'Creating...' : 'Create Department'}
+                                    {processing
+                                        ? 'Creating...'
+                                        : 'Create Department'}
                                 </Button>
                                 <Button type="button" variant="outline" asChild>
-                                    <Link href={adminRoutes.departments.index().url}>Cancel</Link>
+                                    <Link
+                                        href={
+                                            adminRoutes.departments.index().url
+                                        }
+                                    >
+                                        Cancel
+                                    </Link>
                                 </Button>
                             </div>
                         </form>
@@ -133,5 +159,3 @@ export default function CreateDepartment() {
         </AppLayout>
     );
 }
-
-

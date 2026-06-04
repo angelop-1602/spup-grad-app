@@ -1,19 +1,19 @@
-import adminRoutes from '@/routes/admin';
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
-    CardDescription,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
+import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
 
 interface Department {
     id: number;
@@ -39,7 +39,9 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function CreateCoordinator({ departments }: CreateCoordinatorProps) {
+export default function CreateCoordinator({
+    departments,
+}: CreateCoordinatorProps) {
     const { data, setData, post, processing, errors } = useForm<{
         name: string;
         email: string;
@@ -59,7 +61,10 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
         post(adminRoutes.coordinators.store().url);
     };
 
-    const toggleDepartment = (id: number, checked: boolean | 'indeterminate') => {
+    const toggleDepartment = (
+        id: number,
+        checked: boolean | 'indeterminate',
+    ) => {
         if (checked) {
             setData('department_ids', [...data.department_ids, id]);
         } else {
@@ -75,15 +80,20 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
             <Head title="Create Coordinator" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center gap-3">
-                    <Button asChild variant="ghost" size="icon">
-                        <Link href={adminRoutes.coordinators.index().url}>
-                            <ArrowLeft className="h-4 w-4" />
-                        </Link>
-                    </Button>
+                    <HistoryBackButton
+                        variant="ghost"
+                        size="icon"
+                        iconOnly
+                        fallbackHref={adminRoutes.coordinators.index().url}
+                        label="Back to coordinators"
+                    />
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Create Coordinator</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Create Coordinator
+                        </h1>
                         <p className="text-sm text-muted-foreground">
-                            Create a coordinator account and assign one or more departments.
+                            Create a coordinator account and assign one or more
+                            departments.
                         </p>
                     </div>
                 </div>
@@ -91,7 +101,9 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                 <Card>
                     <CardHeader>
                         <CardTitle>Coordinator Details</CardTitle>
-                        <CardDescription>Basic information and department assignments.</CardDescription>
+                        <CardDescription>
+                            Basic information and department assignments.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-6">
@@ -101,10 +113,14 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                     <Input
                                         id="name"
                                         value={data.name}
-                                        onChange={(e) => setData('name', e.target.value)}
+                                        onChange={(e) =>
+                                            setData('name', e.target.value)
+                                        }
                                     />
                                     {errors.name && (
-                                        <p className="text-sm text-destructive">{errors.name}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.name}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
@@ -113,10 +129,14 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                         id="email"
                                         type="email"
                                         value={data.email}
-                                        onChange={(e) => setData('email', e.target.value)}
+                                        onChange={(e) =>
+                                            setData('email', e.target.value)
+                                        }
                                     />
                                     {errors.email && (
-                                        <p className="text-sm text-destructive">{errors.email}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.email}
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -128,20 +148,29 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                         id="password"
                                         type="password"
                                         value={data.password}
-                                        onChange={(e) => setData('password', e.target.value)}
+                                        onChange={(e) =>
+                                            setData('password', e.target.value)
+                                        }
                                     />
                                     {errors.password && (
-                                        <p className="text-sm text-destructive">{errors.password}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.password}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="password_confirmation">Confirm Password</Label>
+                                    <Label htmlFor="password_confirmation">
+                                        Confirm Password
+                                    </Label>
                                     <Input
                                         id="password_confirmation"
                                         type="password"
                                         value={data.password_confirmation}
                                         onChange={(e) =>
-                                            setData('password_confirmation', e.target.value)
+                                            setData(
+                                                'password_confirmation',
+                                                e.target.value,
+                                            )
                                         }
                                     />
                                 </div>
@@ -151,8 +180,8 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                 <div>
                                     <Label>Assigned Departments</Label>
                                     <p className="text-sm text-muted-foreground">
-                                        Select one or more departments this coordinator is responsible
-                                        for.
+                                        Select one or more departments this
+                                        coordinator is responsible for.
                                     </p>
                                 </div>
                                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
@@ -162,9 +191,14 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                             className="flex cursor-pointer items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
                                         >
                                             <Checkbox
-                                                checked={data.department_ids.includes(department.id)}
+                                                checked={data.department_ids.includes(
+                                                    department.id,
+                                                )}
                                                 onCheckedChange={(checked) =>
-                                                    toggleDepartment(department.id, checked)
+                                                    toggleDepartment(
+                                                        department.id,
+                                                        checked,
+                                                    )
                                                 }
                                             />
                                             <span>{department.name}</span>
@@ -172,7 +206,9 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                     ))}
                                 </div>
                                 {errors.department_ids && (
-                                    <p className="text-sm text-destructive">{errors.department_ids}</p>
+                                    <p className="text-sm text-destructive">
+                                        {errors.department_ids}
+                                    </p>
                                 )}
                             </div>
 
@@ -183,10 +219,18 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
                                     asChild
                                     disabled={processing}
                                 >
-                                    <Link href={adminRoutes.coordinators.index().url}>Cancel</Link>
+                                    <Link
+                                        href={
+                                            adminRoutes.coordinators.index().url
+                                        }
+                                    >
+                                        Cancel
+                                    </Link>
                                 </Button>
                                 <Button type="submit" disabled={processing}>
-                                    {processing ? 'Creating...' : 'Create Coordinator'}
+                                    {processing
+                                        ? 'Creating...'
+                                        : 'Create Coordinator'}
                                 </Button>
                             </div>
                         </form>
@@ -196,5 +240,3 @@ export default function CreateCoordinator({ departments }: CreateCoordinatorProp
         </AppLayout>
     );
 }
-
-

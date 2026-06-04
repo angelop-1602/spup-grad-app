@@ -1,5 +1,6 @@
 import { ApplicationApplicantCell } from '@/components/application-applicant-cell';
 import { DownloadFormButton } from '@/components/download-form-button';
+import { HistoryBackButton } from '@/components/history-back-button';
 import { NationalitySummary } from '@/components/nationality-summary';
 import { headline, staffStatusClass } from '@/components/staff-table-utils';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +32,7 @@ import AppLayout from '@/layouts/app-layout';
 import coordinatorRoutes from '@/routes/coordinator';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Download, Eye, Search } from 'lucide-react';
+import { Download, Eye, Search } from 'lucide-react';
 import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -572,15 +573,15 @@ export default function CoordinatorWindowShow({
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link
-                                href={
-                                    coordinatorRoutes.applications.index().url
-                                }
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                        <HistoryBackButton
+                            variant="ghost"
+                            size="icon"
+                            iconOnly
+                            fallbackHref={
+                                coordinatorRoutes.applications.index().url
+                            }
+                            label="Back to application windows"
+                        />
                         <div>
                             <h1 className="text-3xl font-bold tracking-tight">
                                 {window.title}

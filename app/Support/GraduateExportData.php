@@ -273,10 +273,18 @@ class GraduateExportData
     private static function dateValue(mixed $value): string
     {
         if ($value instanceof DateTimeInterface) {
-            return $value->format('Y-m-d');
+            return $value->format('F j, Y');
         }
 
-        return trim((string) $value);
+        $date = trim((string) $value);
+
+        if ($date === '') {
+            return '';
+        }
+
+        $timestamp = strtotime($date);
+
+        return $timestamp ? date('F j, Y', $timestamp) : $date;
     }
 
     /**

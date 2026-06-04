@@ -1,9 +1,10 @@
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, MailWarning, Trash2 } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
+import { MailWarning, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatDate, headline, statusClass } from './console-utils';
 
@@ -246,12 +247,11 @@ export default function DeveloperWindow({
             <Head title={`Developer Window - ${window.title}`} />
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <Button asChild variant="outline" size="sm">
-                    <Link href="/developer/windows">
-                        <ArrowLeft className="size-4" />
-                        Back
-                    </Link>
-                </Button>
+                <HistoryBackButton
+                    variant="outline"
+                    size="sm"
+                    fallbackHref="/developer/windows"
+                />
                 <div className="flex flex-wrap gap-2">
                     <Badge
                         variant="outline"

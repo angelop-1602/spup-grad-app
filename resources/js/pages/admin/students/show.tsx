@@ -1,3 +1,4 @@
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,7 +26,6 @@ import { formatName } from '@/utils/format-name';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
-    ArrowLeft,
     CheckCircle2,
     KeyRound,
     Pencil,
@@ -262,19 +262,14 @@ export default function AdminStudentShow({ student }: ShowStudentProps) {
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-3 md:gap-6 md:p-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <Button
-                            asChild
+                        <HistoryBackButton
                             variant="ghost"
                             size="icon"
+                            iconOnly
                             className="h-8 w-8 p-0"
-                        >
-                            <Link
-                                href={adminRoutes.students.index().url}
-                                aria-label="Back to students"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                            fallbackHref={adminRoutes.students.index().url}
+                            label="Back to students"
+                        />
                         <div>
                             <h1 className="text-xl font-semibold tracking-tight md:text-2xl lg:text-3xl">
                                 {displayName}

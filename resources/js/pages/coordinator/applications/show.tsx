@@ -2,6 +2,7 @@ import {
     ApplicationTrackingCard,
     type ApplicationTracking,
 } from '@/components/application-tracking-card';
+import { HistoryBackButton } from '@/components/history-back-button';
 import {
     PossibleDuplicateApplications,
     type PossibleDuplicateApplication,
@@ -15,8 +16,8 @@ import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import coordinatorRoutes from '@/routes/coordinator';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
+import { CheckCircle2, Clock } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -331,20 +332,16 @@ export default function CoordinatorShowApplication({
                 {/* Header */}
                 <div className="flex items-center justify-between pb-3 md:pb-4 lg:pb-6">
                     <div className="flex items-center gap-2 md:gap-3">
-                        <Button
-                            asChild
+                        <HistoryBackButton
                             variant="ghost"
                             size="icon"
+                            iconOnly
                             className="hidden md:flex"
-                        >
-                            <Link
-                                href={
-                                    coordinatorRoutes.applications.index().url
-                                }
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                            fallbackHref={
+                                coordinatorRoutes.applications.index().url
+                            }
+                            label="Back to applications"
+                        />
                         <div>
                             <h1 className="text-xl font-bold tracking-tight md:text-2xl lg:text-3xl">
                                 Application Review

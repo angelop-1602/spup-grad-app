@@ -4,6 +4,7 @@ import {
     type ApplicationTracking,
 } from '@/components/application-tracking-card';
 import { DownloadFormButton } from '@/components/download-form-button';
+import { HistoryBackButton } from '@/components/history-back-button';
 import {
     PossibleDuplicateApplications,
     type PossibleDuplicateApplication,
@@ -17,7 +18,7 @@ import { profilePhotoUrl } from '@/lib/profile-photo';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, Clock, Pencil } from 'lucide-react';
+import { CheckCircle2, Clock, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -330,17 +331,17 @@ export default function AdminShowApplication({
                 {/* Header */}
                 <div className="flex items-center justify-between pb-6">
                     <div className="flex items-center gap-3">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link
-                                href={
-                                    adminRoutes.windows.show({
-                                        window: application.window.id,
-                                    }).url
-                                }
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                        <HistoryBackButton
+                            variant="ghost"
+                            size="icon"
+                            iconOnly
+                            fallbackHref={
+                                adminRoutes.windows.show({
+                                    window: application.window.id,
+                                }).url
+                            }
+                            label="Back to window"
+                        />
                         <div>
                             <h1 className="text-3xl font-bold tracking-tight">
                                 Application Details

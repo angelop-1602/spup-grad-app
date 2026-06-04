@@ -2,6 +2,7 @@ import {
     ApplicationTrackingCard,
     type ApplicationTracking,
 } from '@/components/application-tracking-card';
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/contexts/toast-context';
@@ -11,7 +12,7 @@ import { formatDateOnly } from '@/lib/date-only';
 import { profilePhotoUrl } from '@/lib/profile-photo';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, ExternalLink } from 'lucide-react';
+import { CheckCircle2, ExternalLink } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 const HIGHEST_EDUCATION_LEVEL_LABELS: Record<string, string> = {
@@ -320,11 +321,13 @@ export default function DraftApplicationShow({
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4 md:p-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link href={backUrl}>
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                        <HistoryBackButton
+                            variant="ghost"
+                            size="icon"
+                            iconOnly
+                            fallbackHref={backUrl}
+                            label="Back to manual verification"
+                        />
                         <div>
                             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
                                 {title}

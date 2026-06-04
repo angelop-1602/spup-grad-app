@@ -1,3 +1,4 @@
+import { HistoryBackButton } from '@/components/history-back-button';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -12,7 +13,6 @@ import AppLayout from '@/layouts/app-layout';
 import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
 
 interface Student {
     id: number;
@@ -67,14 +67,13 @@ export default function EditStudent({ student }: EditStudentProps) {
             <Head title={`Edit Student: ${student.name}`} />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center gap-3">
-                    <Button asChild variant="ghost" size="icon">
-                        <Link
-                            href={studentIndexUrl}
-                            aria-label="Back to students"
-                        >
-                            <ArrowLeft className="h-4 w-4" />
-                        </Link>
-                    </Button>
+                    <HistoryBackButton
+                        variant="ghost"
+                        size="icon"
+                        iconOnly
+                        fallbackHref={studentIndexUrl}
+                        label="Back to students"
+                    />
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">
                             Edit Student

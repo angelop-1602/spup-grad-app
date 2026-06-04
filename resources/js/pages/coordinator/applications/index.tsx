@@ -3,12 +3,12 @@ import {
     type ApplicationWindowRow,
     type PaginatedApplicationWindows,
 } from '@/components/application-windows-table';
-import { Button } from '@/components/ui/button';
+import { HistoryBackButton } from '@/components/history-back-button';
 import AppLayout from '@/layouts/app-layout';
 import coordinatorRoutes from '@/routes/coordinator';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Download, Eye } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { Download, Eye } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -49,11 +49,13 @@ export default function CoordinatorApplicationsIndex({
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link href={coordinatorRoutes.dashboard().url}>
-                                <ArrowLeft className="h-4 w-4" />
-                            </Link>
-                        </Button>
+                        <HistoryBackButton
+                            variant="ghost"
+                            size="icon"
+                            iconOnly
+                            fallbackHref={coordinatorRoutes.dashboard().url}
+                            label="Back to dashboard"
+                        />
                         <div>
                             <h1 className="text-3xl font-bold tracking-tight">
                                 Application Windows

@@ -1,11 +1,12 @@
+import { HistoryBackButton } from '@/components/history-back-button';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import DeveloperConsoleLayout from '@/layouts/developer-console-layout';
-import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, ExternalLink, Image } from 'lucide-react';
+import { Head, useForm } from '@inertiajs/react';
+import { CheckCircle2, ExternalLink, Image } from 'lucide-react';
 import { formatDate, headline, statusClass } from '../console-utils';
 
 type TicketDetail = {
@@ -70,12 +71,12 @@ export default function DeveloperTicketShow({ ticket }: TicketShowProps) {
             <Head title={`Ticket ${ticket.ticket_number}`} />
 
             <div>
-                <Button asChild variant="outline" size="sm">
-                    <Link href="/developer/tickets">
-                        <ArrowLeft className="size-4" />
-                        Back to tickets
-                    </Link>
-                </Button>
+                <HistoryBackButton
+                    variant="outline"
+                    size="sm"
+                    fallbackHref="/developer/tickets"
+                    label="Back to tickets"
+                />
             </div>
 
             <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -110,7 +111,7 @@ export default function DeveloperTicketShow({ ticket }: TicketShowProps) {
                                 </Badge>
                             </div>
                         </div>
-                        <div className="whitespace-pre-wrap rounded-lg border bg-background/80 p-4 text-sm leading-relaxed">
+                        <div className="rounded-lg border bg-background/80 p-4 text-sm leading-relaxed whitespace-pre-wrap">
                             {ticket.description}
                         </div>
                     </div>
@@ -276,9 +277,7 @@ export default function DeveloperTicketShow({ ticket }: TicketShowProps) {
                                         rows={5}
                                     />
                                     <InputError
-                                        message={
-                                            form.errors.resolution_note
-                                        }
+                                        message={form.errors.resolution_note}
                                     />
                                 </div>
                                 <Button
