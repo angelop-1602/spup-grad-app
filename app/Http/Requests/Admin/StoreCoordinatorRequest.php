@@ -27,6 +27,8 @@ class StoreCoordinatorRequest extends FormRequest
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'department_ids' => ['sometimes', 'array'],
             'department_ids.*' => ['exists:departments,id'],
+            'course_ids' => ['sometimes', 'array'],
+            'course_ids.*' => ['exists:courses,id'],
         ];
     }
 }

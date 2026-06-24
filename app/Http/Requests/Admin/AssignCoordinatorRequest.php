@@ -25,6 +25,8 @@ class AssignCoordinatorRequest extends FormRequest
             'coordinator_id' => ['required', 'exists:coordinators,id'],
             'department_ids' => ['required', 'array', 'min:1'],
             'department_ids.*' => ['exists:departments,id'],
+            'course_ids' => ['sometimes', 'array'],
+            'course_ids.*' => ['exists:courses,id'],
         ];
     }
 }

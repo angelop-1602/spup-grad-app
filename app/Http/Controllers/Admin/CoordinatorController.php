@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AssignCoordinatorRequest;
 use App\Http\Requests\Admin\StoreCoordinatorRequest;
 use App\Models\Coordinator;
+use App\Models\Course;
 use App\Models\Department;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class CoordinatorController extends Controller
     public function index(Request $request): Response
     {
         $coordinators = Coordinator::query()
-            ->with(['departments'])
+            ->with(['departments', 'courses'])
             ->orderBy('name')
             ->paginate(20);
 
@@ -35,10 +36,8 @@ class CoordinatorController extends Controller
      */
     public function create(): Response
     {
-        $departments = Department::active()->orderBy('name')->get();
-
         return Inertia::render('admin/coordinators/create', [
-            'departments' => $departments,
+            'departments' => $this->academicStructure(),
         ]);
     }
 
@@ -49,15 +48,16 @@ class CoordinatorController extends Controller
     {
         $data = $request->validated();
         $departmentIds = $data['department_ids'] ?? [];
+        $courseIds = $data['course_ids'] ?? [];
+        $courseIdsProvided = array_key_exists('course_ids', $data);
         unset($data['department_ids']);
+        unset($data['course_ids']);
 
         $data['password'] = Hash::make($data['password']);
 
         $coordinator = Coordinator::create($data);
 
-        if (! empty($departmentIds)) {
-            $coordinator->departments()->attach($departmentIds);
-        }
+        $this->syncAcademicAssignments($coordinator, $departmentIds, $courseIds, $courseIdsProvided);
 
         return redirect()
             ->route('admin.coordinators.index')
@@ -69,7 +69,7 @@ class CoordinatorController extends Controller
      */
     public function show(Coordinator $coordinator): Response
     {
-        $coordinator->load('departments');
+        $coordinator->load(['departments', 'courses']);
 
         return Inertia::render('admin/coordinators/show', [
             'coordinator' => $coordinator,
@@ -81,12 +81,12 @@ class CoordinatorController extends Controller
      */
     public function edit(Coordinator $coordinator): Response
     {
-        $coordinator->load('departments');
-        $departments = Department::active()->orderBy('name')->get();
+        $coordinator->load(['departments', 'courses']);
 
         return Inertia::render('admin/coordinators/edit', [
             'coordinator' => $coordinator,
-            'departments' => $departments,
+            'departments' => $this->academicStructure(),
+            'assignedCourseIds' => $coordinator->assignedCourseIds(),
         ]);
     }
 
@@ -101,10 +101,15 @@ class CoordinatorController extends Controller
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'department_ids' => ['sometimes', 'array'],
             'department_ids.*' => ['exists:departments,id'],
+            'course_ids' => ['sometimes', 'array'],
+            'course_ids.*' => ['exists:courses,id'],
         ]);
 
         $departmentIds = $validated['department_ids'] ?? [];
+        $courseIds = $validated['course_ids'] ?? [];
+        $courseIdsProvided = array_key_exists('course_ids', $validated);
         unset($validated['department_ids']);
+        unset($validated['course_ids']);
 
         if (isset($validated['password']) && $validated['password']) {
             $validated['password'] = Hash::make($validated['password']);
@@ -114,7 +119,7 @@ class CoordinatorController extends Controller
 
         $coordinator->update($validated);
 
-        $coordinator->departments()->sync($departmentIds);
+        $this->syncAcademicAssignments($coordinator, $departmentIds, $courseIds, $courseIdsProvided);
 
         return redirect()
             ->route('admin.coordinators.index')
@@ -127,7 +132,12 @@ class CoordinatorController extends Controller
     public function assign(AssignCoordinatorRequest $request): RedirectResponse
     {
         $coordinator = Coordinator::findOrFail($request->coordinator_id);
-        $coordinator->departments()->sync($request->department_ids);
+        $this->syncAcademicAssignments(
+            $coordinator,
+            $request->department_ids ?? [],
+            $request->course_ids ?? [],
+            $request->has('course_ids'),
+        );
 
         return redirect()
             ->route('admin.coordinators.index')
@@ -144,5 +154,59 @@ class CoordinatorController extends Controller
         return redirect()
             ->route('admin.coordinators.index')
             ->with('success', 'Coordinator deleted successfully.');
+    }
+
+    private function academicStructure()
+    {
+        return Department::active()
+            ->with(['courses' => function ($query) {
+                $query->orderBy('name');
+            }])
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @param  array<int, int|string>  $departmentIds
+     * @param  array<int, int|string>  $courseIds
+     */
+    private function syncAcademicAssignments(
+        Coordinator $coordinator,
+        array $departmentIds,
+        array $courseIds,
+        bool $courseIdsProvided,
+    ): void {
+        $departmentIds = collect($departmentIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $courseIds = collect($courseIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if (! $courseIdsProvided && $departmentIds->isNotEmpty()) {
+            $courseIds = Course::query()
+                ->whereIn('department_id', $departmentIds)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+        }
+
+        $courses = Course::query()
+            ->whereIn('id', $courseIds)
+            ->get(['id', 'department_id']);
+
+        $departmentIds = $departmentIds
+            ->merge($courses->pluck('department_id')->map(fn ($id) => (int) $id))
+            ->unique()
+            ->values();
+
+        $coordinator->departments()->sync($departmentIds->all());
+        $coordinator->courses()->sync($courses->pluck('id')->map(fn ($id) => (int) $id)->all());
     }
 }

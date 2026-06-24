@@ -13,6 +13,7 @@ class WindowApplicationsExport implements WithMultipleSheets
         protected int $windowId,
         protected ?string $departmentName = null,
         protected ?array $departmentIds = null,
+        protected ?array $courseIds = null,
         protected ?string $search = null,
     ) {}
 
@@ -25,6 +26,7 @@ class WindowApplicationsExport implements WithMultipleSheets
         $applications = GraduateExportData::applicationsForWindow(
             window: $window,
             departmentIds: $this->departmentIds,
+            courseIds: $this->courseIds,
             departmentName: $this->departmentName,
             search: $this->search,
         );

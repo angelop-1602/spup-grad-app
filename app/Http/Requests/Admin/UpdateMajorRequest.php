@@ -28,7 +28,7 @@ class UpdateMajorRequest extends FormRequest
             'course_id' => ['required', 'exists:courses,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => [
-                'nullable',
+                'required',
                 'string',
                 'max:255',
                 Rule::unique('majors', 'code')

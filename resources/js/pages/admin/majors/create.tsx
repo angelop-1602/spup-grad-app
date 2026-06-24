@@ -220,14 +220,15 @@ export default function CreateMajor({
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="code">Code</Label>
+                                    <Label htmlFor="code">Code *</Label>
                                     <Input
                                         id="code"
                                         value={data.code}
                                         onChange={(e) =>
                                             setData('code', e.target.value)
                                         }
-                                        placeholder="Optional code (e.g., SE)"
+                                        placeholder="e.g., SE"
+                                        required
                                     />
                                     {errors.code && (
                                         <p className="text-sm text-red-600">

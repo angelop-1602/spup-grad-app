@@ -21,13 +21,13 @@ class DashboardController extends Controller
     {
         $coordinator = Auth::guard('coordinator')->user();
 
-        // Get coordinator's assigned departments
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
+        $departmentIds = $coordinator->assignedDepartmentIds();
+        $courseIds = $coordinator->assignedCourseIds();
 
         // Use the current active window, or the latest window when none is active.
         $currentWindow = ApplicationWindow::currentOrLatest();
-        $assignedApplicationsQuery = Application::query()
-            ->whereIn('department_id', $departmentIds)
+        $assignedApplicationsQuery = $coordinator
+            ->scopeApplicationsToAssignments(Application::query())
             ->when($currentWindow, fn ($query) => $query->where('window_id', $currentWindow->id));
 
         $dashboardStats = [
@@ -38,6 +38,7 @@ class DashboardController extends Controller
             'new_today' => (clone $assignedApplicationsQuery)->where('created_at', '>=', now()->startOfDay())->count(),
             'new_this_week' => (clone $assignedApplicationsQuery)->where('created_at', '>=', now()->startOfWeek())->count(),
             'assigned_departments' => count($departmentIds),
+            'assigned_courses' => count($courseIds),
         ];
 
         $newApplicants = (clone $assignedApplicationsQuery)
@@ -61,8 +62,9 @@ class DashboardController extends Controller
         if ($currentWindow) {
             $baseQuery = Application::query()
                 ->with(['user.profile', 'department', 'course'])
-                ->where('window_id', $currentWindow->id)
-                ->whereIn('department_id', $departmentIds);
+                ->where('window_id', $currentWindow->id);
+
+            $coordinator->scopeApplicationsToAssignments($baseQuery);
 
             // Filter by search if provided (name or student ID)
             if ($request->has('search') && $request->search) {
@@ -113,6 +115,7 @@ class DashboardController extends Controller
                 'name' => $coordinator->name,
                 'email' => $coordinator->email,
                 'departments' => $coordinator->departments()->select('departments.id', 'departments.name', 'departments.code')->get(),
+                'courses' => $coordinator->courses()->select('courses.id', 'courses.name', 'courses.code', 'courses.department_id')->get(),
             ],
         ]);
     }

@@ -27,14 +27,20 @@ class DuplicateApplicationRecords
 
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      * @return array<int, array<string, mixed>>
      */
-    public function verifiedApplicationsForWindow(ApplicationWindow $window, ?array $departmentIds = null): array
+    public function verifiedApplicationsForWindow(
+        ApplicationWindow $window,
+        ?array $departmentIds = null,
+        ?array $courseIds = null,
+    ): array
     {
         return Application::query()
             ->with($this->applicationRelations())
             ->where('window_id', $window->getKey())
             ->when($departmentIds !== null, fn (Builder $query) => $query->whereIn('department_id', $departmentIds))
+            ->when($courseIds !== null, fn (Builder $query) => $query->whereIn('course_id', $courseIds))
             ->latest('created_at')
             ->get()
             ->map(fn (Application $application) => $this->publicPayload($this->applicationRecord($application), true))
@@ -44,11 +50,16 @@ class DuplicateApplicationRecords
 
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      * @return array<int, array<string, mixed>>
      */
-    public function unverifiedDraftsForWindow(ApplicationWindow $window, ?array $departmentIds = null): array
+    public function unverifiedDraftsForWindow(
+        ApplicationWindow $window,
+        ?array $departmentIds = null,
+        ?array $courseIds = null,
+    ): array
     {
-        return $this->unfinalizedDraftsQuery($window, $departmentIds)
+        return $this->unfinalizedDraftsQuery($window, $departmentIds, $courseIds)
             ->latest('created_at')
             ->get()
             ->map(fn (GuestApplicationDraft $draft) => $this->publicPayload($this->draftRecord($draft), true))
@@ -58,13 +69,18 @@ class DuplicateApplicationRecords
 
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      * @return array<int, array<string, mixed>>
      */
-    public function duplicatePairsForWindow(ApplicationWindow $window, ?array $departmentIds = null): array
+    public function duplicatePairsForWindow(
+        ApplicationWindow $window,
+        ?array $departmentIds = null,
+        ?array $courseIds = null,
+    ): array
     {
         $seenPairs = [];
 
-        return $this->recordsGroupedByMatchKey($this->duplicateRecordsForWindow($window, $departmentIds))
+        return $this->recordsGroupedByMatchKey($this->duplicateRecordsForWindow($window, $departmentIds, $courseIds))
             ->filter(fn (Collection $group) => $group->count() > 1)
             ->flatMap(function (Collection $group, string $matchKey) use (&$seenPairs): array {
                 $records = $group->values();
@@ -155,6 +171,7 @@ class DuplicateApplicationRecords
             'department_id' => $record['department_id'],
             'department_code' => $record['department_code'],
             'department_name' => $record['department_name'],
+            'course_id' => $record['course_id'],
             'course_code' => $record['course_code'],
             'course_name' => $record['course_name'],
             'status' => $record['status'],
@@ -214,19 +231,25 @@ class DuplicateApplicationRecords
 
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      * @return Collection<int, array<string, mixed>>
      */
-    private function duplicateRecordsForWindow(ApplicationWindow $window, ?array $departmentIds = null): Collection
+    private function duplicateRecordsForWindow(
+        ApplicationWindow $window,
+        ?array $departmentIds = null,
+        ?array $courseIds = null,
+    ): Collection
     {
         $applications = Application::query()
             ->with($this->applicationRelations())
             ->where('window_id', $window->getKey())
             ->when($departmentIds !== null, fn (Builder $query) => $query->whereIn('department_id', $departmentIds))
+            ->when($courseIds !== null, fn (Builder $query) => $query->whereIn('course_id', $courseIds))
             ->latest('created_at')
             ->get()
             ->map(fn (Application $application) => $this->applicationRecord($application));
 
-        $drafts = $this->unfinalizedDraftsQuery($window, $departmentIds)
+        $drafts = $this->unfinalizedDraftsQuery($window, $departmentIds, $courseIds)
             ->latest('created_at')
             ->get()
             ->map(fn (GuestApplicationDraft $draft) => $this->draftRecord($draft));
@@ -236,13 +259,19 @@ class DuplicateApplicationRecords
 
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      */
-    private function unfinalizedDraftsQuery(ApplicationWindow $window, ?array $departmentIds = null): Builder
+    private function unfinalizedDraftsQuery(
+        ApplicationWindow $window,
+        ?array $departmentIds = null,
+        ?array $courseIds = null,
+    ): Builder
     {
         return GuestApplicationDraft::query()
             ->with($this->draftRelations())
             ->where('window_id', $window->getKey())
             ->when($departmentIds !== null, fn (Builder $query) => $query->whereIn('payload->department_id', $departmentIds))
+            ->when($courseIds !== null, fn (Builder $query) => $query->whereIn('payload->course_id', $courseIds))
             ->where(function ($query): void {
                 $query->whereNull('verified_at')
                     ->orWhereNull('application_id');
@@ -307,6 +336,7 @@ class DuplicateApplicationRecords
             'department_id' => $application->department_id,
             'department_code' => $application->department?->code,
             'department_name' => $application->department?->name,
+            'course_id' => $application->course_id,
             'course_code' => $application->course?->code,
             'course_name' => $application->course?->name,
             'status' => $application->status,
@@ -361,6 +391,7 @@ class DuplicateApplicationRecords
             'department_id' => $department?->id ?: ($departmentId ?: null),
             'department_code' => $department?->code,
             'department_name' => $department?->name,
+            'course_id' => $course?->id ?: ($courseId ?: null),
             'course_code' => $course?->code,
             'course_name' => $course?->name,
             'status' => $this->draftVerificationStatus($draft),

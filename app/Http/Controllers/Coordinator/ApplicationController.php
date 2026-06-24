@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Coordinator\UpdateApplicationStatusRequest;
 use App\Models\Application;
 use App\Models\ApplicationWindow;
+use App\Models\Coordinator;
 use App\Models\SystemHealthCheck;
 use App\Notifications\DuplicateApplicationDetected;
 use App\Support\DuplicateApplicationRecords;
@@ -83,7 +84,8 @@ class ApplicationController extends Controller
     {
         $coordinator = Auth::guard('coordinator')->user();
 
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
+        $departmentIds = $coordinator->assignedDepartmentIds();
+        $courseIds = $coordinator->assignedCourseIds();
 
         $windowId = (int) $request->get('window_id');
         $window = ApplicationWindow::findOrFail($windowId);
@@ -91,7 +93,7 @@ class ApplicationController extends Controller
         $search = $request->get('search');
         $departmentName = $request->string('department')->toString() ?: null;
 
-        $export = new CoordinatorWindowApplicationsExport($window->id, $departmentIds, $search, $departmentName);
+        $export = new CoordinatorWindowApplicationsExport($window->id, $departmentIds, $courseIds ?: null, $search, $departmentName);
 
         $safeTitle = GraduateExportData::safeFileName($window->title);
         $suffix = $departmentName ? '_department_'.str_replace(' ', '_', $departmentName) : '_assigned_departments';
@@ -118,11 +120,10 @@ class ApplicationController extends Controller
     public function exportStatisticsPdf(Request $request, ApplicationWindow $window)
     {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
 
         // Load all applications for statistics (filtered by coordinator departments)
-        $allApplications = $window->applications()
-            ->whereIn('department_id', $departmentIds)
+        $allApplications = $coordinator
+            ->scopeApplicationsToAssignments(Application::query()->where('window_id', $window->id))
             ->with([
                 'user:id,name,email,student_id',
                 'user.profile:id,user_id,nationality',
@@ -265,15 +266,16 @@ class ApplicationController extends Controller
     public function window(Request $request, ApplicationWindow $window, DuplicateApplicationRecords $duplicates): Response
     {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
+        $departmentIds = $coordinator->assignedDepartmentIds();
+        $courseIds = $coordinator->assignedCourseIds();
 
         // Get search query and status filter
         $search = $request->get('search', '');
         $statusFilter = $request->get('status', 'all');
 
         // Build applications query with search and status filter
-        $applicationsQuery = $window->applications()
-            ->whereIn('department_id', $departmentIds)
+        $applicationsQuery = $coordinator
+            ->scopeApplicationsToAssignments(Application::query()->where('window_id', $window->id))
             ->with([
                 'user:id,name,email,student_id',
                 'user.profile:id,user_id,first_name,last_name,middle_name,suffix,photo_path',
@@ -315,8 +317,8 @@ class ApplicationController extends Controller
             ->withQueryString();
 
         // Load all applications for statistics (without pagination, filtered by coordinator departments)
-        $allApplications = $window->applications()
-            ->whereIn('department_id', $departmentIds)
+        $allApplications = $coordinator
+            ->scopeApplicationsToAssignments(Application::query()->where('window_id', $window->id))
             ->with([
                 'user:id,name,email,student_id',
                 'user.profile:id,user_id,nationality',
@@ -542,8 +544,8 @@ class ApplicationController extends Controller
                 'search' => $search,
                 'status' => $statusFilter,
             ],
-            'unverifiedApplications' => $duplicates->unverifiedDraftsForWindow($window, $departmentIds),
-            'duplicatePairs' => $duplicates->duplicatePairsForWindow($window, $departmentIds),
+            'unverifiedApplications' => $duplicates->unverifiedDraftsForWindow($window, $departmentIds, $courseIds ?: null),
+            'duplicatePairs' => $duplicates->duplicatePairsForWindow($window, $departmentIds, $courseIds ?: null),
         ]);
     }
 
@@ -558,13 +560,6 @@ class ApplicationController extends Controller
         ]);
 
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator
-            ? $coordinator->departments()
-                ->pluck('departments.id')
-                ->map(fn ($id) => (int) $id)
-                ->all()
-            : [];
-
         [$left, $right] = [
             $duplicates->resolve($validated['left']),
             $duplicates->resolve($validated['right']),
@@ -582,8 +577,9 @@ class ApplicationController extends Controller
             ]);
         }
 
-        if (! in_array((int) ($left['department_id'] ?? 0), $departmentIds, true)
-            || ! in_array((int) ($right['department_id'] ?? 0), $departmentIds, true)) {
+        if (! $coordinator
+            || ! $this->coordinatorCanAccessDuplicateRecord($coordinator, $left)
+            || ! $this->coordinatorCanAccessDuplicateRecord($coordinator, $right)) {
             abort(403, 'Unauthorized access to duplicate records outside your assigned departments.');
         }
 
@@ -623,13 +619,6 @@ class ApplicationController extends Controller
         ]);
 
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator
-            ? $coordinator->departments()
-                ->pluck('departments.id')
-                ->map(fn ($id) => (int) $id)
-                ->all()
-            : [];
-
         [$left, $right] = [
             $duplicates->resolve($validated['left']),
             $duplicates->resolve($validated['right']),
@@ -647,8 +636,9 @@ class ApplicationController extends Controller
             ]);
         }
 
-        if (! in_array((int) ($left['department_id'] ?? 0), $departmentIds, true)
-            || ! in_array((int) ($right['department_id'] ?? 0), $departmentIds, true)) {
+        if (! $coordinator
+            || ! $this->coordinatorCanAccessDuplicateRecord($coordinator, $left)
+            || ! $this->coordinatorCanAccessDuplicateRecord($coordinator, $right)) {
             abort(403, 'Unauthorized access to duplicate records outside your assigned departments.');
         }
 
@@ -700,10 +690,8 @@ class ApplicationController extends Controller
     ): Response {
         $coordinator = Auth::guard('coordinator')->user();
 
-        // Ensure application belongs to coordinator's department
-        $departmentIds = $coordinator->departments()->pluck('departments.id');
-
-        if (! in_array($application->department_id, $departmentIds->toArray())) {
+        // Ensure application belongs to coordinator's assigned academic scope.
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -819,10 +807,8 @@ class ApplicationController extends Controller
     {
         $coordinator = Auth::guard('coordinator')->user();
 
-        // Ensure application belongs to coordinator's department
-        $departmentIds = $coordinator->departments()->pluck('departments.id');
-
-        if (! in_array($application->department_id, $departmentIds->toArray())) {
+        // Ensure application belongs to coordinator's assigned academic scope.
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -880,10 +866,8 @@ class ApplicationController extends Controller
     {
         $coordinator = Auth::guard('coordinator')->user();
 
-        // Ensure application belongs to coordinator's department
-        $departmentIds = $coordinator->departments()->pluck('departments.id');
-
-        if (! in_array($application->department_id, $departmentIds->toArray())) {
+        // Ensure application belongs to coordinator's assigned academic scope.
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -1001,9 +985,8 @@ class ApplicationController extends Controller
     public function download(Application $application): BinaryFileResponse
     {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
 
-        if (! in_array($application->department_id, $departmentIds, true)) {
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -1021,9 +1004,8 @@ class ApplicationController extends Controller
     public function downloadPhoto(Application $application): BinaryFileResponse
     {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
 
-        if (! in_array($application->department_id, $departmentIds, true)) {
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -1045,9 +1027,8 @@ class ApplicationController extends Controller
         RequirementFileStorage $files,
     ): BinaryFileResponse {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
 
-        if (! in_array($application->department_id, $departmentIds, true)) {
+        if (! $coordinator->canAccessApplication($application)) {
             abort(403, 'Unauthorized access to this application.');
         }
 
@@ -1064,6 +1045,23 @@ class ApplicationController extends Controller
         );
 
         return $files->response($requirement, $request);
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function coordinatorCanAccessDuplicateRecord(Coordinator $coordinator, array $record): bool
+    {
+        $departmentId = (int) ($record['department_id'] ?? 0);
+        $courseId = (int) ($record['course_id'] ?? 0);
+
+        if (! in_array($departmentId, $coordinator->assignedDepartmentIds(), true)) {
+            return false;
+        }
+
+        $courseIds = $coordinator->assignedCourseIds();
+
+        return $courseIds === [] || in_array($courseId, $courseIds, true);
     }
 
     /**

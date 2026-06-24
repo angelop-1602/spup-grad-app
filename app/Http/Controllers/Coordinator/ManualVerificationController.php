@@ -21,7 +21,7 @@ class ManualVerificationController extends Controller
 {
     public function index(Request $request): Response
     {
-        $departmentIds = $this->assignedDepartmentIds();
+        $coordinator = Auth::guard('coordinator')->user();
         $selectedWindowId = $this->selectedWindowId($request);
         $search = trim($request->string('search')->toString());
 
@@ -33,7 +33,7 @@ class ManualVerificationController extends Controller
                     ->orWhereNull('application_id');
             });
 
-        $this->scopeDraftsToDepartments($query, $departmentIds);
+        $coordinator->scopeDraftsToAssignments($query);
 
         if ($search !== '') {
             $query->where(function (Builder $query) use ($search) {
@@ -144,43 +144,11 @@ class ManualVerificationController extends Controller
         return back()->with('success', 'Draft manually verified and an access email was sent.');
     }
 
-    /**
-     * @return array<int, int>
-     */
-    private function assignedDepartmentIds(): array
+    private function authorizeDraftDepartment(GuestApplicationDraft $draft): void
     {
         $coordinator = Auth::guard('coordinator')->user();
 
-        if (! $coordinator) {
-            return [];
-        }
-
-        return $coordinator
-            ->departments()
-            ->pluck('departments.id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-    }
-
-    /**
-     * @param  array<int, int>  $departmentIds
-     */
-    private function scopeDraftsToDepartments(Builder $query, array $departmentIds): void
-    {
-        if ($departmentIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn('payload->department_id', $departmentIds);
-    }
-
-    private function authorizeDraftDepartment(GuestApplicationDraft $draft): void
-    {
-        $departmentId = (int) ($draft->payload['department_id'] ?? 0);
-
-        if (! in_array($departmentId, $this->assignedDepartmentIds(), true)) {
+        if (! $coordinator || ! $coordinator->canAccessDraftPayload($draft->payload ?? [])) {
             abort(403, 'Unauthorized access to this draft.');
         }
     }

@@ -26,7 +26,7 @@ class StoreMajorRequest extends FormRequest
             'course_id' => ['required', 'exists:courses,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => [
-                'nullable',
+                'required',
                 'string',
                 'max:255',
                 Rule::unique('majors', 'code')->where('course_id', $this->input('course_id')),

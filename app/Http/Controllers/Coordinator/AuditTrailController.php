@@ -17,10 +17,9 @@ class AuditTrailController extends Controller
     public function index(Request $request, DashboardOverview $overview): Response
     {
         $coordinator = Auth::guard('coordinator')->user();
-        $departmentIds = $coordinator->departments()->pluck('departments.id')->toArray();
         $search = trim($request->string('search')->toString());
-        $assignedApplicationIds = Application::query()
-            ->whereIn('department_id', $departmentIds)
+        $assignedApplicationIds = $coordinator
+            ->scopeApplicationsToAssignments(Application::query())
             ->pluck('id')
             ->all();
 

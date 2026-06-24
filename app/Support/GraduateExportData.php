@@ -12,11 +12,13 @@ class GraduateExportData
 {
     /**
      * @param  array<int, int>|null  $departmentIds
+     * @param  array<int, int>|null  $courseIds
      * @return Collection<int, Application>
      */
     public static function applicationsForWindow(
         ApplicationWindow $window,
         ?array $departmentIds = null,
+        ?array $courseIds = null,
         ?string $departmentName = null,
         ?string $search = null,
     ): Collection {
@@ -31,6 +33,10 @@ class GraduateExportData
 
         if ($departmentIds !== null) {
             $query->whereIn('department_id', $departmentIds);
+        }
+
+        if ($courseIds !== null) {
+            $query->whereIn('course_id', $courseIds);
         }
 
         if ($departmentName) {

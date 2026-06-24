@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Course extends Model
@@ -56,6 +57,15 @@ class Course extends Model
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);
+    }
+
+    /**
+     * Get the coordinators assigned to this course.
+     */
+    public function coordinators(): BelongsToMany
+    {
+        return $this->belongsToMany(Coordinator::class, 'coordinator_course_assignments')
+            ->withTimestamps();
     }
 
     /**

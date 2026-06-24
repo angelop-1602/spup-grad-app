@@ -1,3 +1,7 @@
+import {
+    CoordinatorAcademicAssignment,
+    type CoordinatorAssignmentDepartment,
+} from '@/components/coordinator-academic-assignment';
 import { HistoryBackButton } from '@/components/history-back-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -7,7 +11,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
@@ -18,6 +21,7 @@ import { Head, Link, useForm } from '@inertiajs/react';
 interface Department {
     id: number;
     name: string;
+    code: string;
 }
 
 interface Coordinator {
@@ -29,7 +33,8 @@ interface Coordinator {
 
 interface EditCoordinatorProps {
     coordinator: Coordinator;
-    departments: Department[];
+    departments: CoordinatorAssignmentDepartment[];
+    assignedCourseIds: number[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -50,6 +55,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function EditCoordinator({
     coordinator,
     departments,
+    assignedCourseIds,
 }: EditCoordinatorProps) {
     const initialDepartmentIds = coordinator.departments.map((d) => d.id);
 
@@ -59,12 +65,14 @@ export default function EditCoordinator({
         password: string;
         password_confirmation: string;
         department_ids: number[];
+        course_ids: number[];
     }>({
         name: coordinator.name,
         email: coordinator.email,
         password: '',
         password_confirmation: '',
         department_ids: initialDepartmentIds,
+        course_ids: assignedCourseIds,
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -75,18 +83,12 @@ export default function EditCoordinator({
         );
     };
 
-    const toggleDepartment = (
-        id: number,
-        checked: boolean | 'indeterminate',
+    const updateAcademicAssignments = (
+        departmentIds: number[],
+        courseIds: number[],
     ) => {
-        if (checked) {
-            setData('department_ids', [...data.department_ids, id]);
-        } else {
-            setData(
-                'department_ids',
-                data.department_ids.filter((deptId) => deptId !== id),
-            );
-        }
+        setData('department_ids', departmentIds);
+        setData('course_ids', courseIds);
     };
 
     return (
@@ -191,41 +193,13 @@ export default function EditCoordinator({
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <div>
-                                    <Label>Assigned Departments</Label>
-                                    <p className="text-sm text-muted-foreground">
-                                        Select one or more departments this
-                                        coordinator is responsible for.
-                                    </p>
-                                </div>
-                                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                    {departments.map((department) => (
-                                        <label
-                                            key={department.id}
-                                            className="flex cursor-pointer items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
-                                        >
-                                            <Checkbox
-                                                checked={data.department_ids.includes(
-                                                    department.id,
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                    toggleDepartment(
-                                                        department.id,
-                                                        checked,
-                                                    )
-                                                }
-                                            />
-                                            <span>{department.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                                {errors.department_ids && (
-                                    <p className="text-sm text-destructive">
-                                        {errors.department_ids}
-                                    </p>
-                                )}
-                            </div>
+                            <CoordinatorAcademicAssignment
+                                departments={departments}
+                                departmentIds={data.department_ids}
+                                courseIds={data.course_ids}
+                                errors={errors}
+                                onChange={updateAcademicAssignments}
+                            />
 
                             <div className="flex items-center justify-end gap-3">
                                 <Button

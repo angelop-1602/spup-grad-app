@@ -88,11 +88,11 @@ class StaffGlobalSearchController extends Controller
             });
 
         if ($role === 'coordinator') {
-            $departmentIds = $request->user('coordinator')
-                ? $request->user('coordinator')->departments()->pluck('departments.id')->all()
-                : [];
+            $coordinator = $request->user('coordinator');
 
-            $query->whereIn('department_id', $departmentIds);
+            $coordinator
+                ? $coordinator->scopeApplicationsToAssignments($query)
+                : $query->whereRaw('1 = 0');
         }
 
         return $query
@@ -143,11 +143,11 @@ class StaffGlobalSearchController extends Controller
             });
 
         if ($role === 'coordinator') {
-            $departmentIds = $request->user('coordinator')
-                ? $request->user('coordinator')->departments()->pluck('departments.id')->map(fn ($id) => (int) $id)->all()
-                : [];
+            $coordinator = $request->user('coordinator');
 
-            $query->whereIn('payload->department_id', $departmentIds);
+            $coordinator
+                ? $coordinator->scopeDraftsToAssignments($query)
+                : $query->whereRaw('1 = 0');
         }
 
         return $query

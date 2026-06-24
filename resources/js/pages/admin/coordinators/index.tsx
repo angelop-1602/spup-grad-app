@@ -1,4 +1,3 @@
-import adminRoutes from '@/routes/admin';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -14,9 +13,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/app-layout';
+import adminRoutes from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { UserCog, Plus, Edit, MoreVertical } from 'lucide-react';
+import { Edit, MoreVertical, Plus, UserCog } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -38,6 +38,11 @@ interface Coordinator {
         name: string;
         code?: string;
     }>;
+    courses: Array<{
+        id: number;
+        name: string;
+        code?: string;
+    }>;
     created_at: string;
     updated_at: string;
 }
@@ -52,16 +57,68 @@ interface CoordinatorsIndexProps {
     };
 }
 
-export default function CoordinatorsIndex({ coordinators }: CoordinatorsIndexProps) {
+function AcademicAssignmentCell({ coordinator }: { coordinator: Coordinator }) {
+    const hasDepartments = coordinator.departments.length > 0;
+    const hasCourses = coordinator.courses.length > 0;
+
+    if (!hasDepartments && !hasCourses) {
+        return (
+            <span className="text-sm text-muted-foreground">
+                No academic structure assigned
+            </span>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {hasDepartments && (
+                <div className="flex flex-wrap gap-2">
+                    {coordinator.departments.map((department) => (
+                        <span
+                            key={department.id}
+                            className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                        >
+                            {department.code ?? department.name}
+                        </span>
+                    ))}
+                </div>
+            )}
+
+            {hasCourses ? (
+                <div className="flex flex-wrap gap-2">
+                    {coordinator.courses.map((course) => (
+                        <span
+                            key={course.id}
+                            className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                        >
+                            {course.code ?? course.name}
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    All courses/programs under assigned departments
+                </p>
+            )}
+        </div>
+    );
+}
+
+export default function CoordinatorsIndex({
+    coordinators,
+}: CoordinatorsIndexProps) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Coordinators" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Coordinators</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Coordinators
+                        </h1>
                         <p className="text-muted-foreground">
-                            Manage coordinator accounts and department assignments
+                            Manage coordinator accounts and academic structure
+                            assignments
                         </p>
                     </div>
                     <Button asChild>
@@ -76,7 +133,8 @@ export default function CoordinatorsIndex({ coordinators }: CoordinatorsIndexPro
                     <CardHeader>
                         <CardTitle>All Coordinators</CardTitle>
                         <CardDescription>
-                            {coordinators.total} coordinator{coordinators.total !== 1 ? 's' : ''} total
+                            {coordinators.total} coordinator
+                            {coordinators.total !== 1 ? 's' : ''} total
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -92,7 +150,7 @@ export default function CoordinatorsIndex({ coordinators }: CoordinatorsIndexPro
                                                 Email
                                             </th>
                                             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                                                Assigned Departments
+                                                Assigned Academic Structure
                                             </th>
                                             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                                 Actions
@@ -100,75 +158,97 @@ export default function CoordinatorsIndex({ coordinators }: CoordinatorsIndexPro
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {coordinators.data.map((coordinator) => (
-                                            <tr
-                                                key={coordinator.id}
-                                                className="border-b transition-colors hover:bg-muted/50"
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <UserCog className="h-4 w-4 text-muted-foreground" />
-                                                        <span className="font-medium">{coordinator.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className="text-sm text-muted-foreground">
-                                                        {coordinator.email}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {coordinator.departments.length > 0 ? (
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {coordinator.departments.map((dept) => (
-                                                                <span
-                                                                    key={dept.id}
-                                                                    className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                                                                >
-                                                                    {dept.code ?? dept.name}
-                                                                </span>
-                                                            ))}
+                                        {coordinators.data.map(
+                                            (coordinator) => (
+                                                <tr
+                                                    key={coordinator.id}
+                                                    className="border-b transition-colors hover:bg-muted/50"
+                                                >
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <UserCog className="h-4 w-4 text-muted-foreground" />
+                                                            <span className="font-medium">
+                                                                {
+                                                                    coordinator.name
+                                                                }
+                                                            </span>
                                                         </div>
-                                                    ) : (
+                                                    </td>
+                                                    <td className="px-4 py-3">
                                                         <span className="text-sm text-muted-foreground">
-                                                            No departments assigned
+                                                            {coordinator.email}
                                                         </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                                                <MoreVertical className="h-4 w-4" />
-                                                                <span className="sr-only">Open menu</span>
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem asChild>
-                                                                <Link
-                                                                    href={adminRoutes.coordinators.edit({ coordinator: coordinator.id }).url}
-                                                                    className="flex items-center"
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <AcademicAssignmentCell
+                                                            coordinator={
+                                                                coordinator
+                                                            }
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger
+                                                                asChild
+                                                            >
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-8 w-8 p-0"
                                                                 >
-                                                                    <Edit className="mr-2 h-4 w-4" />
-                                                                    Edit
-                                                                </Link>
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                    <span className="sr-only">
+                                                                        Open
+                                                                        menu
+                                                                    </span>
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem
+                                                                    asChild
+                                                                >
+                                                                    <Link
+                                                                        href={
+                                                                            adminRoutes.coordinators.edit(
+                                                                                {
+                                                                                    coordinator:
+                                                                                        coordinator.id,
+                                                                                },
+                                                                            )
+                                                                                .url
+                                                                        }
+                                                                        className="flex items-center"
+                                                                    >
+                                                                        <Edit className="mr-2 h-4 w-4" />
+                                                                        Edit
+                                                                    </Link>
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </td>
+                                                </tr>
+                                            ),
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
                         ) : (
                             <div className="py-12 text-center">
                                 <UserCog className="mx-auto h-12 w-12 text-muted-foreground" />
-                                <h3 className="mt-4 text-lg font-semibold">No coordinators found</h3>
+                                <h3 className="mt-4 text-lg font-semibold">
+                                    No coordinators found
+                                </h3>
                                 <p className="mt-2 text-sm text-muted-foreground">
-                                    Get started by creating your first coordinator.
+                                    Get started by creating your first
+                                    coordinator.
                                 </p>
                                 <Button asChild className="mt-4">
-                                    <Link href={adminRoutes.coordinators.create().url}>
+                                    <Link
+                                        href={
+                                            adminRoutes.coordinators.create()
+                                                .url
+                                        }
+                                    >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Create Coordinator
                                     </Link>
